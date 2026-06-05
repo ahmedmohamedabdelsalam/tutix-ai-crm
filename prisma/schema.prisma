@@ -1,0 +1,119 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Company {
+  id                String         @id @default(cuid())
+  name              String
+  ownerName         String?
+  ownerPhone        String?
+  phone             String?
+  waPhoneId         String?
+  waToken           String?
+  packages          String?
+  apiKey            String?        @unique
+  subscriptionPlan  String         @default("Basic")
+  subscriptionStart DateTime?
+  isActive          Boolean        @default(true)
+  createdAt         DateTime       @default(now())
+  conversations     Conversation[]
+  leads             Lead[]
+  users             User[]
+}
+
+model User {
+  id        String   @id @default(cuid())
+  companyId String
+  name      String
+  email     String   @unique
+  password  String
+  role      UserRole @default(AGENT)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  company   Company  @relation(fields: [companyId], references: [id])
+
+  @@index([companyId])
+}
+
+model Lead {
+  id            String         @id @default(cuid())
+  companyId     String
+  name          String?
+  phone         String
+  packageType   String?
+  groupSize     Int?
+  budget        String?
+  travelDate    String?
+  notes         String?
+  score         Int            @default(0)
+  isHot         Boolean        @default(false)
+  status        LeadStatus     @default(NEW)
+  source        String         @default("whatsapp")
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  conversations Conversation[]
+  company       Company        @relation(fields: [companyId], references: [id])
+
+  @@index([companyId])
+  @@index([phone])
+}
+
+model Conversation {
+  id         String     @id @default(cuid())
+  companyId  String
+  leadId     String?
+  phone      String
+  status     ConvStatus @default(AI_HANDLING)
+  agentNotes String?
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  company    Company    @relation(fields: [companyId], references: [id])
+  lead       Lead?      @relation(fields: [leadId], references: [id])
+  messages   Message[]
+
+  @@index([companyId])
+  @@index([phone, companyId])
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  role           MessageRole
+  content        String
+  createdAt      DateTime     @default(now())
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+
+  @@index([conversationId])
+}
+
+enum UserRole {
+  PLATFORM_ADMIN
+  COMPANY_ADMIN
+  AGENT
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  INTERESTED
+  HOT
+  CONVERTED
+  COLD
+  LOST
+}
+
+enum ConvStatus {
+  AI_HANDLING
+  NEEDS_HUMAN
+  ASSIGNED
+  CLOSED
+}
+
+enum MessageRole {
+  USER
+  ASSISTANT
+}
