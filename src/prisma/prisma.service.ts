@@ -16,12 +16,20 @@ export class PrismaService extends PrismaClient
   }
 
   async onModuleInit() {
-    await this.$connect()
-    console.log('✅ Database connected')
+    try {
+      await this.$connect()
+      console.log('✅ Database connected')
+    } catch (err) {
+      console.error('⚠️ Database connection failed (will retry on first query):', err)
+    }
   }
 
   async onModuleDestroy() {
-    await this.$disconnect()
-    await this.pool.end()
+    try {
+      await this.$disconnect()
+      await this.pool.end()
+    } catch {
+      // ignore cleanup errors
+    }
   }
 }
