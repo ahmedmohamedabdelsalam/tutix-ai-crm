@@ -15,7 +15,7 @@ async function bootstrap() {
   console.log('AI_API_KEY set:', !!process.env.AI_API_KEY)
   console.log('=================')
 
-  await app.listen(port)
+  await app.listen(port, '0.0.0.0')
   console.log(`🚀 TUTIX AI CRM running on port ${port}`)
   console.log(`🧪 Test: http://localhost:${port}/webhook/test`)
 }
