@@ -1,26 +1,34 @@
+// Catch anything that crashes the process before NestJS starts
+process.on('uncaughtException', (err) => {
+  console.error('💥 UNCAUGHT EXCEPTION:', err.message)
+  console.error(err.stack)
+  process.exit(1)
+})
+
+process.on('unhandledRejection', (reason) => {
+  console.error('💥 UNHANDLED REJECTION:', reason)
+  process.exit(1)
+})
+
 import { NestFactory } from '@nestjs/core'
 import { AppModule } from './app.module'
 
 async function bootstrap() {
-  try {
-    const app = await NestFactory.create(AppModule)
-    app.enableCors()
+  console.log('▶ bootstrap() starting...')
+  console.log('Node version:', process.version)
+  console.log('PORT env:', process.env.PORT)
+  console.log('DATABASE_URL set:', !!process.env.DATABASE_URL)
 
-    const port = parseInt(process.env.PORT ?? '3001', 10)
+  const app = await NestFactory.create(AppModule)
+  app.enableCors()
 
-    console.log('=== STARTUP ===')
-    console.log('PORT:', port)
-    console.log('NODE_ENV:', process.env.NODE_ENV)
-    console.log('DEFAULT_COMPANY_ID:', process.env.DEFAULT_COMPANY_ID ?? 'NOT SET')
-    console.log('DATABASE_URL set:', !!process.env.DATABASE_URL)
-    console.log('AI_API_KEY set:', !!process.env.AI_API_KEY)
-    console.log('===============')
-
-    await app.listen(port, '0.0.0.0')
-    console.log(`🚀 TUTIX AI CRM running on port ${port}`)
-  } catch (err) {
-    console.error('❌ FATAL STARTUP ERROR:', err)
-    process.exit(1)
-  }
+  const port = parseInt(process.env.PORT ?? '3001', 10)
+  await app.listen(port, '0.0.0.0')
+  console.log(`🚀 TUTIX AI CRM running on port ${port}`)
 }
-bootstrap()
+
+bootstrap().catch((err) => {
+  console.error('💥 bootstrap() failed:', err.message)
+  console.error(err.stack)
+  process.exit(1)
+})
