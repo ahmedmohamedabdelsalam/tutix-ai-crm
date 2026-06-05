@@ -10,6 +10,11 @@ export class WhatsAppController {
     private prisma: PrismaService,
   ) {}
 
+  @Get('health')
+  health() {
+    return { status: 'ok', ts: new Date().toISOString() }
+  }
+
   @Get()
   verify(
     @Query('hub.mode') mode: string,
@@ -39,37 +44,34 @@ export class WhatsAppController {
 
   @Post('test')
   async test(@Body() body: { phone: string; message: string }) {
-    console.log('--- /webhook/test called ---')
-    console.log('DEFAULT_COMPANY_ID:', process.env.DEFAULT_COMPANY_ID ?? '❌ NOT SET')
-    console.log(
-      'ENV keys present:',
-      Object.keys(process.env)
-        .filter((k) => !k.startsWith('npm_') && !k.startsWith('NODE'))
-        .join(', '),
-    )
+    try {
+      console.log('--- /webhook/test called ---')
+      console.log('DEFAULT_COMPANY_ID:', process.env.DEFAULT_COMPANY_ID ?? '❌ NOT SET')
 
-    const companyId = process.env.DEFAULT_COMPANY_ID
-    if (!companyId) {
-      console.error('❌ DEFAULT_COMPANY_ID is empty or not set on this environment')
-      return { error: 'DEFAULT_COMPANY_ID not set in .env' }
+      const companyId = process.env.DEFAULT_COMPANY_ID
+      if (!companyId) {
+        return { error: 'DEFAULT_COMPANY_ID not set' }
+      }
+
+      console.log(`🔍 Looking up company: ${companyId}`)
+      const company = await this.prisma.company.findUnique({
+        where: { id: companyId },
+      })
+      console.log('Company found:', company ? `✅ ${company.name}` : '❌ NOT IN DATABASE')
+
+      if (!company) {
+        return { error: `Company ${companyId} not found in database` }
+      }
+
+      const reply = await this.whatsapp.handleMessage(
+        companyId,
+        body.phone ?? '201234567890',
+        body.message ?? 'مرحباً',
+      )
+      return { reply }
+    } catch (err: any) {
+      console.error('❌ /webhook/test error:', err?.message ?? err)
+      return { error: err?.message ?? 'Internal server error', stack: err?.stack?.split('\n').slice(0, 3) }
     }
-
-    // DB check — verify the company exists
-    console.log(`🔍 Looking up company: ${companyId}`)
-    const company = await this.prisma.company.findUnique({
-      where: { id: companyId },
-    })
-    console.log('Company found:', company ? `✅ ${company.name}` : '❌ NOT IN DATABASE')
-
-    if (!company) {
-      return { error: `Company ${companyId} not found in database` }
-    }
-
-    const reply = await this.whatsapp.handleMessage(
-      companyId,
-      body.phone ?? '201234567890',
-      body.message ?? 'مرحباً',
-    )
-    return { reply }
   }
 }
