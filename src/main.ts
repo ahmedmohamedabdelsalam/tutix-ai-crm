@@ -1,4 +1,3 @@
-// Catch anything that crashes the process before NestJS starts
 process.on('uncaughtException', (err) => {
   console.error('💥 UNCAUGHT EXCEPTION:', err.message)
   console.error(err.stack)
@@ -22,7 +21,7 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule)
   app.enableCors()
 
-  const port = parseInt(process.env.PORT ?? '3001', 10)
+  const port = process.env.PORT || 3001
   await app.listen(port, '0.0.0.0')
   console.log(`🚀 TUTIX AI CRM running on port ${port}`)
 }
