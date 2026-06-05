@@ -1,4 +1,8 @@
 {
+  "build": {
+    "builder": "NIXPACKS",
+    "buildCommand": "npm install && npm run build"
+  },
   "deploy": {
     "startCommand": "node dist/src/main.js",
     "restartPolicyType": "ON_FAILURE",
