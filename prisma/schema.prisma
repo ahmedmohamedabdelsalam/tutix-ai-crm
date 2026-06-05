@@ -18,6 +18,7 @@ model Company {
   apiKey            String?        @unique
   subscriptionPlan  String         @default("Basic")
   subscriptionStart DateTime?
+  subscriptionEnd   DateTime?
   isActive          Boolean        @default(true)
   createdAt         DateTime       @default(now())
   conversations     Conversation[]
@@ -26,15 +27,16 @@ model Company {
 }
 
 model User {
-  id        String   @id @default(cuid())
-  companyId String
-  name      String
-  email     String   @unique
-  password  String
-  role      UserRole @default(AGENT)
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  company   Company  @relation(fields: [companyId], references: [id])
+  id            String   @id @default(cuid())
+  companyId     String
+  name          String
+  email         String   @unique
+  password      String
+  role          UserRole @default(AGENT)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  company       Company  @relation(fields: [companyId], references: [id])
+  assignedLeads Lead[]   @relation("LeadAssignment")
 
   @@index([companyId])
 }
@@ -53,13 +55,17 @@ model Lead {
   isHot         Boolean        @default(false)
   status        LeadStatus     @default(NEW)
   source        String         @default("whatsapp")
+  assignedTo    String?
+  assignedAt    DateTime?
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
   conversations Conversation[]
   company       Company        @relation(fields: [companyId], references: [id])
+  assignedUser  User?          @relation("LeadAssignment", fields: [assignedTo], references: [id])
 
   @@index([companyId])
   @@index([phone])
+  @@index([assignedTo])
 }
 
 model Conversation {
@@ -93,6 +99,7 @@ model Message {
 enum UserRole {
   PLATFORM_ADMIN
   COMPANY_ADMIN
+  SALES_MANAGER
   AGENT
 }
 
@@ -100,6 +107,8 @@ enum LeadStatus {
   NEW
   CONTACTED
   INTERESTED
+  NEGOTIATING
+  WON
   HOT
   CONVERTED
   COLD
