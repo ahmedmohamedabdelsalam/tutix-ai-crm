@@ -115,7 +115,7 @@ export class WhatsAppService {
       },
     })
 
-    const { yes, reason } = shouldHandoff(score, history.length + 1, extracted, text)
+    const { yes, reason } = shouldHandoff(score, history.length, extracted, text)
 
     if (yes) {
       await this.prisma.conversation.update({

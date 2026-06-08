@@ -364,12 +364,12 @@ export function shouldHandoff(
   data: Partial<LeadData>,
   lastUserMessage = '',
 ): { yes: boolean; reason: string } {
-  // Only trust isReadyToBook if the last message contains an explicit booking phrase
-  if (data.isReadyToBook && hasExplicitBookingIntent(lastUserMessage)) {
+  // Handoff only on explicit booking keyword in the actual message (never on score alone)
+  if (hasExplicitBookingIntent(lastUserMessage)) {
     return { yes: true, reason: 'العميل جاهز للحجز' };
   }
-  if (score >= 85 && msgCount >= 6) return { yes: true, reason: `score عالي (${score}/100)` };
-  if (msgCount >= 14) return { yes: true, reason: 'محادثة طويلة' };
+  // Safety fallback for very long conversations
+  if (msgCount >= 16) return { yes: true, reason: 'محادثة طويلة' };
   return { yes: false, reason: '' };
 }
 
