@@ -15,6 +15,7 @@ model Company {
   waPhoneId         String?
   waToken           String?
   packages          String?
+  aiPrompt          String?
   apiKey            String?        @unique
   subscriptionPlan  String         @default("Basic")
   subscriptionStart DateTime?
@@ -69,14 +70,16 @@ model Lead {
 }
 
 model Conversation {
-  id         String     @id @default(cuid())
-  companyId  String
-  leadId     String?
-  phone      String
-  status     ConvStatus @default(AI_HANDLING)
-  agentNotes String?
-  createdAt  DateTime   @default(now())
-  updatedAt  DateTime   @updatedAt
+  id               String     @id @default(cuid())
+  companyId        String
+  leadId           String?
+  phone            String
+  status           ConvStatus @default(AI_HANDLING)
+  agentMode        String     @default("AI")
+  assignedSalesId  String?
+  agentNotes       String?
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
   company    Company    @relation(fields: [companyId], references: [id])
   lead       Lead?      @relation(fields: [leadId], references: [id])
   messages   Message[]
