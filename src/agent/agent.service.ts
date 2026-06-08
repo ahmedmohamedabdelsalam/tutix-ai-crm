@@ -316,6 +316,9 @@ export async function extractLeadData(
 ): Promise<Partial<LeadData>> {
   const prompt = `من المحادثة التالية استخرج بيانات العميل. أجب بـ JSON فقط:
 {"name":"الاسم أو null","packageType":"حج أو عمرة أو null","groupSize":عدد أو null,"budget":"الميزانية أو null","travelDate":"الموعد أو null","isReadyToBook":true أو false}
+
+قاعدة مهمة: isReadyToBook يكون true فقط إذا قال العميل صراحةً إنه يريد الحجز الآن بعبارات مثل "عايز احجز" أو "هحجز" أو "موافق نحجز". مجرد السؤال عن العمرة أو الأسعار لا يعني الاستعداد للحجز.
+
 المحادثة:
 ${history.map((m) => `${m.role === 'user' ? 'العميل' : 'المساعد'}: ${m.content}`).join('\n')}`;
 
