@@ -277,10 +277,11 @@ ${aiPrompt.trim()}`;
 }
 
 function cleanAgentResponse(text: string): string {
-  return text
+  const cleaned = text
     .replace(/[.،!]/g, '')    // remove . ، !
     .replace(/[ \t]+/g, ' ')  // normalize spaces (preserve newlines for package cards)
     .trim();
+  return cleaned || text.trim(); // fallback to original if cleaning empties the string
 }
 
 export async function getAgentReply(
@@ -301,7 +302,7 @@ export async function getAgentReply(
         })),
       ],
       temperature: 0.7,
-      max_tokens: 300,
+      max_tokens: 500,
     });
     const rawReply = res.choices[0].message.content ?? 'عذراً حدث خطأ سيتواصل معك أحد المتخصصين';
     return cleanAgentResponse(rawReply);
