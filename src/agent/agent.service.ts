@@ -347,12 +347,27 @@ export function calculateScore(data: Partial<LeadData>): number {
   return score;
 }
 
+const BOOKING_KEYWORDS = [
+  'عايز احجز', 'عايزة احجز', 'هحجز', 'موافق نحجز', 'تمام هنحجز',
+  'خد الحجز', 'احجزلي', 'احجزي لي', 'نحجز دلوقتي', 'كمل الحجز',
+  'ابدأ الحجز', 'خليني احجز', 'اوك نحجز', 'اوكيه نحجز',
+];
+
+function hasExplicitBookingIntent(lastUserMessage: string): boolean {
+  const normalized = lastUserMessage.trim().toLowerCase();
+  return BOOKING_KEYWORDS.some(kw => normalized.includes(kw));
+}
+
 export function shouldHandoff(
   score: number,
   msgCount: number,
   data: Partial<LeadData>,
+  lastUserMessage = '',
 ): { yes: boolean; reason: string } {
-  if (data.isReadyToBook) return { yes: true, reason: 'العميل جاهز للحجز' };
+  // Only trust isReadyToBook if the last message contains an explicit booking phrase
+  if (data.isReadyToBook && hasExplicitBookingIntent(lastUserMessage)) {
+    return { yes: true, reason: 'العميل جاهز للحجز' };
+  }
   if (score >= 85 && msgCount >= 6) return { yes: true, reason: `score عالي (${score}/100)` };
   if (msgCount >= 14) return { yes: true, reason: 'محادثة طويلة' };
   return { yes: false, reason: '' };
