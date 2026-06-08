@@ -11,26 +11,75 @@ export class WhatsAppService {
     const company = await this.prisma.company.findUnique({ where: { id: companyId } })
     if (!company || !company.isActive) return ''
 
-    // Shared include so findFirst and create return the same type
     const msgInclude = { messages: { orderBy: { createdAt: 'asc' as const } } }
 
+    // Find any open (non-closed) conversation for this phone
     let conv = await this.prisma.conversation.findFirst({
-      where: { companyId, phone, status: 'AI_HANDLING' },
+      where: { companyId, phone, status: { not: ConvStatus.CLOSED } },
       include: msgInclude,
+      orderBy: { updatedAt: 'desc' },
     })
 
+    // ── New conversation ─────────────────────────────────────
     if (!conv) {
+      // PART 4: Returning customer check — phone has a previous WON lead
+      const hasWonLead = await this.prisma.lead.findFirst({
+        where: { companyId, phone, status: LeadStatus.WON },
+      })
+
       const lead = await this.prisma.lead.create({
         data: { companyId, phone, source: 'whatsapp' },
       })
+
       conv = await this.prisma.conversation.create({
-        data: { companyId, phone, leadId: lead.id, status: 'AI_HANDLING' },
+        data: {
+          companyId,
+          phone,
+          leadId: lead.id,
+          status: ConvStatus.AI_HANDLING,
+          agentMode: hasWonLead ? 'HUMAN' : 'AI',
+        },
         include: msgInclude,
       })
+
+      if (hasWonLead) {
+        await this.prisma.message.create({
+          data: { conversationId: conv.id, role: 'USER', content: text },
+        })
+        const welcomeBack = 'أهلاً بعودتك، سيتصل بك أحد متخصصينا قريباً.'
+        await this.prisma.message.create({
+          data: { conversationId: conv.id, role: 'ASSISTANT', content: welcomeBack },
+        })
+        await this.prisma.conversation.update({
+          where: { id: conv.id },
+          data: {
+            status: ConvStatus.NEEDS_HUMAN,
+            agentNotes: 'عميل عائد - تسليم فوري للمبيعات',
+          },
+        })
+        console.log(`RETURNING CUSTOMER → ${phone}`)
+        return welcomeBack
+      }
     }
 
-    if (conv.status !== 'AI_HANDLING') return ''
+    // ── PART 2: HUMAN mode — save message, skip AI ───────────
+    if (conv.agentMode === 'HUMAN') {
+      await this.prisma.message.create({
+        data: { conversationId: conv.id, role: 'USER', content: text },
+      })
+      console.log(`HUMAN MODE — message saved for ${phone}`)
+      return ''
+    }
 
+    // ── AI mode but conversation already handed off ───────────
+    if (conv.status !== ConvStatus.AI_HANDLING) {
+      await this.prisma.message.create({
+        data: { conversationId: conv.id, role: 'USER', content: text },
+      })
+      return ''
+    }
+
+    // ── Full AI pipeline ─────────────────────────────────────
     await this.prisma.message.create({
       data: { conversationId: conv.id, role: 'USER', content: text },
     })
@@ -40,8 +89,10 @@ export class WhatsAppService {
       { role: 'user', content: text },
     ]
 
-    const packages = company.packages ?? 'عمرة اقتصادي - عمرة VIP - حج'
-    const reply = await getAgentReply(history, company.name, packages)
+    const packages = company.packages ?? ''
+    const aiPrompt = company.aiPrompt ?? ''
+    const waPhone  = company.phone ?? company.ownerPhone ?? ''
+    const reply = await getAgentReply(history, company.name, packages, aiPrompt, waPhone)
 
     await this.prisma.message.create({
       data: { conversationId: conv.id, role: 'ASSISTANT', content: reply },
@@ -69,13 +120,17 @@ export class WhatsAppService {
     if (yes) {
       await this.prisma.conversation.update({
         where: { id: conv.id },
-        data: { status: ConvStatus.NEEDS_HUMAN, agentNotes: `${reason} | Score: ${score}/100` },
+        data: {
+          status: ConvStatus.NEEDS_HUMAN,
+          agentMode: 'HUMAN',
+          agentNotes: `${reason} | Score: ${score}/100`,
+        },
       })
-      const closing = `شكراً لتواصلك مع ${company.name}! سيتصل بك أحد متخصصينا قريباً إن شاء الله 🕌`
+      const closing = `شكراً لتواصلك مع ${company.name}. سيتصل بك أحد المتخصصين قريباً.`
       await this.prisma.message.create({
         data: { conversationId: conv.id, role: 'ASSISTANT', content: closing },
       })
-      console.log(`🔥 HOT LEAD → ${phone} | Score: ${score} | ${reason}`)
+      console.log(`HOT LEAD → ${phone} | Score: ${score} | ${reason}`)
       return closing
     }
 
