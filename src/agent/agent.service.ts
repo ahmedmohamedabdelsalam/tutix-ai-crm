@@ -276,6 +276,13 @@ ${aiPrompt.trim()}`;
   return prompt;
 }
 
+function cleanAgentResponse(text: string): string {
+  return text
+    .replace(/[.،!]/g, '')    // remove . ، !
+    .replace(/[ \t]+/g, ' ')  // normalize spaces (preserve newlines for package cards)
+    .trim();
+}
+
 export async function getAgentReply(
   history: { role: string; content: string }[],
   companyName: string,
@@ -296,13 +303,11 @@ export async function getAgentReply(
       temperature: 0.7,
       max_tokens: 300,
     });
-    return (
-      res.choices[0].message.content ??
-      'عذراً، حدث خطأ. سيتواصل معك أحد المتخصصين.'
-    );
+    const rawReply = res.choices[0].message.content ?? 'عذراً حدث خطأ سيتواصل معك أحد المتخصصين';
+    return cleanAgentResponse(rawReply);
   } catch (err) {
     console.error('AI error:', err);
-    return 'عذراً، حدث خطأ. سيتواصل معك أحد المتخصصين قريباً.';
+    return 'عذراً حدث خطأ سيتواصل معك أحد المتخصصين قريباً';
   }
 }
 
