@@ -247,8 +247,8 @@ export function shouldHandoff(
   data: Partial<LeadData>,
 ): { yes: boolean; reason: string } {
   if (data.isReadyToBook) return { yes: true, reason: 'العميل جاهز للحجز' };
-  if (score >= 70) return { yes: true, reason: `score عالي (${score}/100)` };
-  if (msgCount >= 10) return { yes: true, reason: 'محادثة طويلة' };
+  if (score >= 85 && msgCount >= 6) return { yes: true, reason: `score عالي (${score}/100)` };
+  if (msgCount >= 14) return { yes: true, reason: 'محادثة طويلة' };
   return { yes: false, reason: '' };
 }
 
