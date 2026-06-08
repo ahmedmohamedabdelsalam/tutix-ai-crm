@@ -3,6 +3,21 @@ import type { Response } from 'express'
 import { WhatsAppService } from './whatsapp.service'
 import { PrismaService } from '../prisma/prisma.service'
 
+function getTypingDelay(text: string): number {
+  const len = text.length
+  if (len < 50)  return 2000 + Math.random() * 1000
+  if (len < 150) return 4000 + Math.random() * 2000
+  return 7000 + Math.random() * 3000
+}
+
+async function metaPost(phoneId: string, token: string, body: object): Promise<void> {
+  await fetch(`https://graph.facebook.com/v18.0/${phoneId}/messages`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
 @Controller('webhook')
 export class WhatsAppController {
   constructor(
@@ -62,10 +77,23 @@ export class WhatsAppController {
         console.warn(`Using DEFAULT_COMPANY_ID fallback for phone_number_id: ${incomingPhoneId}`)
       }
 
+      // Mark incoming message as read (shows blue ticks to customer)
+      if (company.waToken && company.waPhoneId && message.id) {
+        await metaPost(company.waPhoneId, company.waToken, {
+          messaging_product: 'whatsapp',
+          status: 'read',
+          message_id: message.id,
+        })
+      }
+
       const reply = await this.whatsapp.handleMessage(company.id, message.from, message.text.body)
 
-      // Send reply back via Meta WhatsApp Cloud API
+      // Send reply back via Meta WhatsApp Cloud API with human-like typing delay
       if (reply && company.waToken && company.waPhoneId) {
+        const delay = getTypingDelay(reply)
+        console.log(`Typing delay: ${Math.round(delay / 1000)}s for reply of ${reply.length} chars`)
+        await new Promise(r => setTimeout(r, delay))
+
         const metaRes = await fetch(
           `https://graph.facebook.com/v18.0/${company.waPhoneId}/messages`,
           {
