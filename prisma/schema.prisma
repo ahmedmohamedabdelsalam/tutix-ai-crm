@@ -25,6 +25,7 @@ model Company {
   conversations     Conversation[]
   leads             Lead[]
   users             User[]
+  tasks             Task[]
 }
 
 model User {
@@ -38,6 +39,7 @@ model User {
   createdAt     DateTime @default(now())
   company       Company  @relation(fields: [companyId], references: [id])
   assignedLeads Lead[]   @relation("LeadAssignment")
+  tasks         Task[]
 
   @@index([companyId])
 }
@@ -61,6 +63,7 @@ model Lead {
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
   conversations Conversation[]
+  tasks         Task[]
   company       Company        @relation(fields: [companyId], references: [id])
   assignedUser  User?          @relation("LeadAssignment", fields: [assignedTo], references: [id])
 
@@ -128,4 +131,22 @@ enum ConvStatus {
 enum MessageRole {
   USER
   ASSISTANT
+}
+
+model Task {
+  id          String   @id @default(cuid())
+  companyId   String
+  leadId      String?
+  assignedTo  String
+  title       String
+  notes       String?
+  dueDate     DateTime
+  isCompleted Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  company     Company  @relation(fields: [companyId], references: [id])
+  lead        Lead?    @relation(fields: [leadId], references: [id])
+  user        User     @relation(fields: [assignedTo], references: [id])
+
+  @@index([companyId])
+  @@index([assignedTo])
 }
