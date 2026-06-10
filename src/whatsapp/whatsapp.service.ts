@@ -46,7 +46,7 @@ export class WhatsAppService {
         await this.prisma.message.create({
           data: { conversationId: conv.id, role: 'USER', content: text },
         })
-        const welcomeBack = 'أهلاً بعودتك، سيتصل بك أحد متخصصينا قريباً.'
+        const welcomeBack = 'أهلاً بعودتك يافندم نورتنا تاني — سيتواصل معك أحد متخصصينا قريباً إن شاء الله'
         await this.prisma.message.create({
           data: { conversationId: conv.id, role: 'ASSISTANT', content: welcomeBack },
         })
@@ -126,7 +126,7 @@ export class WhatsAppService {
           agentNotes: `${reason} | Score: ${score}/100`,
         },
       })
-      const closing = `شكراً لتواصلك مع ${company.name}. سيتصل بك أحد المتخصصين قريباً.`
+      const closing = 'تمام يافندم هحول حضرتك لزميلي المختص يكمل معاك خطوات الحجز إن شاء الله'
       await this.prisma.message.create({
         data: { conversationId: conv.id, role: 'ASSISTANT', content: closing },
       })
