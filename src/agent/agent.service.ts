@@ -1,20 +1,15 @@
-import OpenAI from 'openai';
+import Anthropic from '@anthropic-ai/sdk';
 
 // Lazy init — created on first use, after NestJS has loaded env vars
-let _client: OpenAI | null = null;
+let _anthropic: Anthropic | null = null;
 
-function getClient(): OpenAI {
-  if (!_client) {
-    _client = new OpenAI({
-      baseURL: process.env.AI_BASE_URL,
-      apiKey: process.env.AI_API_KEY,
+function getClient(): Anthropic {
+  if (!_anthropic) {
+    _anthropic = new Anthropic({
+      apiKey: process.env.ANTHROPIC_API_KEY,
     });
   }
-  return _client;
-}
-
-function getModel(): string {
-  return process.env.AI_MODEL ?? 'llama3-70b-8192';
+  return _anthropic;
 }
 
 function buildSystemPrompt(
@@ -116,19 +111,22 @@ export async function getAgentReply(
   waPhone = '',
 ): Promise<string> {
   try {
-    const res = await getClient().chat.completions.create({
-      model: getModel(),
-      messages: [
-        { role: 'system', content: buildSystemPrompt(companyName, packages, aiPrompt, waPhone) },
-        ...history.map((m) => ({
-          role: m.role as 'user' | 'assistant',
-          content: m.content,
-        })),
-      ],
-      temperature: 0.7,
+    const messages = history.map((m) => ({
+      role: m.role === 'USER' ? 'user' as const : 'assistant' as const,
+      content: m.content,
+    }));
+
+    const response = await getClient().messages.create({
+      model: 'claude-haiku-4-5-20251001',
       max_tokens: 500,
+      system: buildSystemPrompt(companyName, packages, aiPrompt, waPhone),
+      messages,
     });
-    const rawReply = res.choices[0].message.content ?? 'عذراً حدث خطأ سيتواصل معك أحد المتخصصين';
+
+    const rawReply =
+      response.content[0]?.type === 'text'
+        ? response.content[0].text
+        : 'عذراً حدث خطأ سيتواصل معك أحد المتخصصين';
     return cleanAgentResponse(rawReply);
   } catch (err) {
     console.error('AI error:', err);
@@ -148,13 +146,13 @@ export async function extractLeadData(
 ${history.map((m) => `${m.role === 'user' ? 'العميل' : 'المساعد'}: ${m.content}`).join('\n')}`;
 
   try {
-    const res = await getClient().chat.completions.create({
-      model: 'llama-3.1-8b-instant', // fast small model — extraction only, saves main quota
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0,
+    const response = await getClient().messages.create({
+      model: 'claude-haiku-4-5-20251001',
       max_tokens: 150,
+      messages: [{ role: 'user', content: prompt }],
     });
-    const text = res.choices[0].message.content ?? '{}';
+    const text =
+      response.content[0]?.type === 'text' ? response.content[0].text : '{}';
     const json = text.match(/\{[\s\S]*\}/)?.[0] ?? '{}';
     return JSON.parse(json) as Partial<LeadData>;
   } catch {
