@@ -46,7 +46,7 @@ export class WhatsAppService {
         await this.prisma.message.create({
           data: { conversationId: conv.id, role: 'USER', content: text },
         })
-        const welcomeBack = 'أهلاً بعودتك يافندم نورتنا تاني — سيتواصل معك أحد متخصصينا قريباً إن شاء الله'
+        const welcomeBack = 'أهلاً بعودتك يافندم نورتنا تاني سيتواصل معك أحد متخصصينا قريباً إن شاء الله'
         await this.prisma.message.create({
           data: { conversationId: conv.id, role: 'ASSISTANT', content: welcomeBack },
         })
