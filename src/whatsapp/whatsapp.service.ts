@@ -62,12 +62,36 @@ export class WhatsAppService {
       }
     }
 
-    // ── PART 2: HUMAN mode — save message, skip AI ───────────
+    // ── PART 2: HUMAN mode — save message ───────────────────
     if (conv.agentMode === 'HUMAN') {
       await this.prisma.message.create({
         data: { conversationId: conv.id, role: 'USER', content: text },
       })
-      console.log(`HUMAN MODE — message saved for ${phone}`)
+
+      // NEEDS_HUMAN = still waiting for a human agent → AI responds normally
+      // (per system prompt: "لو حصل تحويل وبعدين العميل بعت رسالة تانية — جاوبه عادي")
+      if (conv.status === ConvStatus.NEEDS_HUMAN) {
+        const freshMsgs = await this.prisma.message.findMany({
+          where: { conversationId: conv.id },
+          orderBy: { createdAt: 'asc' },
+        })
+        const historyNH = freshMsgs.map(m => ({
+          role: m.role === 'USER' ? 'user' : 'assistant',
+          content: m.content,
+        }))
+        const packagesNH = company.packages ?? ''
+        const aiPromptNH = company.aiPrompt ?? ''
+        const waPhoneNH  = company.phone ?? company.ownerPhone ?? ''
+        const replyNH = await getAgentReply(historyNH, company.name, packagesNH, aiPromptNH, waPhoneNH)
+        await this.prisma.message.create({
+          data: { conversationId: conv.id, role: 'ASSISTANT', content: replyNH },
+        })
+        console.log(`POST-HANDOFF AI — ${phone}`)
+        return replyNH
+      }
+
+      // Any other status (CLOSED, etc.) = human agent has fully taken over → silence
+      console.log(`HUMAN MODE (${conv.status}) — message saved for ${phone}`)
       return ''
     }
 

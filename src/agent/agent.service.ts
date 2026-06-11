@@ -111,7 +111,7 @@ function buildSystemPrompt(
 متحولش المحادثة لفريق المبيعات إلا لو العميل قال بوضوح إنه عايز يحجز فعلاً — جمل زي:
 "عايز احجز" / "هحجز" / "احجزلي" / "موافق نحجز" / "خد الحجز منى"
 
-أمثلة على حاجات مينفعش تتفهم كطلب حجز: تحية — موافقة عامة ("اه" أو "تمام" أو "ماشي") — سؤال عن السعر أو التفاصيل — "هفكر"
+أمثلة على حاجات مينفعش تتفهم كطلب حجز: تحية — موافقة عامة ("اه" أو "تمام" أو "ماشي") — سؤال عن السعر أو التفاصيل — "هفكر" — "لا" أو "مش مناسب" أو "مش حاسس" أو "غالي برضو" — الرفض يعني اعرض باكج أرخص أو أنهِ بلطف بدون إحالة
 
 لما فعلاً يحصل تأكيد حجز:
 ${bookingCta}
@@ -123,7 +123,10 @@ ${bookingCta}
 - متكررش كلام العميل حرفياً في ردك
 - متستخدمش "سيتواصل معك أحد المتخصصين قريباً" — دي عبارة باردة — استخدم فقط الصيغة المذكورة في القسم ٥
 - متعملش تحويل لمجرد إن العميل رد بأي حاجة
-- لا تكتب ما يمكن أن يرد به العميل — بمجرد ما تنهي ردّك توقف`;
+- لا تكتب ما يمكن أن يرد به العميل — بمجرد ما تنهي ردّك توقف
+- لا تكمل جملة العميل أبداً — لو بعت كلمة واحدة أو رقم ابدأ ردّك مباشرةً كجملة مستقلة بدون إكمال كلامه
+  مثال: العميل بعت "١٠" → ابدأ بـ"تمام يا أستاذ..." لا تكتب "أيام" أو "١٠ أيام" كأول كلمة
+  مثال: العميل بعت "المدينة" أو "مكة" → ابدأ بردّك مباشرةً لا تكتب "أولاً" أو "المدينة أولاً" قبل ردّك`;
 
   // Append DB-driven updates (override base prices if contradicted)
   if (packages && packages.trim()) {
@@ -156,6 +159,18 @@ function cleanAgentResponse(text: string): string {
     .join('\n')
     .replace(/^\n+/, '');
 
+  // Strip single-word leading fragment — model sometimes completes user's last word first
+  // e.g. user says "10" → model outputs "ايام\nتمام يا أستاذ..." ; "المدينه" → "اولا\nتمام..."
+  const firstNlIdx = t.indexOf('\n');
+  if (firstNlIdx > 0) {
+    const firstToken = t.substring(0, firstNlIdx).trim();
+    // Single word (no spaces), ≤10 chars, no question mark or ━ = likely a preamble fragment
+    if (!firstToken.includes(' ') && firstToken.length <= 10 && !firstToken.includes('؟') && !firstToken.includes('━')) {
+      const rest = t.substring(firstNlIdx).replace(/^\n+/, '');
+      if (rest.length > 15) t = rest;
+    }
+  }
+
   // Strip conversation-delimiter artifacts like <<HUMAN_CONVERSATION_END>> — truncate at first "<<"
   const delimIdx = t.indexOf('<<');
   if (delimIdx !== -1) t = t.substring(0, delimIdx).trimEnd();
@@ -174,15 +189,17 @@ function cleanAgentResponse(text: string): string {
     const idx = t.indexOf(marker);
     if (idx !== -1) t = t.substring(0, idx).trimEnd();
   }
-  // 2. Structural detection: if a short middle paragraph (≤80 chars) contains
-  //    first-person customer-style language, it's a hallucinated customer reply.
+  // 2. Structural detection: if a short middle paragraph contains a customer-style hallucination.
   // "احنا" removed — agent also uses it to mean "we (the company)"
   const customerWords = ['أنا عايز', 'أنا هاخد', 'هنفكر', 'نرد عليك', 'هنكلمك', 'سنفكر', 'نفكر فيها'];
   const blocks = t.split('\n\n');
   if (blocks.length >= 3) {
     for (let i = 1; i < blocks.length - 1; i++) {
       const block = blocks[i].trim();
-      if (block.length <= 80 && !block.includes('━') && customerWords.some(kw => block.includes(kw))) {
+      const isKnownPhrase = customerWords.some(kw => block.includes(kw));
+      // Very short isolated block (≤8 chars) with no ━ = one-word fake customer reply (e.g. "يوليو", "10 ايام")
+      const isOneWordReply = block.length <= 8 && !block.includes('━') && !block.includes('—');
+      if (block.length <= 80 && !block.includes('━') && (isKnownPhrase || isOneWordReply)) {
         t = blocks.slice(0, i).join('\n\n').trimEnd();
         break;
       }
@@ -222,6 +239,7 @@ export async function getAgentReply(
       response.content[0]?.type === 'text'
         ? response.content[0].text
         : 'عذراً حدث خطأ سيتواصل معك أحد المتخصصين';
+    console.log(`RAW_REPLY: ${rawReply.substring(0, 300).replace(/\n/g, '↵')}`);
     return cleanAgentResponse(rawReply);
   } catch (err) {
     console.error('AI error:', err);
@@ -286,8 +304,8 @@ export function shouldHandoff(
   if (hasExplicitBookingIntent(lastUserMessage)) {
     return { yes: true, reason: 'العميل جاهز للحجز' };
   }
-  // Safety fallback for very long conversations
-  if (msgCount >= 16) return { yes: true, reason: 'محادثة طويلة' };
+  // Safety fallback for very long conversations (30 total msgs = ~15 exchanges)
+  if (msgCount >= 30) return { yes: true, reason: 'محادثة طويلة' };
   return { yes: false, reason: '' };
 }
 
