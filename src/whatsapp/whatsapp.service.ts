@@ -84,10 +84,15 @@ export class WhatsAppService {
       data: { conversationId: conv.id, role: 'USER', content: text },
     })
 
-    const history = [
-      ...conv.messages.map(m => ({ role: m.role === 'USER' ? 'user' : 'assistant', content: m.content })),
-      { role: 'user', content: text },
-    ]
+    // Reload from DB after saving — avoids race condition where conv.messages is a stale snapshot
+    const freshMessages = await this.prisma.message.findMany({
+      where: { conversationId: conv.id },
+      orderBy: { createdAt: 'asc' },
+    })
+    const history = freshMessages.map(m => ({
+      role: m.role === 'USER' ? 'user' : 'assistant',
+      content: m.content,
+    }))
 
     const packages = company.packages ?? ''
     const aiPrompt = company.aiPrompt ?? ''
