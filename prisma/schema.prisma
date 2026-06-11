@@ -17,6 +17,7 @@ model Company {
   packages          String?
   aiPrompt          String?
   apiKey            String?        @unique
+  industry          Industry       @default(HAJJ_UMRAH)
   subscriptionPlan  String         @default("Basic")
   subscriptionStart DateTime?
   subscriptionEnd   DateTime?
@@ -102,6 +103,13 @@ model Message {
   conversation   Conversation @relation(fields: [conversationId], references: [id])
 
   @@index([conversationId])
+}
+
+enum Industry {
+  HAJJ_UMRAH
+  HEALTHCARE
+  REAL_ESTATE
+  EDUCATION
 }
 
 enum UserRole {

@@ -82,7 +82,7 @@ export class WhatsAppService {
         const packagesNH = company.packages ?? ''
         const aiPromptNH = company.aiPrompt ?? ''
         const waPhoneNH  = company.phone ?? company.ownerPhone ?? ''
-        const replyNH = await getAgentReply(historyNH, company.name, packagesNH, aiPromptNH, waPhoneNH)
+        const replyNH = await getAgentReply(historyNH, company.name, packagesNH, aiPromptNH, waPhoneNH, company.industry)
         await this.prisma.message.create({
           data: { conversationId: conv.id, role: 'ASSISTANT', content: replyNH },
         })
@@ -121,7 +121,7 @@ export class WhatsAppService {
     const packages = company.packages ?? ''
     const aiPrompt = company.aiPrompt ?? ''
     const waPhone  = company.phone ?? company.ownerPhone ?? ''
-    const reply = await getAgentReply(history, company.name, packages, aiPrompt, waPhone)
+    const reply = await getAgentReply(history, company.name, packages, aiPrompt, waPhone, company.industry)
 
     await this.prisma.message.create({
       data: { conversationId: conv.id, role: 'ASSISTANT', content: reply },
