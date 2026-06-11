@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { Industry } from '@prisma/client';
 import { buildBasePersonality } from './prompts/base-personality';
 import { getIndustryPrompt } from './prompts/index';
+import { findHotelInMessage } from './prompts/hajj-umrah-hotels';
 
 // Lazy init — created on first use, after NestJS has loaded env vars
 let _anthropic: Anthropic | null = null;
@@ -26,8 +27,8 @@ function buildSystemPrompt(
     ? `قل: "تمام يافندم هحول حضرتك لزميلي المختص يكمل معاك خطوات الحجز إن شاء الله وللتواصل المباشر: ${waPhone}"`
     : `قل: "تمام يافندم هحول حضرتك لزميلي المختص يكمل معاك خطوات الحجز إن شاء الله"`;
 
-  const { identity, catalog } = getIndustryPrompt(industry, companyName);
-  let prompt = buildBasePersonality(identity, catalog, bookingCta);
+  const { identity, catalog, hotels } = getIndustryPrompt(industry, companyName);
+  let prompt = buildBasePersonality(identity, catalog, bookingCta, hotels);
 
   // Append DB-driven updates (override base prices if contradicted)
   if (packages && packages.trim()) {
@@ -108,9 +109,10 @@ function cleanAgentResponse(text: string): string {
   }
 
   const cleaned = t
-    .replace(/\*\*/g, '')     // remove markdown bold **
-    .replace(/[.،!]/g, '')    // remove . ، !
-    .replace(/—/g, ' ')       // remove em-dashes (replaced with space)
+    .replace(/\*\*/g, '')          // remove markdown bold **
+    .replace(/[،!]/g, '')          // remove ، !
+    .replace(/(?<!\S)\.|\.(?!\S)/g, '') // remove standalone dots (not inside URLs/words)
+    .replace(/—/g, ' ')            // remove em-dashes (replaced with space)
     .replace(/[ \t]+/g, ' ')  // normalize spaces (preserve newlines for package cards)
     .trim();
   return cleaned || text.trim(); // fallback to original if cleaning empties the string
@@ -126,18 +128,27 @@ export async function getAgentReply(
 ): Promise<string> {
   try {
     const messages = history.map((m) => ({
-      role: m.role === 'USER' ? 'user' as const : 'assistant' as const,
+      role: m.role.toLowerCase() === 'user' ? 'user' as const : 'assistant' as const,
       content: m.content,
     }));
+
+    // Detect hotel name in the last user message and inject a targeted override
+    const lastUserMsg = history.filter(m => m.role.toLowerCase() === 'user').slice(-1)[0]?.content ?? '';
+    const hotelOverride = findHotelInMessage(lastUserMsg);
+
+    const sysPrompt = buildSystemPrompt(companyName, packages, aiPrompt, waPhone, industry);
+
+    const finalPrompt = hotelOverride
+      ? `${sysPrompt}\n\n${hotelOverride}`
+      : sysPrompt;
 
     const response = await getClient().messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 700,
       temperature: 0.3,
-      system: buildSystemPrompt(companyName, packages, aiPrompt, waPhone, industry),
+      system: finalPrompt,
       messages,
     });
-
     const rawReply =
       response.content[0]?.type === 'text'
         ? response.content[0].text

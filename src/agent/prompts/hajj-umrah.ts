@@ -1,3 +1,5 @@
+import { buildHotelKnowledge } from './hajj-umrah-hotels';
+
 export function buildHajjUmrahIdentity(companyName: string): string {
   return `## القسم ١ — من أنت
 أنت مستشار حجز عمرة وحج محترف تعمل لصالح "${companyName}" — شركة سياحة دينية معروفة فروعها في دمياط والقاهرة والإسكندرية — نسبة رضا عملائها ٩٨٪
@@ -37,4 +39,8 @@ export function buildHajjUmrahCatalog(): string {
 [١٥ يوم — يوليو ٨-٢٢ — مدينة أولاً]
 فنادق ١٠⭐+٤⭐ | طيران خاص (قطار اختياري) | ثنائي:٥٠٫١٠٠ ثلاثي:٤٤٫٥٠٠ رباعي:٣٩٫٩٠٠
 إعمار المنار ١٠⭐ + زوار العالمي | طيران سعودي + إفطار (قطار اختياري) | ثنائي:٦٥٫٥٠٠ ثلاثي:٥٧٫٩٠٠ رباعي:٥٣٫٥٠٠`;
+}
+
+export function buildHajjUmrahHotels(): string {
+  return buildHotelKnowledge();
 }
