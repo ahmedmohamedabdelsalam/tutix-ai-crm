@@ -132,23 +132,30 @@ export async function getAgentReply(
       content: m.content,
     }));
 
-    // Detect hotel name in the last user message and inject a targeted override
+    // Detect hotel name in last user message → injected as a separate uncached block
     const lastUserMsg = history.filter(m => m.role.toLowerCase() === 'user').slice(-1)[0]?.content ?? '';
     const hotelOverride = findHotelInMessage(lastUserMsg);
 
+    // Base system prompt is identical across all calls for the same company → cache it.
+    // Hotel override (when present) is appended as a second uncached block so the
+    // cached portion stays stable and gets a cache hit on every subsequent message.
     const sysPrompt = buildSystemPrompt(companyName, packages, aiPrompt, waPhone, industry);
-
-    const finalPrompt = hotelOverride
-      ? `${sysPrompt}\n\n${hotelOverride}`
-      : sysPrompt;
+    const systemBlocks = [
+      { type: 'text' as const, text: sysPrompt, cache_control: { type: 'ephemeral' as const } },
+      ...(hotelOverride ? [{ type: 'text' as const, text: hotelOverride }] : []),
+    ];
 
     const response = await getClient().messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 700,
       temperature: 0.3,
-      system: finalPrompt,
+      system: systemBlocks,
       messages,
     });
+
+    const u = response.usage;
+    console.log(`CACHE: write=${u.cache_creation_input_tokens ?? 0} read=${u.cache_read_input_tokens ?? 0} input=${u.input_tokens} output=${u.output_tokens}`);
+
     const rawReply =
       response.content[0]?.type === 'text'
         ? response.content[0].text
