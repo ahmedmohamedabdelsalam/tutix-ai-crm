@@ -102,14 +102,21 @@ export class WhatsAppService {
       console.log(`FOLLOW-UP CANCELLED — ${phone} replied before deadline`)
     }
 
+    // knownCustomerName is set here when we find an existing lead with a name — used later
+    // in getAgentReply so the AI greets by name instead of asking again
+    let knownCustomerName: string | undefined
+
     // ── New conversation ─────────────────────────────────────
     if (!conv) {
-      // PART 4: Returning customer check — phone has a previous WON lead
-      const hasWonLead = await this.prisma.lead.findFirst({
-        where: { companyId, phone, status: LeadStatus.WON },
+      // ONE canonical Lead per phone+companyId — reuse if exists, never duplicate
+      const existingLead = await this.prisma.lead.findFirst({
+        where: { companyId, phone },
+        orderBy: { createdAt: 'asc' },
       })
-
-      const lead = await this.prisma.lead.create({
+      const hasWonLead = existingLead?.status === LeadStatus.WON
+      knownCustomerName = existingLead?.name ?? undefined
+      console.log(`NEW_CONV → phone=${phone} existingLead=${existingLead?.id ?? 'null'} knownName=${knownCustomerName ?? 'undefined'}`)
+      const lead = existingLead ?? await this.prisma.lead.create({
         data: { companyId, phone, source: 'whatsapp' },
       })
 
@@ -212,7 +219,7 @@ export class WhatsAppService {
     const packages = company.packages ?? ''
     const aiPrompt = company.aiPrompt ?? ''
     const waPhone  = company.phone ?? company.ownerPhone ?? ''
-    const reply = await getAgentReply(history, company.name, packages, aiPrompt, waPhone, company.industry, returningCustomer)
+    const reply = await getAgentReply(history, company.name, packages, aiPrompt, waPhone, company.industry, returningCustomer, knownCustomerName)
 
     await this.prisma.message.create({
       data: { conversationId: conv.id, role: 'ASSISTANT', content: reply },

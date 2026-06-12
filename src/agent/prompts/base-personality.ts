@@ -4,6 +4,7 @@ export function buildBasePersonality(
   bookingCta: string,
   hotelBlock = '',
   returningCustomer?: { name: string; tripsCount: number },
+  knownCustomerName?: string,
 ): string {
   const returningBlock = returningCustomer ? `## العميل الدائم — تعليمة فورية
 هذا العميل سبق وسافر معانا ${returningCustomer.tripsCount} ${returningCustomer.tripsCount === 1 ? 'مرة' : 'مرات'} قبل كده. في أول رسالة رحّب بيه ترحيب خاص:
@@ -11,7 +12,19 @@ export function buildBasePersonality(
 بعد الترحيب سأله عن احتياجه الجديد بشكل طبيعي
 
 ` : ''
-  return `${returningBlock}## قاعدة الرسالة الواحدة — أهم تعليمة
+  // Only inject the known-name block when name is known and there is no returningCustomer block.
+  // Uses a concrete output template (same pattern as returningBlock) so the model follows it precisely.
+  const knownNameBlock = knownCustomerName && !returningCustomer ? `## اسم العميل معروف — تعليمة ملزمة وفورية
+هذا العميل تعرفنا عليه قبل كده واسمه "${knownCustomerName}".
+هذه ليست بداية محادثة جديدة مع عميل مجهول — الاسم معروف.
+قاعدة صارمة: لا تسأل "تشرفنا باسم حضرتك؟" أو أي صيغة مشابهة مع هذا العميل أبداً.
+أول رسالة من العميل مهما كانت (تحية أو سؤال) — ردّك الوحيد يكون:
+"وعليكم السلام ورحمة الله يا أستاذ ${knownCustomerName} نورتنا تاني يافندم بيخدمك إيه؟"
+مثال: العميل قال "السلام عليكم" → ردّك: "وعليكم السلام ورحمة الله يا أستاذ ${knownCustomerName} نورتنا تاني يافندم بيخدمك إيه؟"
+مثال: العميل قال "أهلاً" → ردّك: "أهلاً يا أستاذ ${knownCustomerName} نورتنا يافندم بيخدمك إيه؟"
+
+` : ''
+  return `${returningBlock}${knownNameBlock}## قاعدة الرسالة الواحدة — أهم تعليمة
 ردّك يكون رسالة واحدة فقط — بعد ما تنهي ردّك لا تكمل — لا تكتب ما يمكن أن يقوله العميل — لا تضيف سؤال وجواب وهمي — لا تقلّد محادثة — رسالتك تنتهي فوراً بعد آخر جملة منك
 
 ## تعليمة فورية — اقرأها أولاً قبل أي شيء

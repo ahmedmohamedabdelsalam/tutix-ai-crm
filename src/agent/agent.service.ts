@@ -23,13 +23,14 @@ function buildSystemPrompt(
   waPhone: string,
   industry: Industry = Industry.HAJJ_UMRAH,
   returningCustomer?: { name: string; tripsCount: number },
+  knownCustomerName?: string,
 ): string {
   const bookingCta = waPhone
     ? `قل: "تمام يافندم هحول حضرتك لزميلي المختص يكمل معاك خطوات الحجز إن شاء الله وللتواصل المباشر: ${waPhone}"`
     : `قل: "تمام يافندم هحول حضرتك لزميلي المختص يكمل معاك خطوات الحجز إن شاء الله"`;
 
   const { identity, catalog, hotels } = getIndustryPrompt(industry, companyName);
-  let prompt = buildBasePersonality(identity, catalog, bookingCta, hotels, returningCustomer);
+  let prompt = buildBasePersonality(identity, catalog, bookingCta, hotels, returningCustomer, knownCustomerName);
 
   // Append DB-driven updates (override base prices if contradicted)
   if (packages && packages.trim()) {
@@ -127,12 +128,26 @@ export async function getAgentReply(
   waPhone = '',
   industry: Industry = Industry.HAJJ_UMRAH,
   returningCustomer?: { name: string; tripsCount: number },
+  knownCustomerName?: string,
 ): Promise<string> {
   try {
-    const messages = history.map((m) => ({
+    let messages = history.map((m) => ({
       role: m.role.toLowerCase() === 'user' ? 'user' as const : 'assistant' as const,
       content: m.content,
     }));
+
+    // When we know the customer's name and this is their first message in a new conversation,
+    // use Anthropic's assistant-turn pre-fill technique: append an incomplete assistant message
+    // so the model continues from a greeting-by-name and cannot ask for the name again.
+    let prefill = '';
+    if (knownCustomerName && history.length === 1) {
+      const firstMsg = history[0].content.trim();
+      const isGreeting = /^(السلام|أهلاً|اهلاً|اهلا|مرحبا|هاي|هاى|صباح|مسا|ازيك)/.test(firstMsg);
+      prefill = isGreeting
+        ? `وعليكم السلام ورحمة الله يا أستاذ ${knownCustomerName} نورتنا تاني يافندم`
+        : `أهلاً يا أستاذ ${knownCustomerName} نورتنا تاني يافندم`;
+      messages = [...messages, { role: 'assistant' as const, content: prefill }];
+    }
 
     // Detect hotel name in last user message → injected as a separate uncached block
     const lastUserMsg = history.filter(m => m.role.toLowerCase() === 'user').slice(-1)[0]?.content ?? '';
@@ -141,7 +156,7 @@ export async function getAgentReply(
     // Base system prompt is identical across all calls for the same company → cache it.
     // Hotel override (when present) is appended as a second uncached block so the
     // cached portion stays stable and gets a cache hit on every subsequent message.
-    const sysPrompt = buildSystemPrompt(companyName, packages, aiPrompt, waPhone, industry, returningCustomer);
+    const sysPrompt = buildSystemPrompt(companyName, packages, aiPrompt, waPhone, industry, returningCustomer, knownCustomerName);
     const systemBlocks = [
       { type: 'text' as const, text: sysPrompt, cache_control: { type: 'ephemeral' as const } },
       ...(hotelOverride ? [{ type: 'text' as const, text: hotelOverride }] : []),
@@ -158,10 +173,10 @@ export async function getAgentReply(
     const u = response.usage;
     console.log(`CACHE: write=${u.cache_creation_input_tokens ?? 0} read=${u.cache_read_input_tokens ?? 0} input=${u.input_tokens} output=${u.output_tokens}`);
 
-    const rawReply =
-      response.content[0]?.type === 'text'
+    const rawReply = prefill +
+      (response.content[0]?.type === 'text'
         ? response.content[0].text
-        : 'عذراً حدث خطأ سيتواصل معك أحد المتخصصين';
+        : 'عذراً حدث خطأ سيتواصل معك أحد المتخصصين');
     console.log(`RAW_REPLY: ${rawReply.substring(0, 300).replace(/\n/g, '↵')}`);
     return cleanAgentResponse(rawReply);
   } catch (err) {
