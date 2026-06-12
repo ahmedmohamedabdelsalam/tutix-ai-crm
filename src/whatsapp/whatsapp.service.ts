@@ -80,7 +80,7 @@ export function clampToWindow(date: Date): Date {
 export class WhatsAppService {
   constructor(private prisma: PrismaService) {}
 
-  async handleMessage(companyId: string, phone: string, text: string): Promise<string> {
+  async handleMessage(companyId: string, phone: string, text: string, source = 'direct', referralData?: object | null): Promise<string> {
     const company = await this.prisma.company.findUnique({ where: { id: companyId } })
     if (!company || !company.isActive) return ''
 
@@ -117,7 +117,10 @@ export class WhatsAppService {
       knownCustomerName = existingLead?.name ?? undefined
       console.log(`NEW_CONV → phone=${phone} existingLead=${existingLead?.id ?? 'null'} knownName=${knownCustomerName ?? 'undefined'}`)
       const lead = existingLead ?? await this.prisma.lead.create({
-        data: { companyId, phone, source: 'whatsapp' },
+        data: {
+          companyId, phone, source,
+          ...(referralData && { referralData }),
+        },
       })
 
       conv = await this.prisma.conversation.create({

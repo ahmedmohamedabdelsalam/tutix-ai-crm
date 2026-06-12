@@ -52,6 +52,15 @@ const MEDIA_REPLIES: Record<string, { label: string; reply: string }> = {
 }
 const MEDIA_TYPES = new Set(Object.keys(MEDIA_REPLIES))
 
+function detectAdSource(referral?: { source_url?: string }): string {
+  if (!referral) return 'direct'
+  const url = referral.source_url ?? ''
+  if (url.includes('instagram.com')) return 'instagram'
+  if (url.includes('tiktok.com')) return 'tiktok'
+  // facebook.com, fb.com, or any other Meta ad — default to facebook
+  return 'facebook'
+}
+
 @Controller('webhook')
 export class WhatsAppController {
   constructor(
@@ -89,7 +98,9 @@ export class WhatsAppController {
       if (!message?.text?.body && !MEDIA_TYPES.has(message?.type)) return
 
       const incomingPhoneId = value?.metadata?.phone_number_id
-      console.log(`Webhook received | phone_number_id: ${incomingPhoneId} | from: ${message.from} | type: ${message.type}`)
+      const referral        = message.referral ?? null
+      const adSource        = detectAdSource(referral)
+      console.log(`Webhook received | phone_number_id: ${incomingPhoneId} | from: ${message.from} | type: ${message.type} | adSource: ${adSource}`)
 
       // Look up company by waPhoneId so multi-tenant routing works correctly
       let company = incomingPhoneId
@@ -133,8 +144,15 @@ export class WhatsAppController {
         })
         let convId = conv?.id
         if (!convId) {
-          const lead = await this.prisma.lead.create({
-            data: { companyId: company.id, phone: message.from, source: 'whatsapp' },
+          const existingLead = await this.prisma.lead.findFirst({
+            where: { companyId: company.id, phone: message.from },
+            orderBy: { createdAt: 'asc' },
+          })
+          const lead = existingLead ?? await this.prisma.lead.create({
+            data: {
+              companyId: company.id, phone: message.from, source: adSource,
+              ...(referral && { referralData: referral }),
+            },
           })
           const newConv = await this.prisma.conversation.create({
             data: { companyId: company.id, phone: message.from, leadId: lead.id, status: ConvStatus.AI_HANDLING },
@@ -160,7 +178,7 @@ export class WhatsAppController {
         return
       }
 
-      const reply = await this.whatsapp.handleMessage(company.id, message.from, message.text.body)
+      const reply = await this.whatsapp.handleMessage(company.id, message.from, message.text.body, adSource, referral)
 
       // Send reply back via Meta WhatsApp Cloud API — split into multiple messages with typing delays
       if (reply && company.waToken && company.waPhoneId) {

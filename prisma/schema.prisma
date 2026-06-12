@@ -62,7 +62,8 @@ model Lead {
   score         Int            @default(0)
   isHot         Boolean        @default(false)
   status        LeadStatus     @default(NEW)
-  source        String         @default("whatsapp")
+  source        String         @default("direct")
+  referralData  Json?
   assignedTo    String?
   assignedAt    DateTime?
   createdAt     DateTime       @default(now())
