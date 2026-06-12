@@ -28,6 +28,7 @@ model Company {
   users             User[]
   tasks             Task[]
   permanentCustomers PermanentCustomer[]
+  payments          Payment[]
 }
 
 model User {
@@ -68,6 +69,7 @@ model Lead {
   conversations Conversation[]
   tasks         Task[]
   callLogs      CallLog[]
+  payments      Payment[]
   company       Company        @relation(fields: [companyId], references: [id])
   assignedUser  User?          @relation("LeadAssignment", fields: [assignedTo], references: [id])
 
@@ -121,6 +123,7 @@ enum UserRole {
   COMPANY_ADMIN
   SALES_MANAGER
   AGENT
+  ACCOUNTANT
 }
 
 enum LeadStatus {
@@ -128,6 +131,7 @@ enum LeadStatus {
   CONTACTED
   INTERESTED
   NEGOTIATING
+  PENDING_PAYMENT
   WON
   HOT
   CONVERTED
@@ -211,4 +215,21 @@ model PermanentCustomer {
 
   @@index([companyId])
   @@index([phone])
+}
+
+model Payment {
+  id            String   @id @default(cuid())
+  leadId        String
+  companyId     String
+  amount        Float
+  method        String
+  receiptNumber String?
+  notes         String?
+  confirmedBy   String
+  createdAt     DateTime @default(now())
+  lead          Lead     @relation(fields: [leadId], references: [id])
+  company       Company  @relation(fields: [companyId], references: [id])
+
+  @@index([companyId])
+  @@index([leadId])
 }
