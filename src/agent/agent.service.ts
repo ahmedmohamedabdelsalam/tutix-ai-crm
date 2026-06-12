@@ -22,13 +22,14 @@ function buildSystemPrompt(
   aiPrompt: string,
   waPhone: string,
   industry: Industry = Industry.HAJJ_UMRAH,
+  returningCustomer?: { name: string; tripsCount: number },
 ): string {
   const bookingCta = waPhone
     ? `قل: "تمام يافندم هحول حضرتك لزميلي المختص يكمل معاك خطوات الحجز إن شاء الله وللتواصل المباشر: ${waPhone}"`
     : `قل: "تمام يافندم هحول حضرتك لزميلي المختص يكمل معاك خطوات الحجز إن شاء الله"`;
 
   const { identity, catalog, hotels } = getIndustryPrompt(industry, companyName);
-  let prompt = buildBasePersonality(identity, catalog, bookingCta, hotels);
+  let prompt = buildBasePersonality(identity, catalog, bookingCta, hotels, returningCustomer);
 
   // Append DB-driven updates (override base prices if contradicted)
   if (packages && packages.trim()) {
@@ -125,6 +126,7 @@ export async function getAgentReply(
   aiPrompt = '',
   waPhone = '',
   industry: Industry = Industry.HAJJ_UMRAH,
+  returningCustomer?: { name: string; tripsCount: number },
 ): Promise<string> {
   try {
     const messages = history.map((m) => ({
@@ -139,7 +141,7 @@ export async function getAgentReply(
     // Base system prompt is identical across all calls for the same company → cache it.
     // Hotel override (when present) is appended as a second uncached block so the
     // cached portion stays stable and gets a cache hit on every subsequent message.
-    const sysPrompt = buildSystemPrompt(companyName, packages, aiPrompt, waPhone, industry);
+    const sysPrompt = buildSystemPrompt(companyName, packages, aiPrompt, waPhone, industry, returningCustomer);
     const systemBlocks = [
       { type: 'text' as const, text: sysPrompt, cache_control: { type: 'ephemeral' as const } },
       ...(hotelOverride ? [{ type: 'text' as const, text: hotelOverride }] : []),

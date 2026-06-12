@@ -27,6 +27,7 @@ model Company {
   leads             Lead[]
   users             User[]
   tasks             Task[]
+  permanentCustomers PermanentCustomer[]
 }
 
 model User {
@@ -184,4 +185,30 @@ model CallLog {
 
   @@index([leadId])
   @@index([userId])
+}
+
+model PermanentCustomer {
+  id            String    @id @default(cuid())
+  companyId     String
+  fullName      String
+  phone         String?
+  phoneAlt      String?
+  tripDate      DateTime?
+  hotelName     String?
+  packageLevel  Int?
+  gender        String?
+  birthDate     DateTime?
+  age           Int?
+  jobTitle      String?
+  address       String?
+  governorate   String?
+  tripsCount    Int       @default(1)
+  source        String    @default("manual")
+  notes         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  company       Company   @relation(fields: [companyId], references: [id])
+
+  @@index([companyId])
+  @@index([phone])
 }

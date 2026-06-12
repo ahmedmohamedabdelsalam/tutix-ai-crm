@@ -200,10 +200,19 @@ export class WhatsAppService {
       content: m.content,
     }))
 
+    // Check for a pipeline-sourced returning customer (source != legacy so phone always exists)
+    const permCustomer = await this.prisma.permanentCustomer.findFirst({
+      where: { companyId, phone, source: { not: 'legacy' } },
+      select: { fullName: true, tripsCount: true },
+    })
+    const returningCustomer = permCustomer
+      ? { name: permCustomer.fullName, tripsCount: permCustomer.tripsCount }
+      : undefined
+
     const packages = company.packages ?? ''
     const aiPrompt = company.aiPrompt ?? ''
     const waPhone  = company.phone ?? company.ownerPhone ?? ''
-    const reply = await getAgentReply(history, company.name, packages, aiPrompt, waPhone, company.industry)
+    const reply = await getAgentReply(history, company.name, packages, aiPrompt, waPhone, company.industry, returningCustomer)
 
     await this.prisma.message.create({
       data: { conversationId: conv.id, role: 'ASSISTANT', content: reply },

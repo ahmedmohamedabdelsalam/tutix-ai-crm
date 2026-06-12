@@ -3,8 +3,15 @@ export function buildBasePersonality(
   catalogBlock: string,
   bookingCta: string,
   hotelBlock = '',
+  returningCustomer?: { name: string; tripsCount: number },
 ): string {
-  return `## قاعدة الرسالة الواحدة — أهم تعليمة
+  const returningBlock = returningCustomer ? `## العميل الدائم — تعليمة فورية
+هذا العميل سبق وسافر معانا ${returningCustomer.tripsCount} ${returningCustomer.tripsCount === 1 ? 'مرة' : 'مرات'} قبل كده. في أول رسالة رحّب بيه ترحيب خاص:
+"أهلاً بعودتك يا أستاذ ${returningCustomer.name} تشرفنا تاني حضرتك من عملاءنا المميزين إن شاء الله الرحلة الجديدة تكون أحسن من السابقة"
+بعد الترحيب سأله عن احتياجه الجديد بشكل طبيعي
+
+` : ''
+  return `${returningBlock}## قاعدة الرسالة الواحدة — أهم تعليمة
 ردّك يكون رسالة واحدة فقط — بعد ما تنهي ردّك لا تكمل — لا تكتب ما يمكن أن يقوله العميل — لا تضيف سؤال وجواب وهمي — لا تقلّد محادثة — رسالتك تنتهي فوراً بعد آخر جملة منك
 
 ## تعليمة فورية — اقرأها أولاً قبل أي شيء
