@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import { ConvStatus, LeadStatus } from '@prisma/client'
-import { getAgentReply, extractLeadData, calculateScore, shouldHandoff } from '../agent/agent.service'
+import { getAgentReply, extractLeadData, calculateScore, shouldHandoff, LeadData } from '../agent/agent.service'
 
 @Injectable()
 export class WhatsAppService {
@@ -127,22 +127,33 @@ export class WhatsAppService {
       data: { conversationId: conv.id, role: 'ASSISTANT', content: reply },
     })
 
-    const extracted = await extractLeadData([...history, { role: 'assistant', content: reply }])
-    const score = calculateScore(extracted)
+    // Run extractLeadData on msg 1-2 (capture name early), every 3rd message,
+    // or whenever the customer's message contains a booking keyword.
+    const BOOKING_SIGNALS = ['عايز احجز', 'عايزة احجز', 'هحجز', 'احجزلي', 'موافق نحجز', 'خد الحجز'];
+    const msgCount = history.length; // includes the just-saved user message
+    const hasBookingSignal = BOOKING_SIGNALS.some(kw => text.includes(kw));
+    const runExtract = msgCount <= 2 || msgCount % 3 === 0 || hasBookingSignal;
+    console.log(`EXTRACT: msg=${msgCount} run=${runExtract} (booking=${hasBookingSignal} mod3=${msgCount % 3 === 0})`);
 
-    await this.prisma.lead.updateMany({
-      where: { companyId, phone },
-      data: {
-        ...(extracted.name && { name: extracted.name }),
-        ...(extracted.packageType && { packageType: extracted.packageType }),
-        ...(extracted.groupSize && { groupSize: extracted.groupSize }),
-        ...(extracted.budget && { budget: extracted.budget }),
-        ...(extracted.travelDate && { travelDate: extracted.travelDate }),
-        score,
-        isHot: score >= 70,
-        status: score >= 70 ? LeadStatus.HOT : LeadStatus.CONTACTED,
-      },
-    })
+    let extracted: Partial<LeadData> = {}
+    let score = 0
+    if (runExtract) {
+      extracted = await extractLeadData([...history, { role: 'assistant', content: reply }])
+      score = calculateScore(extracted)
+      await this.prisma.lead.updateMany({
+        where: { companyId, phone },
+        data: {
+          ...(extracted.name && { name: extracted.name }),
+          ...(extracted.packageType && { packageType: extracted.packageType }),
+          ...(extracted.groupSize && { groupSize: extracted.groupSize }),
+          ...(extracted.budget && { budget: extracted.budget }),
+          ...(extracted.travelDate && { travelDate: extracted.travelDate }),
+          score,
+          isHot: score >= 70,
+          status: score >= 70 ? LeadStatus.HOT : LeadStatus.CONTACTED,
+        },
+      })
+    }
 
     const { yes, reason } = shouldHandoff(score, history.length, extracted, text)
 
