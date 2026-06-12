@@ -17,6 +17,7 @@ model Company {
   packages          String?
   aiPrompt          String?
   apiKey            String?        @unique
+  emailDomain       String?
   industry          Industry       @default(HAJJ_UMRAH)
   subscriptionPlan  String         @default("Basic")
   subscriptionStart DateTime?
