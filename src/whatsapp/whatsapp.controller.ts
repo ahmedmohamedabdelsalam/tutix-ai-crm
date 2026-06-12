@@ -43,8 +43,14 @@ async function metaPost(phoneId: string, token: string, body: object): Promise<v
   })
 }
 
-const MEDIA_REPLY = 'حضرتك بعتلنا رسالة صوتية، للأسف مش بنقدر نسمعها دلوقتي 🙏 لو ممكن تكتب طلبك يافندم نكون شاكرين'
-const MEDIA_TYPES = new Set(['audio', 'image', 'video', 'document', 'sticker'])
+const MEDIA_REPLIES: Record<string, { label: string; reply: string }> = {
+  audio:    { label: '[رسالة صوتية]',   reply: 'حضرتك بعتلنا رسالة صوتية للأسف مش بنقدر نسمعها دلوقتي 🙏 لو ممكن تكتب طلبك يافندم نكون شاكرين' },
+  sticker:  { label: '[استيكر]',        reply: 'تم استلام الاستيكر يافندم 😊 لو حابب تكتب طلبك أو سؤالك أكون ممنون' },
+  image:    { label: '[صورة]',           reply: 'تم استلام الصورة يافندم 🙏 لو محتاج تستفسر عن حاجة معينة اكتبلنا التفاصيل وهنساعدك إن شاء الله وفريقنا هيتابع مع حضرتك في حالة وجود أي إجراء مطلوب' },
+  video:    { label: '[فيديو]',          reply: 'تم استلام الملف يافندم 🙏 لو حابب تكتب طلبك أو سؤالك أكون ممنون' },
+  document: { label: '[ملف]',            reply: 'تم استلام الملف يافندم 🙏 لو حابب تكتب طلبك أو سؤالك أكون ممنون' },
+}
+const MEDIA_TYPES = new Set(Object.keys(MEDIA_REPLIES))
 
 @Controller('webhook')
 export class WhatsAppController {
@@ -119,6 +125,7 @@ export class WhatsAppController {
       // Non-text media: save placeholder + send fixed reply, skip AI entirely
       if (!message.text?.body) {
         const mediaType = message.type as string
+        const media = MEDIA_REPLIES[mediaType] ?? MEDIA_REPLIES['document']
         console.log(`MEDIA MESSAGE (${mediaType}) from ${message.from} — sending fixed reply`)
         const conv = await this.prisma.conversation.findFirst({
           where: { companyId: company.id, phone: message.from, status: { not: ConvStatus.CLOSED } },
@@ -135,7 +142,7 @@ export class WhatsAppController {
           convId = newConv.id
         }
         await this.prisma.message.create({
-          data: { conversationId: convId, role: 'USER', content: '[رسالة صوتية]' },
+          data: { conversationId: convId, role: 'USER', content: media.label },
         })
         if (company.waToken && company.waPhoneId) {
           await new Promise(r => setTimeout(r, 1500))
@@ -143,13 +150,13 @@ export class WhatsAppController {
             messaging_product: 'whatsapp',
             to: message.from,
             type: 'text',
-            text: { body: MEDIA_REPLY },
+            text: { body: media.reply },
           })
         }
         await this.prisma.message.create({
-          data: { conversationId: convId, role: 'ASSISTANT', content: MEDIA_REPLY },
+          data: { conversationId: convId, role: 'ASSISTANT', content: media.reply },
         })
-        console.log(`MEDIA REPLY sent to ${message.from}`)
+        console.log(`MEDIA REPLY (${mediaType}) sent to ${message.from}`)
         return
       }
 
@@ -228,6 +235,33 @@ export class WhatsAppController {
       console.error('❌ /webhook/test error:', err?.message ?? err)
       return { error: err?.message ?? 'Internal server error', stack: err?.stack?.split('\n').slice(0, 3) }
     }
+  }
+
+  // Test media handling — simulates receiving a non-text message
+  @Post('test-media')
+  async testMedia(@Body() body: { phone: string; type: string }) {
+    const companyId = process.env.DEFAULT_COMPANY_ID
+    if (!companyId) return { error: 'DEFAULT_COMPANY_ID not set' }
+    const company = await this.prisma.company.findUnique({ where: { id: companyId } })
+    if (!company) return { error: 'Company not found' }
+    const phone = body.phone ?? '201234567890'
+    const mediaType = body.type ?? 'image'
+    const media = MEDIA_REPLIES[mediaType] ?? MEDIA_REPLIES['document']
+    const conv = await this.prisma.conversation.findFirst({
+      where: { companyId, phone, status: { not: ConvStatus.CLOSED } },
+      orderBy: { updatedAt: 'desc' },
+    })
+    let convId = conv?.id
+    if (!convId) {
+      const lead = await this.prisma.lead.create({ data: { companyId, phone, source: 'whatsapp' } })
+      const newConv = await this.prisma.conversation.create({
+        data: { companyId, phone, leadId: lead.id, status: ConvStatus.AI_HANDLING },
+      })
+      convId = newConv.id
+    }
+    await this.prisma.message.create({ data: { conversationId: convId, role: 'USER', content: media.label } })
+    await this.prisma.message.create({ data: { conversationId: convId, role: 'ASSISTANT', content: media.reply } })
+    return { type: mediaType, label: media.label, reply: media.reply }
   }
 
   // Manually trigger the follow-up cron (bypasses time window — for testing only)

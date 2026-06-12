@@ -170,7 +170,8 @@ export class WhatsAppService {
         }))
         const packagesNH = company.packages ?? ''
         const aiPromptNH = company.aiPrompt ?? ''
-        const waPhoneNH  = company.phone ?? company.ownerPhone ?? ''
+        // Suppress phone in CTA once handoff message already sent — prevents repeat
+        const waPhoneNH  = conv.handoffMessageSent ? '' : (company.phone ?? company.ownerPhone ?? '')
         const replyNH = await getAgentReply(historyNH, company.name, packagesNH, aiPromptNH, waPhoneNH, company.industry)
         await this.prisma.message.create({
           data: { conversationId: conv.id, role: 'ASSISTANT', content: replyNH },
@@ -272,19 +273,26 @@ export class WhatsAppService {
     }
 
     // Handoff: booking confirmed
+    // First time → full message with contact number. Repeat → short acknowledgment only.
+    const closingFull = waPhone
+      ? `تمام يافندم هحول حضرتك لزميلي المختص يكمل معاك خطوات الحجز إن شاء الله وللتواصل المباشر: ${waPhone}`
+      : 'تمام يافندم هحول حضرتك لزميلي المختص يكمل معاك خطوات الحجز إن شاء الله'
+    const closingRepeat = 'تمام يافندم زميلنا هيتواصل معك في أقرب وقت إن شاء الله'
+    const closing = conv.handoffMessageSent ? closingRepeat : closingFull
+
     await this.prisma.conversation.update({
       where: { id: conv.id },
       data: {
         status: ConvStatus.NEEDS_HUMAN,
         agentMode: 'HUMAN',
         agentNotes: `${reason} | Score: ${score}/100`,
+        handoffMessageSent: true,
       },
     })
-    const closing = 'تمام يافندم هحول حضرتك لزميلي المختص يكمل معاك خطوات الحجز إن شاء الله'
     await this.prisma.message.create({
       data: { conversationId: conv.id, role: 'ASSISTANT', content: closing },
     })
-    console.log(`HOT LEAD → ${phone} | Score: ${score} | ${reason}`)
+    console.log(`HOT LEAD → ${phone} | Score: ${score} | ${reason} | firstHandoff=${!conv.handoffMessageSent}`)
     return closing
   }
 }

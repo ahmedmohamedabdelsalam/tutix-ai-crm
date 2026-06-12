@@ -90,6 +90,7 @@ model Conversation {
   agentNotes           String?
   followUpScheduledAt  DateTime?
   followUpStatus       FollowUpStatus @default(NONE)
+  handoffMessageSent   Boolean        @default(false)
   createdAt            DateTime       @default(now())
   updatedAt            DateTime       @updatedAt
   company    Company    @relation(fields: [companyId], references: [id])
