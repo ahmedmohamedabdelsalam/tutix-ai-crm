@@ -76,22 +76,25 @@ model Lead {
 }
 
 model Conversation {
-  id               String     @id @default(cuid())
-  companyId        String
-  leadId           String?
-  phone            String
-  status           ConvStatus @default(AI_HANDLING)
-  agentMode        String     @default("AI")
-  assignedSalesId  String?
-  agentNotes       String?
-  createdAt        DateTime   @default(now())
-  updatedAt        DateTime   @updatedAt
+  id                   String         @id @default(cuid())
+  companyId            String
+  leadId               String?
+  phone                String
+  status               ConvStatus     @default(AI_HANDLING)
+  agentMode            String         @default("AI")
+  assignedSalesId      String?
+  agentNotes           String?
+  followUpScheduledAt  DateTime?
+  followUpStatus       FollowUpStatus @default(NONE)
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
   company    Company    @relation(fields: [companyId], references: [id])
   lead       Lead?      @relation(fields: [leadId], references: [id])
   messages   Message[]
 
   @@index([companyId])
   @@index([phone, companyId])
+  @@index([followUpStatus])
 }
 
 model Message {
@@ -136,6 +139,13 @@ enum ConvStatus {
   NEEDS_HUMAN
   ASSIGNED
   CLOSED
+}
+
+enum FollowUpStatus {
+  NONE
+  SCHEDULED
+  SENT
+  CANCELLED
 }
 
 enum MessageRole {

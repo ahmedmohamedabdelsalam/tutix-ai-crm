@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Body, Query, Res } from '@nestjs/common'
 import type { Response } from 'express'
 import { WhatsAppService } from './whatsapp.service'
+import { FollowUpService } from './followup.service'
 import { PrismaService } from '../prisma/prisma.service'
 
 function getTypingDelay(text: string): number {
@@ -45,6 +46,7 @@ async function metaPost(phoneId: string, token: string, body: object): Promise<v
 export class WhatsAppController {
   constructor(
     private whatsapp: WhatsAppService,
+    private followup: FollowUpService,
     private prisma: PrismaService,
   ) {}
 
@@ -184,5 +186,11 @@ export class WhatsAppController {
       console.error('❌ /webhook/test error:', err?.message ?? err)
       return { error: err?.message ?? 'Internal server error', stack: err?.stack?.split('\n').slice(0, 3) }
     }
+  }
+
+  // Manually trigger the follow-up cron (bypasses time window — for testing only)
+  @Post('test-followup')
+  async testFollowup() {
+    return this.followup.triggerNow()
   }
 }
