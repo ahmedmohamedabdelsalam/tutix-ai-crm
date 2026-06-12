@@ -1,5 +1,6 @@
 import { Controller, Get, Post, Body, Query, Res } from '@nestjs/common'
 import type { Response } from 'express'
+import { ConvStatus } from '@prisma/client'
 import { WhatsAppService } from './whatsapp.service'
 import { FollowUpService } from './followup.service'
 import { PrismaService } from '../prisma/prisma.service'
@@ -42,6 +43,9 @@ async function metaPost(phoneId: string, token: string, body: object): Promise<v
   })
 }
 
+const MEDIA_REPLY = 'حضرتك بعتلنا رسالة صوتية، للأسف مش بنقدر نسمعها دلوقتي 🙏 لو ممكن تكتب طلبك يافندم نكون شاكرين'
+const MEDIA_TYPES = new Set(['audio', 'image', 'video', 'document', 'sticker'])
+
 @Controller('webhook')
 export class WhatsAppController {
   constructor(
@@ -75,10 +79,11 @@ export class WhatsAppController {
     try {
       const value   = body?.entry?.[0]?.changes?.[0]?.value
       const message = value?.messages?.[0]
-      if (!message?.text?.body) return
+      if (!message?.from || !message?.id) return
+      if (!message?.text?.body && !MEDIA_TYPES.has(message?.type)) return
 
       const incomingPhoneId = value?.metadata?.phone_number_id
-      console.log(`Webhook received | phone_number_id: ${incomingPhoneId} | from: ${message.from}`)
+      console.log(`Webhook received | phone_number_id: ${incomingPhoneId} | from: ${message.from} | type: ${message.type}`)
 
       // Look up company by waPhoneId so multi-tenant routing works correctly
       let company = incomingPhoneId
@@ -109,6 +114,43 @@ export class WhatsAppController {
           status: 'read',
           message_id: message.id,
         })
+      }
+
+      // Non-text media: save placeholder + send fixed reply, skip AI entirely
+      if (!message.text?.body) {
+        const mediaType = message.type as string
+        console.log(`MEDIA MESSAGE (${mediaType}) from ${message.from} — sending fixed reply`)
+        const conv = await this.prisma.conversation.findFirst({
+          where: { companyId: company.id, phone: message.from, status: { not: ConvStatus.CLOSED } },
+          orderBy: { updatedAt: 'desc' },
+        })
+        let convId = conv?.id
+        if (!convId) {
+          const lead = await this.prisma.lead.create({
+            data: { companyId: company.id, phone: message.from, source: 'whatsapp' },
+          })
+          const newConv = await this.prisma.conversation.create({
+            data: { companyId: company.id, phone: message.from, leadId: lead.id, status: ConvStatus.AI_HANDLING },
+          })
+          convId = newConv.id
+        }
+        await this.prisma.message.create({
+          data: { conversationId: convId, role: 'USER', content: '[رسالة صوتية]' },
+        })
+        if (company.waToken && company.waPhoneId) {
+          await new Promise(r => setTimeout(r, 1500))
+          await metaPost(company.waPhoneId, company.waToken, {
+            messaging_product: 'whatsapp',
+            to: message.from,
+            type: 'text',
+            text: { body: MEDIA_REPLY },
+          })
+        }
+        await this.prisma.message.create({
+          data: { conversationId: convId, role: 'ASSISTANT', content: MEDIA_REPLY },
+        })
+        console.log(`MEDIA REPLY sent to ${message.from}`)
+        return
       }
 
       const reply = await this.whatsapp.handleMessage(company.id, message.from, message.text.body)
