@@ -2,7 +2,7 @@ const http = require('http');
 
 const data = JSON.stringify({
   phone: '201111111112',
-  message: 'أنا وزوجتي عايزين نعمل عمرة في أغسطس'
+  message: 'عندكم فرع في القاهرة فين؟'
 });
 
 const options = {
