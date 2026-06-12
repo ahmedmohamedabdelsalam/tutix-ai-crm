@@ -99,9 +99,9 @@ function cleanAgentResponse(text: string): string {
     for (let i = 1; i < blocks.length - 1; i++) {
       const block = blocks[i].trim();
       const isKnownPhrase = customerWords.some(kw => block.includes(kw));
-      // Very short isolated block (≤8 chars) with no ━ = one-word fake customer reply (e.g. "يوليو", "10 ايام")
-      const isOneWordReply = block.length <= 8 && !block.includes('━') && !block.includes('—');
-      if (block.length <= 80 && !block.includes('━') && (isKnownPhrase || isOneWordReply)) {
+      // Very short isolated block (≤8 chars) with no ⭐ = one-word fake customer reply (e.g. "يوليو", "10 ايام")
+      const isOneWordReply = block.length <= 8 && !block.includes('⭐') && !block.includes('—');
+      if (block.length <= 80 && !block.includes('⭐') && (isKnownPhrase || isOneWordReply)) {
         t = blocks.slice(0, i).join('\n\n').trimEnd();
         break;
       }

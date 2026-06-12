@@ -5,9 +5,32 @@ import { PrismaService } from '../prisma/prisma.service'
 
 function getTypingDelay(text: string): number {
   const len = text.length
-  if (len < 50)  return 2000 + Math.random() * 1000
-  if (len < 150) return 4000 + Math.random() * 2000
-  return 7000 + Math.random() * 3000
+  if (len < 50)  return 1500 + Math.random() * 1000   // 1.5–2.5s per short segment
+  if (len < 150) return 2500 + Math.random() * 1000   // 2.5–3.5s per medium segment
+  return 3000 + Math.random() * 1500                   // 3–4.5s per long segment (package card)
+}
+
+// Split a cleaned reply into WhatsApp message parts.
+// Rules:
+//   - Split first by blank lines (paragraph breaks)
+//   - Paragraphs containing ⭐ or 2+ "جنيه" = package card → keep as one message
+//   - All other paragraphs → split further by single newlines
+function splitIntoMessages(reply: string): string[] {
+  const segments: string[] = []
+  for (const para of reply.split(/\n\n+/)) {
+    const trimmed = para.trim()
+    if (!trimmed) continue
+    const isPackageCard = trimmed.includes('⭐') || (trimmed.match(/جنيه/g) ?? []).length >= 2
+    if (isPackageCard) {
+      segments.push(trimmed)
+    } else {
+      for (const line of trimmed.split('\n')) {
+        const l = line.trim()
+        if (l) segments.push(l)
+      }
+    }
+  }
+  return segments
 }
 
 async function metaPost(phoneId: string, token: string, body: object): Promise<void> {
@@ -88,34 +111,37 @@ export class WhatsAppController {
 
       const reply = await this.whatsapp.handleMessage(company.id, message.from, message.text.body)
 
-      // Send reply back via Meta WhatsApp Cloud API with human-like typing delay
+      // Send reply back via Meta WhatsApp Cloud API — split into multiple messages with typing delays
       if (reply && company.waToken && company.waPhoneId) {
-        const delay = getTypingDelay(reply)
-        console.log(`Typing delay: ${Math.round(delay / 1000)}s for reply of ${reply.length} chars`)
-        await new Promise(r => setTimeout(r, delay))
-
-        const metaRes = await fetch(
-          `https://graph.facebook.com/v18.0/${company.waPhoneId}/messages`,
-          {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${company.waToken}`,
-              'Content-Type': 'application/json',
+        const parts = splitIntoMessages(reply)
+        console.log(`Sending ${parts.length} part(s) to ${message.from}`)
+        for (let pi = 0; pi < parts.length; pi++) {
+          const part = parts[pi]
+          const delay = getTypingDelay(part)
+          console.log(`Part ${pi + 1}/${parts.length} (${part.length} chars, delay ${Math.round(delay / 1000)}s): ${part.substring(0, 60)}`)
+          await new Promise(r => setTimeout(r, delay))
+          const metaRes = await fetch(
+            `https://graph.facebook.com/v18.0/${company.waPhoneId}/messages`,
+            {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${company.waToken}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                messaging_product: 'whatsapp',
+                to: message.from,
+                type: 'text',
+                text: { body: part },
+              }),
             },
-            body: JSON.stringify({
-              messaging_product: 'whatsapp',
-              to: message.from,
-              type: 'text',
-              text: { body: reply },
-            }),
-          },
-        )
-        if (!metaRes.ok) {
-          const err = await metaRes.text()
-          console.error(`Meta API error (${metaRes.status}):`, err)
-        } else {
-          console.log(`Reply sent to ${message.from} via ${company.waPhoneId}`)
+          )
+          if (!metaRes.ok) {
+            const err = await metaRes.text()
+            console.error(`Meta API error on part ${pi + 1} (${metaRes.status}):`, err)
+          }
         }
+        console.log(`All ${parts.length} part(s) sent to ${message.from} via ${company.waPhoneId}`)
       } else if (reply) {
         console.warn(`Reply generated but not sent — waToken or waPhoneId missing for company: ${company.name}`)
       }
@@ -150,7 +176,10 @@ export class WhatsAppController {
         body.phone ?? '201234567890',
         body.message ?? 'مرحباً',
       )
-      return { reply }
+      const parts = reply ? splitIntoMessages(reply) : []
+      console.log(`TEST split: ${parts.length} part(s)`)
+      parts.forEach((p, i) => console.log(`  [${i + 1}] ${p.substring(0, 80)}`))
+      return { reply, parts }
     } catch (err: any) {
       console.error('❌ /webhook/test error:', err?.message ?? err)
       return { error: err?.message ?? 'Internal server error', stack: err?.stack?.split('\n').slice(0, 3) }
