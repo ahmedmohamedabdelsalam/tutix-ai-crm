@@ -1,6 +1,6 @@
 import { Industry } from '@prisma/client';
 import { buildHajjUmrahIdentity, buildHajjUmrahCatalog, buildHajjUmrahHotels } from './hajj-umrah';
-import { buildHajjCatalog } from './hajj-packages';
+import { buildHajjCatalog, buildHajjGeneralKnowledge } from './hajj-packages';
 
 export function getIndustryPrompt(
   industry: Industry,
@@ -11,7 +11,7 @@ export function getIndustryPrompt(
     default:
       return {
         identity: buildHajjUmrahIdentity(companyName),
-        catalog: buildHajjUmrahCatalog() + '\n\n' + buildHajjCatalog(),
+        catalog: buildHajjUmrahCatalog() + '\n\n' + buildHajjCatalog() + '\n\n' + buildHajjGeneralKnowledge(),
         hotels: buildHajjUmrahHotels(),
       };
   }
