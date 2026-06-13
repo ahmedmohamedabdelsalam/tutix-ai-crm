@@ -30,7 +30,7 @@ function buildSystemPrompt(
     : `قل: "تمام يافندم هحول حضرتك لزميلي المختص يكمل معاك خطوات الحجز إن شاء الله"`;
 
   const { identity, catalog, hotels } = getIndustryPrompt(industry, companyName);
-  let prompt = buildBasePersonality(identity, catalog, bookingCta, hotels, returningCustomer, knownCustomerName);
+  let prompt = buildBasePersonality(identity, catalog, bookingCta, hotels, returningCustomer, knownCustomerName, companyName);
 
   // Append DB-driven updates (override base prices if contradicted)
   if (packages && packages.trim()) {
