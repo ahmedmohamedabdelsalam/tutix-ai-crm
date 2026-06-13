@@ -38,6 +38,11 @@ const AGREEMENT = ['ماشي', 'تمام', 'أيوه', 'أوكي', 'اوكي', '
 const SHORT_WAIT = /دقيقة|لحظة|ثانية|ثواني|شوية|كمان شوية/
 const REAL_DURATION = /يوم|أيام|بكر[هة]|أسبوع|شهر/
 
+const DEFERRAL_PHRASES = [
+  'هتأكد مع الفريق', 'فريقنا هيتابع', 'الأفضل الرجوع لـ',
+  'مش متاكد', 'مش متأكد', 'هتأكدلك', 'هتأكد لك', 'هتأكد للحضرتك',
+]
+
 export function detectFollowUpIntent(
   text: string,
   history: { role: string; content: string }[],
@@ -237,6 +242,13 @@ export class WhatsAppService {
     await this.prisma.message.create({
       data: { conversationId: conv.id, role: 'ASSISTANT', content: reply },
     })
+
+    // Non-blocking: log deferral events for analytics
+    if (DEFERRAL_PHRASES.some(p => reply.includes(p))) {
+      this.prisma.agentInsight.create({
+        data: { companyId, conversationId: conv.id, type: 'deferred_question', content: text },
+      }).catch(e => console.error('AgentInsight write error:', e))
+    }
 
     // Run extractLeadData on msg 1-2 (capture name early), every 3rd message,
     // or whenever the customer's message contains a booking keyword.

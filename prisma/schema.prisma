@@ -30,6 +30,7 @@ model Company {
   tasks             Task[]
   permanentCustomers PermanentCustomer[]
   payments          Payment[]
+  agentInsights     AgentInsight[]
 }
 
 model User {
@@ -92,6 +93,7 @@ model Conversation {
   followUpScheduledAt  DateTime?
   followUpStatus       FollowUpStatus @default(NONE)
   handoffMessageSent   Boolean        @default(false)
+  dropOffAnalyzed      Boolean        @default(false)
   createdAt            DateTime       @default(now())
   updatedAt            DateTime       @updatedAt
   company    Company    @relation(fields: [companyId], references: [id])
@@ -235,4 +237,18 @@ model Payment {
 
   @@index([companyId])
   @@index([leadId])
+}
+
+model AgentInsight {
+  id             String   @id @default(cuid())
+  companyId      String
+  conversationId String
+  type           String
+  category       String?
+  content        String?
+  createdAt      DateTime @default(now())
+  company        Company  @relation(fields: [companyId], references: [id])
+
+  @@index([companyId])
+  @@index([type, companyId])
 }

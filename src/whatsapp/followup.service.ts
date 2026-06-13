@@ -1,8 +1,17 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { Cron } from '@nestjs/schedule'
 import { PrismaService } from '../prisma/prisma.service'
-import { FollowUpStatus } from '@prisma/client'
+import { FollowUpStatus, ConvStatus, MessageRole } from '@prisma/client'
 import { clampToWindow } from './whatsapp.service'
+
+function categorizeDropOff(lastMsg: string, totalMsgCount: number): string {
+  if (/غالي|تخفيض|خصم|أرخص/.test(lastMsg)) return 'بعد التعامل مع اعتراض'
+  if (/جنيه|السعر|الإجمالي/.test(lastMsg))  return 'بعد عرض الأسعار'
+  if (/يوليو|أغسطس|كام يوم|مدة الرحلة/.test(lastMsg)) return 'بعد سؤال الشهر/المدة'
+  if (/كام شخص|عدد الأفراد|معاك كام/.test(lastMsg)) return 'بعد سؤال عدد الأفراد'
+  if (/تشرفنا باسم|بيخدمك إيه|نورتنا/.test(lastMsg) && totalMsgCount <= 4) return 'بعد التحية / السؤال عن الاسم'
+  return 'أخرى'
+}
 
 const CAIRO_OFFSET_MS = 2 * 60 * 60 * 1000
 
@@ -88,10 +97,56 @@ export class FollowUpService {
       sent++
     }
 
+    await this.analyzeDropOffs(bypassWindow)
     return { sent, skipped: null }
   }
 
-  // Manual trigger for testing — bypasses time window
+  private async analyzeDropOffs(bypassHours = false): Promise<void> {
+    const cutoff = bypassHours
+      ? new Date(Date.now() + 60_000)           // effectively "all AI_HANDLING convs"
+      : new Date(Date.now() - 2 * 60 * 60_000)  // idle for >2h
+
+    const stale = await this.prisma.conversation.findMany({
+      where: {
+        dropOffAnalyzed: false,
+        status: ConvStatus.AI_HANDLING,
+        updatedAt: { lt: cutoff },
+      },
+      select: {
+        id: true,
+        companyId: true,
+        phone: true,
+        _count: { select: { messages: true } },
+        messages: {
+          where: { role: MessageRole.ASSISTANT },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          select: { content: true },
+        },
+      },
+    })
+
+    this.logger.log(`Drop-off analysis: ${stale.length} conversation(s) to classify`)
+    for (const conv of stale) {
+      const lastAsst = conv.messages[0]
+      const category = lastAsst
+        ? categorizeDropOff(lastAsst.content, conv._count.messages)
+        : 'أخرى'
+
+      await Promise.all([
+        this.prisma.agentInsight.create({
+          data: { companyId: conv.companyId, conversationId: conv.id, type: 'drop_off_stage', category },
+        }),
+        this.prisma.conversation.update({
+          where: { id: conv.id },
+          data: { dropOffAnalyzed: true },
+        }),
+      ])
+      this.logger.log(`DROP-OFF: ${conv.phone} → ${category}`)
+    }
+  }
+
+  // Manual trigger for testing — bypasses time window AND 2h idle threshold
   async triggerNow(): Promise<{ ran: boolean; ts: string; result: { sent: number; skipped: string | null } }> {
     const result = await this.sendDueFollowUps(true)
     return { ran: true, ts: new Date().toISOString(), result }
