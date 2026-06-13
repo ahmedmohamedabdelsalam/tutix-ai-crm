@@ -67,15 +67,22 @@ export function detectFollowUpIntent(
     return { shouldSchedule: true, days, declined: false }
   }
 
-  // Previous agent message was a proposal → check if customer agreed
-  const lastBot = [...history].reverse().find(m => m.role === 'assistant')
-  if (lastBot && isFollowUpProposal(lastBot.content)) {
-    // For short single-word agreement, match exact; for longer words, include substring
-    if (AGREEMENT.some(w => t === w || (w.length > 3 && t.includes(w)))) {
-      return { shouldSchedule: true, days: 1, declined: false }
+  // Previous agent message was a proposal → check if customer agreed.
+  // Guard: the user message that triggered the proposal must have had DEFER_INTENT.
+  // Without this, a misfired proposal (AI over-interpreting "ت" as "هفكر") would let
+  // the next innocent "تمام" schedule a follow-up.
+  const msgs = [...history]
+  const lastBotIdx = msgs.reduce<number>((found, m, i) => m.role === 'assistant' ? i : found, -1)
+  if (lastBotIdx >= 0 && isFollowUpProposal(msgs[lastBotIdx].content)) {
+    const userBeforeBot = msgs.slice(0, lastBotIdx).reverse().find(m => m.role === 'user')
+    if (userBeforeBot && DEFER_INTENT.test(userBeforeBot.content)) {
+      // For short single-word agreement, match exact; for longer words, include substring
+      if (AGREEMENT.some(w => t === w || (w.length > 3 && t.includes(w)))) {
+        return { shouldSchedule: true, days: 1, declined: false }
+      }
+      // Customer counter-proposes a different duration ("لأ بعد يومين أحسن")
+      if (days !== null) return { shouldSchedule: true, days, declined: false }
     }
-    // Customer counter-proposes a different duration ("لأ بعد يومين أحسن")
-    if (days !== null) return { shouldSchedule: true, days, declined: false }
   }
 
   return { shouldSchedule: false, days: 0, declined: false }
@@ -237,6 +244,19 @@ export class WhatsAppService {
     const packages = company.packages ?? ''
     const aiPrompt = company.aiPrompt ?? ''
     const waPhone  = company.phone ?? company.ownerPhone ?? ''
+
+    // Single Arabic letter (e.g. "ت") = typo or accidental tap — skip AI entirely.
+    // The LLM treats single letters as continuation fillers ("اتفضل") no matter the prompt.
+    const LONE_ARABIC_LETTER = /^[ء-ي]$/
+    if (LONE_ARABIC_LETTER.test(text.trim())) {
+      const clarify = 'معلش يافندم مفهمتش، تحب تقولي إيه بالتحديد؟'
+      await this.prisma.message.create({
+        data: { conversationId: conv.id, role: 'ASSISTANT', content: clarify },
+      })
+      console.log(`SINGLE-CHAR GUARD → ${phone} sent "${text.trim()}"`)
+      return clarify
+    }
+
     const reply = await getAgentReply(history, company.name, packages, aiPrompt, waPhone, company.industry, returningCustomer, knownCustomerName)
 
     await this.prisma.message.create({
