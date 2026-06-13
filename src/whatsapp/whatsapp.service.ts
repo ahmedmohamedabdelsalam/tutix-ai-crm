@@ -35,6 +35,9 @@ const DEFER_INTENT = /هفكر|بفكر|خليني افكر|هرد عليك|رد
 
 const AGREEMENT = ['ماشي', 'تمام', 'أيوه', 'أوكي', 'اوكي', 'موافق', 'أكيد', 'اكيد', 'حاضر']
 
+const SHORT_WAIT = /دقيقة|لحظة|ثانية|ثواني|شوية|كمان شوية/
+const REAL_DURATION = /يوم|أيام|بكر[هة]|أسبوع|شهر/
+
 export function detectFollowUpIntent(
   text: string,
   history: { role: string; content: string }[],
@@ -44,6 +47,12 @@ export function detectFollowUpIntent(
   // Hard decline: customer refuses to be contacted
   if (HARD_DECLINE.some(kw => t.includes(kw))) {
     return { shouldSchedule: false, days: 0, declined: true }
+  }
+
+  // Short-wait filler phrases ("دقيقة"/"لحظة"/"شوية") mean "I'll reply soon myself"
+  // — not a deferred-contact request. Bail out unless a real duration word is also present.
+  if (SHORT_WAIT.test(t) && !REAL_DURATION.test(t)) {
+    return { shouldSchedule: false, days: 0, declined: false }
   }
 
   // Explicit duration + deferring intent → schedule immediately
