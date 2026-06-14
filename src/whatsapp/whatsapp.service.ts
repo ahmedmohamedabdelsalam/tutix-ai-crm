@@ -184,6 +184,17 @@ export class WhatsAppService {
       // NEEDS_HUMAN = still waiting for a human agent → AI responds normally
       // (per system prompt: "لو حصل تحويل وبعدين العميل بعت رسالة تانية — جاوبه عادي")
       if (conv.status === ConvStatus.NEEDS_HUMAN) {
+        // Repeat booking keyword after handoff already sent → short ack, no AI call, no phone repeat
+        const BOOKING_REPEAT = ['عايز احجز', 'عايزة احجز', 'هحجز', 'احجزلي', 'عايز أحجز', 'عايزة أحجز', 'موافق نحجز']
+        if (conv.handoffMessageSent && BOOKING_REPEAT.some(kw => text.includes(kw))) {
+          const repeatAck = 'تمام يافندم زميلنا هيتواصل معك في أقرب وقت إن شاء الله'
+          await this.prisma.message.create({
+            data: { conversationId: conv.id, role: 'ASSISTANT', content: repeatAck },
+          })
+          console.log(`REPEAT_BOOKING_ACK → ${phone}`)
+          return repeatAck
+        }
+
         const freshMsgs = await this.prisma.message.findMany({
           where: { conversationId: conv.id },
           orderBy: { createdAt: 'asc' },
@@ -301,6 +312,17 @@ export class WhatsAppService {
     const { yes, reason } = shouldHandoff(score, history.length, extracted, text)
 
     if (!yes) {
+      // Guard: if the AI self-triggered the handoff CTA (should not happen but prompt is non-deterministic),
+      // stamp handoffMessageSent so the phone number is suppressed on the next code-level handoff.
+      const AI_HANDOFF_PATTERN = /هحول حضرتك لزميلي|زميلنا هيتواصل/
+      if (AI_HANDOFF_PATTERN.test(reply) && !conv.handoffMessageSent) {
+        await this.prisma.conversation.update({
+          where: { id: conv.id },
+          data: { handoffMessageSent: true },
+        })
+        console.log(`AI_SELF_HANDOFF DETECTED → ${phone} — handoffMessageSent stamped`)
+      }
+
       // Detect follow-up scheduling intent (only when not handing off)
       const fu = detectFollowUpIntent(text, history)
       if (fu.shouldSchedule) {

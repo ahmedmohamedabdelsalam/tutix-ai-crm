@@ -226,6 +226,8 @@ const BOOKING_KEYWORDS = [
   'عايز احجز', 'عايزة احجز', 'هحجز', 'موافق نحجز', 'تمام هنحجز',
   'خد الحجز', 'احجزلي', 'احجزي لي', 'نحجز دلوقتي', 'كمل الحجز',
   'ابدأ الحجز', 'خليني احجز', 'اوك نحجز', 'اوكيه نحجز',
+  // hamza variants (أ vs ا — both common in Egyptian typing)
+  'عايز أحجز', 'عايزة أحجز', 'خليني أحجز', 'أحجزلي',
 ];
 
 function hasExplicitBookingIntent(lastUserMessage: string): boolean {
