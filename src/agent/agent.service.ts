@@ -177,7 +177,7 @@ export async function getAgentReply(
     ];
 
     const response = await getClient().messages.create({
-      model: 'claude-haiku-4-5-20251001',
+      model: process.env.AI_MODEL ?? 'claude-sonnet-4-6',
       max_tokens: 1500,
       temperature: 0.3,
       system: systemBlocks,
@@ -212,7 +212,7 @@ ${history.map((m) => `${m.role === 'user' ? 'العميل' : 'المساعد'}: 
 
   try {
     const response = await getClient().messages.create({
-      model: 'claude-haiku-4-5-20251001',
+      model: process.env.AI_MODEL ?? 'claude-sonnet-4-6',
       max_tokens: 150,
       messages: [{ role: 'user', content: prompt }],
     });
