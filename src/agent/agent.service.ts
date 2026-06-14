@@ -101,8 +101,9 @@ function cleanAgentResponse(text: string): string {
     for (let i = 1; i < blocks.length - 1; i++) {
       const block = blocks[i].trim();
       const isKnownPhrase = customerWords.some(kw => block.includes(kw));
-      // Very short isolated block (≤8 chars) with no ⭐ = one-word fake customer reply (e.g. "يوليو", "10 ايام")
-      const isOneWordReply = block.length <= 8 && !block.includes('⭐') && !block.includes('—');
+      // Very short isolated block (1–8 chars) with no ⭐ = one-word fake customer reply (e.g. "يوليو", "10 ايام")
+      // Must be non-empty — empty separator blocks between program cards must NOT trigger truncation
+      const isOneWordReply = block.length >= 1 && block.length <= 8 && !block.includes('⭐') && !block.includes('—');
       if (block.length <= 80 && !block.includes('⭐') && (isKnownPhrase || isOneWordReply)) {
         t = blocks.slice(0, i).join('\n\n').trimEnd();
         break;
@@ -164,7 +165,7 @@ export async function getAgentReply(
 
     const response = await getClient().messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 700,
+      max_tokens: 1500,
       temperature: 0.3,
       system: systemBlocks,
       messages,
