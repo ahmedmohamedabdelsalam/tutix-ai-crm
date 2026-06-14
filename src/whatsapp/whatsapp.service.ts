@@ -207,7 +207,12 @@ export class WhatsAppService {
         const aiPromptNH = company.aiPrompt ?? ''
         // Suppress phone in CTA once handoff message already sent — prevents repeat
         const waPhoneNH  = conv.handoffMessageSent ? '' : (company.phone ?? company.ownerPhone ?? '')
-        const replyNH = await getAgentReply(historyNH, company.name, packagesNH, aiPromptNH, waPhoneNH, company.industry)
+        const faqsNH = await this.prisma.companyFAQ.findMany({
+          where: { companyId, isActive: true },
+          select: { question: true, answer: true },
+          orderBy: { createdAt: 'asc' },
+        })
+        const replyNH = await getAgentReply(historyNH, company.name, packagesNH, aiPromptNH, waPhoneNH, company.industry, undefined, undefined, faqsNH)
         await this.prisma.message.create({
           data: { conversationId: conv.id, role: 'ASSISTANT', content: replyNH },
         })
@@ -256,6 +261,12 @@ export class WhatsAppService {
     const aiPrompt = company.aiPrompt ?? ''
     const waPhone  = company.phone ?? company.ownerPhone ?? ''
 
+    const companyFAQs = await this.prisma.companyFAQ.findMany({
+      where: { companyId, isActive: true },
+      select: { question: true, answer: true },
+      orderBy: { createdAt: 'asc' },
+    })
+
     // Single Arabic letter (e.g. "ت") = typo or accidental tap — skip AI entirely.
     // The LLM treats single letters as continuation fillers ("اتفضل") no matter the prompt.
     const LONE_ARABIC_LETTER = /^[ء-ي]$/
@@ -268,7 +279,7 @@ export class WhatsAppService {
       return clarify
     }
 
-    const reply = await getAgentReply(history, company.name, packages, aiPrompt, waPhone, company.industry, returningCustomer, knownCustomerName)
+    const reply = await getAgentReply(history, company.name, packages, aiPrompt, waPhone, company.industry, returningCustomer, knownCustomerName, companyFAQs)
 
     await this.prisma.message.create({
       data: { conversationId: conv.id, role: 'ASSISTANT', content: reply },

@@ -24,6 +24,7 @@ function buildSystemPrompt(
   industry: Industry = Industry.HAJJ_UMRAH,
   returningCustomer?: { name: string; tripsCount: number },
   knownCustomerName?: string,
+  dynamicFAQs?: { question: string; answer: string }[],
 ): string {
   const bookingCta = waPhone
     ? `قل: "تمام يافندم هحول حضرتك لزميلي المختص يكمل معاك خطوات الحجز إن شاء الله وللتواصل المباشر: ${waPhone}"`
@@ -47,6 +48,17 @@ ${packages.trim()}`;
 تعليمات وملاحظات إضافية
 ═══════════════════════════════
 ${aiPrompt.trim()}`;
+  }
+
+  // Inject company-specific answered FAQs from DB (added by TUTIX admin)
+  if (dynamicFAQs && dynamicFAQs.length > 0) {
+    const faqLines = dynamicFAQs.map((f, i) => `س${i + 1}: ${f.question}\nج${i + 1}: ${f.answer}`).join('\n\n')
+    prompt += `\n\n═══════════════════════════════
+إجابات جاهزة معتمدة من الإدارة
+═══════════════════════════════
+استخدم هذه الإجابات حرفياً عند سؤال مشابه:
+
+${faqLines}`;
   }
 
   // Anti-hallucination rule always last — closest to generation
@@ -130,6 +142,7 @@ export async function getAgentReply(
   industry: Industry = Industry.HAJJ_UMRAH,
   returningCustomer?: { name: string; tripsCount: number },
   knownCustomerName?: string,
+  dynamicFAQs?: { question: string; answer: string }[],
 ): Promise<string> {
   try {
     let messages = history.map((m) => ({
@@ -157,7 +170,7 @@ export async function getAgentReply(
     // Base system prompt is identical across all calls for the same company → cache it.
     // Hotel override (when present) is appended as a second uncached block so the
     // cached portion stays stable and gets a cache hit on every subsequent message.
-    const sysPrompt = buildSystemPrompt(companyName, packages, aiPrompt, waPhone, industry, returningCustomer, knownCustomerName);
+    const sysPrompt = buildSystemPrompt(companyName, packages, aiPrompt, waPhone, industry, returningCustomer, knownCustomerName, dynamicFAQs);
     const systemBlocks = [
       { type: 'text' as const, text: sysPrompt, cache_control: { type: 'ephemeral' as const } },
       ...(hotelOverride ? [{ type: 'text' as const, text: hotelOverride }] : []),
