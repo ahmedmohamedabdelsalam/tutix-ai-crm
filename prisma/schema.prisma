@@ -64,7 +64,20 @@ model Lead {
   score         Int            @default(0)
   isHot         Boolean        @default(false)
   status        LeadStatus     @default(NEW)
-  source        String         @default("direct")
+  source        String         @default("whatsapp")
+  platform      String?
+  serviceType   String?
+  roomType      String?
+  level         String?
+  governorate   String?
+  recordDate    DateTime?
+  totalMessages Int?
+  hajjMessages  Int?
+  umrahMessages Int?
+  otherMessages Int?
+  assignedAgent String?
+  executionNotes String?
+  extraNotes    String?
   referralData  Json?
   assignedTo    String?
   assignedAt    DateTime?
