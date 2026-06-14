@@ -9,7 +9,7 @@ function categorizeDropOff(lastMsg: string, totalMsgCount: number): string {
   if (/جنيه|السعر|الإجمالي/.test(lastMsg))  return 'بعد عرض الأسعار'
   if (/يوليو|أغسطس|كام يوم|مدة الرحلة/.test(lastMsg)) return 'بعد سؤال الشهر/المدة'
   if (/كام شخص|عدد الأفراد|معاك كام/.test(lastMsg)) return 'بعد سؤال عدد الأفراد'
-  if (/تشرفنا باسم|بيخدمك إيه|نورتنا/.test(lastMsg) && totalMsgCount <= 4) return 'بعد التحية / السؤال عن الاسم'
+  if (/تشرفنا باسم|نورتنا|إزاي أقدر أساعدك|إيه اللي تحب|تحب أعرفك/.test(lastMsg) && totalMsgCount <= 4) return 'بعد التحية / السؤال عن الاسم'
   return 'أخرى'
 }
 
