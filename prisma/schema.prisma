@@ -23,6 +23,8 @@ model Company {
   subscriptionStart DateTime?
   subscriptionEnd   DateTime?
   isActive          Boolean        @default(true)
+  waTokenUpdatedAt  DateTime?
+  waTokenExpiresAt  DateTime?
   createdAt         DateTime       @default(now())
   conversations     Conversation[]
   leads             Lead[]
@@ -32,6 +34,7 @@ model Company {
   payments          Payment[]
   agentInsights     AgentInsight[]
   faqs              CompanyFAQ[]
+  notifications     SystemNotification[]
 }
 
 model User {
@@ -279,4 +282,18 @@ model CompanyFAQ {
   company   Company  @relation(fields: [companyId], references: [id])
 
   @@index([companyId])
+}
+
+model SystemNotification {
+  id        String   @id @default(cuid())
+  companyId String
+  type      String
+  message   String
+  daysLeft  Int?
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  company   Company  @relation(fields: [companyId], references: [id])
+
+  @@index([companyId])
+  @@index([isRead, companyId])
 }

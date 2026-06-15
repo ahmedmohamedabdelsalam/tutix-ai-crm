@@ -123,6 +123,16 @@ export class WhatsAppService {
     const company = await this.prisma.company.findUnique({ where: { id: companyId } })
     if (!company || !company.isActive) return ''
 
+    // First message ever received → stamp waTokenUpdatedAt so the 60-day clock starts now.
+    if (!company.waTokenUpdatedAt) {
+      const now = new Date()
+      const expiresAt = new Date(now.getTime() + 60 * 86_400_000)
+      this.prisma.company.update({
+        where: { id: companyId },
+        data: { waTokenUpdatedAt: now, waTokenExpiresAt: expiresAt },
+      }).catch(() => {})
+    }
+
     const msgInclude = { messages: { orderBy: { createdAt: 'asc' as const } } }
 
     // Find any open (non-closed) conversation for this phone
