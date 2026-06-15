@@ -99,7 +99,25 @@ export function clampToWindow(date: Date): Date {
 
 @Injectable()
 export class WhatsAppService {
+  private faqCache = new Map<string, { data: { question: string; answer: string }[]; expiresAt: number }>()
+
   constructor(private prisma: PrismaService) {}
+
+  private async getCompanyFAQ(companyId: string): Promise<{ question: string; answer: string }[]> {
+    const cached = this.faqCache.get(companyId)
+    if (cached && cached.expiresAt > Date.now()) {
+      console.log(`FAQ_CACHE HIT — companyId=${companyId}`)
+      return cached.data
+    }
+    const faqs = await this.prisma.companyFAQ.findMany({
+      where: { companyId, isActive: true },
+      select: { question: true, answer: true },
+      orderBy: { createdAt: 'asc' },
+    })
+    this.faqCache.set(companyId, { data: faqs, expiresAt: Date.now() + 10 * 60 * 1000 })
+    console.log(`FAQ_CACHE MISS — companyId=${companyId} fetched ${faqs.length} FAQs`)
+    return faqs
+  }
 
   async handleMessage(companyId: string, phone: string, text: string, source = 'direct', referralData?: object | null): Promise<string> {
     const company = await this.prisma.company.findUnique({ where: { id: companyId } })
@@ -175,6 +193,16 @@ export class WhatsAppService {
       }
     }
 
+    // For existing conversations: resolve customer name from the Lead record so the AI
+    // can address them by name even when early messages fall outside the 10-msg history window.
+    if (!knownCustomerName && conv.leadId) {
+      const lead = await this.prisma.lead.findUnique({
+        where: { id: conv.leadId },
+        select: { name: true },
+      })
+      if (lead?.name) knownCustomerName = lead.name
+    }
+
     // ── PART 2: HUMAN mode — save message ───────────────────
     if (conv.agentMode === 'HUMAN') {
       await this.prisma.message.create({
@@ -197,9 +225,10 @@ export class WhatsAppService {
 
         const freshMsgs = await this.prisma.message.findMany({
           where: { conversationId: conv.id },
-          orderBy: { createdAt: 'asc' },
+          orderBy: { createdAt: 'desc' },
+          take: 10,
         })
-        const historyNH = freshMsgs.map(m => ({
+        const historyNH = freshMsgs.reverse().map(m => ({
           role: m.role === 'USER' ? 'user' : 'assistant',
           content: m.content,
         }))
@@ -207,12 +236,8 @@ export class WhatsAppService {
         const aiPromptNH = company.aiPrompt ?? ''
         // Suppress phone in CTA once handoff message already sent — prevents repeat
         const waPhoneNH  = conv.handoffMessageSent ? '' : (company.phone ?? company.ownerPhone ?? '')
-        const faqsNH = await this.prisma.companyFAQ.findMany({
-          where: { companyId, isActive: true },
-          select: { question: true, answer: true },
-          orderBy: { createdAt: 'asc' },
-        })
-        const replyNH = await getAgentReply(historyNH, company.name, packagesNH, aiPromptNH, waPhoneNH, company.industry, undefined, undefined, faqsNH)
+        const faqsNH = await this.getCompanyFAQ(companyId)
+        const replyNH = await getAgentReply(historyNH, company.name, packagesNH, aiPromptNH, waPhoneNH, company.industry, undefined, knownCustomerName, faqsNH)
         await this.prisma.message.create({
           data: { conversationId: conv.id, role: 'ASSISTANT', content: replyNH },
         })
@@ -238,12 +263,18 @@ export class WhatsAppService {
       data: { conversationId: conv.id, role: 'USER', content: text },
     })
 
-    // Reload from DB after saving — avoids race condition where conv.messages is a stale snapshot
+    // Count total messages for extract-frequency tracking (history.length would be capped at 10
+    // after the limit below, causing % 5 to fire on every message once conv exceeds 10 msgs).
+    const totalMsgCount = await this.prisma.message.count({ where: { conversationId: conv.id } })
+
+    // Reload from DB — limit to last 10 messages to cap input tokens.
+    // Customer name is preserved via knownCustomerName (from Lead record), not message history.
     const freshMessages = await this.prisma.message.findMany({
       where: { conversationId: conv.id },
-      orderBy: { createdAt: 'asc' },
+      orderBy: { createdAt: 'desc' },
+      take: 10,
     })
-    const history = freshMessages.map(m => ({
+    const history = freshMessages.reverse().map(m => ({
       role: m.role === 'USER' ? 'user' : 'assistant',
       content: m.content,
     }))
@@ -261,11 +292,7 @@ export class WhatsAppService {
     const aiPrompt = company.aiPrompt ?? ''
     const waPhone  = company.phone ?? company.ownerPhone ?? ''
 
-    const companyFAQs = await this.prisma.companyFAQ.findMany({
-      where: { companyId, isActive: true },
-      select: { question: true, answer: true },
-      orderBy: { createdAt: 'asc' },
-    })
+    const companyFAQs = await this.getCompanyFAQ(companyId)
 
     // Meaningless-short guard: 1–2 Arabic chars with no semantic content = accidental tap / typo.
     // Handled here in code so the LLM never sees these inputs and can't mis-apply clarification rules.
@@ -301,10 +328,10 @@ export class WhatsAppService {
     // Run extractLeadData on msg 1-2 (capture name early), every 3rd message,
     // or whenever the customer's message contains a booking keyword.
     const BOOKING_SIGNALS = ['عايز احجز', 'عايزة احجز', 'هحجز', 'احجزلي', 'موافق نحجز', 'خد الحجز'];
-    const msgCount = history.length; // includes the just-saved user message
+    const msgCount = totalMsgCount; // total msgs in DB (not history.length, which is capped at 10)
     const hasBookingSignal = BOOKING_SIGNALS.some(kw => text.includes(kw));
-    const runExtract = msgCount <= 2 || msgCount % 3 === 0 || hasBookingSignal;
-    console.log(`EXTRACT: msg=${msgCount} run=${runExtract} (booking=${hasBookingSignal} mod3=${msgCount % 3 === 0})`);
+    const runExtract = msgCount <= 2 || msgCount % 5 === 0 || hasBookingSignal;
+    console.log(`EXTRACT: msg=${msgCount} run=${runExtract} (booking=${hasBookingSignal} mod5=${msgCount % 5 === 0})`);
 
     let extracted: Partial<LeadData> = {}
     let score = 0
@@ -314,7 +341,7 @@ export class WhatsAppService {
       await this.prisma.lead.updateMany({
         where: { companyId, phone },
         data: {
-          ...(extracted.name && { name: extracted.name }),
+          ...(extracted.name && !knownCustomerName && { name: extracted.name }),
           ...(extracted.packageType && { packageType: extracted.packageType }),
           ...(extracted.groupSize && { groupSize: extracted.groupSize }),
           ...(extracted.budget && { budget: extracted.budget }),
