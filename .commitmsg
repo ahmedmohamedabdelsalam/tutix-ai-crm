@@ -1,0 +1,14 @@
+feat: permanent customers schema + returning customer greeting
+
+Schema: add PermanentCustomer model (companyId, fullName, phone,
+tripDate, hotelName, packageLevel, gender, birthDate, age, jobTitle,
+address, governorate, tripsCount, source, notes).
+source values: "legacy" | "pipeline" | "manual"
+
+AI greeting: before getAgentReply, query PermanentCustomer by
+phone+companyId where source != "legacy". If found, pass
+returningCustomer={name, tripsCount} through getAgentReply ->
+buildSystemPrompt -> buildBasePersonality which prepends a special
+welcome-back block to the system prompt for returning customers.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>

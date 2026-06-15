@@ -1,0 +1,725 @@
+[32m[Nest] 21640  - [39m06/15/2026, 7:55:33 AM [32m    LOG[39m [38;5;3m[NestFactory] [39m[32mStarting Nest application...[39m
+[32m[Nest] 21640  - [39m06/15/2026, 7:55:33 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAppModule dependencies initialized[39m[38;5;3m +16ms[39m
+[32m[Nest] 21640  - [39m06/15/2026, 7:55:33 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mPrismaModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 21640  - [39m06/15/2026, 7:55:33 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigHostModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m[Nest] 21640  - [39m06/15/2026, 7:55:33 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mDiscoveryModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 21640  - [39m06/15/2026, 7:55:33 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mSubscriptionModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m[Nest] 21640  - [39m06/15/2026, 7:55:33 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 21640  - [39m06/15/2026, 7:55:33 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mScheduleModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 21640  - [39m06/15/2026, 7:55:33 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mWhatsAppModule dependencies initialized[39m[38;5;3m +1ms[39m
+[32m[Nest] 21640  - [39m06/15/2026, 7:55:33 AM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mWhatsAppController {/webhook}:[39m[38;5;3m +3ms[39m
+[32m[Nest] 21640  - [39m06/15/2026, 7:55:33 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/webhook/health, GET} route[39m[38;5;3m +2ms[39m
+[32m[Nest] 21640  - [39m06/15/2026, 7:55:33 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/webhook, GET} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 21640  - [39m06/15/2026, 7:55:33 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/webhook, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 21640  - [39m06/15/2026, 7:55:33 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/webhook/test, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 21640  - [39m06/15/2026, 7:55:33 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/webhook/test-media, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 21640  - [39m06/15/2026, 7:55:33 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/webhook/test-followup, POST} route[39m[38;5;3m +0ms[39m
+✅ Database connected
+[32m[Nest] 21640  - [39m06/15/2026, 7:55:33 AM [32m    LOG[39m [38;5;3m[NestApplication] [39m[32mNest application successfully started[39m[38;5;3m +69ms[39m
+🚀 TUTIX AI CRM running on port 3001
+PORT env value: 3001
+DEFAULT_COMPANY_ID: cmq4ok7hx000004kzfnsxp54o
+DATABASE_URL set: true
+--- /webhook/test called ---
+DEFAULT_COMPANY_ID: cmq4ok7hx000004kzfnsxp54o
+🔍 Looking up company: cmq4ok7hx000004kzfnsxp54o
+Company found: ✅ إسكندرية الدولية للسياحة
+NEW_CONV → phone=01199915001 existingLead=null knownName=undefined
+FAQ_CACHE MISS — companyId=cmq4ok7hx000004kzfnsxp54o fetched 1 FAQs
+CACHE: write=21684 read=0 input=10 output=63
+RAW_REPLY: وعليكم السلام ورحمة الله وبركاته أهلاً بيك في إسكندرية الدولية للسياحة تشرفنا باسم حضرتك؟
+EXTRACT: msg=1 run=true (booking=false mod5=false)
+TEST split: 1 part(s)
+  [1] وعليكم السلام ورحمة الله وبركاته أهلاً بيك في إسكندرية الدولية للسياحة تشرفنا با
+--- /webhook/test called ---
+DEFAULT_COMPANY_ID: cmq4ok7hx000004kzfnsxp54o
+🔍 Looking up company: cmq4ok7hx000004kzfnsxp54o
+Company found: ✅ إسكندرية الدولية للسياحة
+FAQ_CACHE HIT — companyId=cmq4ok7hx000004kzfnsxp54o
+CACHE: write=7 read=21684 input=75 output=50
+RAW_REPLY: أهلاً يا أستاذ أحمد نورتنا يافندم بتسأل عن عمرة ولا حج يافندم؟
+EXTRACT: msg=3 run=false (booking=false mod5=false)
+TEST split: 1 part(s)
+  [1] أهلاً يا أستاذ أحمد نورتنا يافندم بتسأل عن عمرة ولا حج يافندم؟
+--- /webhook/test called ---
+DEFAULT_COMPANY_ID: cmq4ok7hx000004kzfnsxp54o
+🔍 Looking up company: cmq4ok7hx000004kzfnsxp54o
+Company found: ✅ إسكندرية الدولية للسياحة
+FAQ_CACHE HIT — companyId=cmq4ok7hx000004kzfnsxp54o
+CACHE: write=7 read=21684 input=135 output=38
+RAW_REPLY: تمام يا أستاذ أحمد إن شاء الله معاك كام شخص يافندم؟
+EXTRACT: msg=5 run=true (booking=false mod5=true)
+TEST split: 1 part(s)
+  [1] تمام يا أستاذ أحمد إن شاء الله معاك كام شخص يافندم؟
+--- /webhook/test called ---
+DEFAULT_COMPANY_ID: cmq4ok7hx000004kzfnsxp54o
+🔍 Looking up company: cmq4ok7hx000004kzfnsxp54o
+Company found: ✅ إسكندرية الدولية للسياحة
+FAQ_CACHE HIT — companyId=cmq4ok7hx000004kzfnsxp54o
+CACHE: write=22206 read=0 input=192 output=118
+RAW_REPLY: تمام يا أستاذ أحمد تفضل مستوى إيه يافندم؟↵↵اقتصادي: فنادق مريحة بأسعار مناسبة↵اقتصادي متميز: فنادق راقية بخدمات أفضل↵خمس نجوم: أفضل الفنادق وأعلى مستوى خدمة
+EXTRACT: msg=7 run=false (booking=false mod5=false)
+TEST split: 4 part(s)
+  [1] تمام يا أستاذ أحمد تفضل مستوى إيه يافندم؟
+  [2] اقتصادي: فنادق مريحة بأسعار مناسبة
+  [3] اقتصادي متميز: فنادق راقية بخدمات أفضل
+  [4] خمس نجوم: أفضل الفنادق وأعلى مستوى خدمة
+--- /webhook/test called ---
+DEFAULT_COMPANY_ID: cmq4ok7hx000004kzfnsxp54o
+🔍 Looking up company: cmq4ok7hx000004kzfnsxp54o
+Company found: ✅ إسكندرية الدولية للسياحة
+FAQ_CACHE HIT — companyId=cmq4ok7hx000004kzfnsxp54o
+CACHE: write=189 read=22206 input=131 output=1169
+RAW_REPLY: تمام يا أستاذ أحمد اقتصادي متميز في يوليو عندنا برامج حلوة جداً يافندم↵↵أزكى الصفا (شامل الإفطار) + جراند بلازا (بدون إفطار)↵قطار الحرمين: مشمول↵١٠ أيام | ١٥-٢٤ يوليو↵رباعي (٤+): ٥٢٬٧٠٠ جنيه/فرد↵ثلاثي (٣): ٥٥٬٧٠٠ جنيه/فرد↵ثنائي (٢): ٦٢٬٧٠٠ جنيه/فرد↵يمكن تطلع على الفنادق من هنا: https://www.booking.c
+EXTRACT: msg=9 run=false (booking=false mod5=false)
+TEST split: 6 part(s)
+  [1] تمام يا أستاذ أحمد اقتصادي متميز في يوليو عندنا برامج حلوة جداً يافندم
+  [2] أزكى الصفا (شامل الإفطار) + جراند بلازا (بدون إفطار)
+قطار الحرمين: مشمول
+١٠ أيام
+  [3] إعمار المنار (بدون إفطار) + أوديست (بدون إفطار)
+قطار الحرمين: لا
+١١ يوم | ٥-١٥ أ
+  [4] أزكى الصفا (شامل الإفطار) + أوديست (بدون إفطار)
+قطار الحرمين: مشمول
+٧ أيام | ١٠-
+  [5] رمادا الفائزين (بدون إفطار) + أوديست (بدون إفطار)
+قطار الحرمين: لا
+١١ يوم | ١٢-٢
+  [6] أزكى الصفا (شامل الإفطار) + جراند بلازا (بدون إفطار)
+قطار الحرمين: مشمول
+١٠ أيام
+--- /webhook/test called ---
+DEFAULT_COMPANY_ID: cmq4ok7hx000004kzfnsxp54o
+🔍 Looking up company: cmq4ok7hx000004kzfnsxp54o
+Company found: ✅ إسكندرية الدولية للسياحة
+FAQ_CACHE HIT — companyId=cmq4ok7hx000004kzfnsxp54o
+CACHE: write=0 read=22206 input=1502 output=46
+RAW_REPLY: تمام يا أستاذ أحمد إن شاء الله حابب تحجز أي من البرامج دي يافندم؟
+EXTRACT: msg=10 run=true (booking=false mod5=true)
+TEST split: 1 part(s)
+  [1] تمام يا أستاذ أحمد إن شاء الله حابب تحجز أي من البرامج دي يافندم؟
+--- /webhook/test called ---
+DEFAULT_COMPANY_ID: cmq4ok7hx000004kzfnsxp54o
+🔍 Looking up company: cmq4ok7hx000004kzfnsxp54o
+Company found: ✅ إسكندرية الدولية للسياحة
+FAQ_CACHE HIT — companyId=cmq4ok7hx000004kzfnsxp54o
+CACHE: write=12 read=22206 input=1471 output=71
+RAW_REPLY: تمام يا أستاذ أحمد هحول حضرتك لزميلي المختص يكمل معاك خطوات الحجز إن شاء الله وللتواصل المباشر: 01554565115
+EXTRACT: msg=10 run=true (booking=false mod5=true)
+AI_SELF_HANDOFF DETECTED → 01199915001 — handoffMessageSent stamped
+TEST split: 1 part(s)
+  [1] تمام يا أستاذ أحمد هحول حضرتك لزميلي المختص يكمل معاك خطوات الحجز إن شاء الله ول
+--- /webhook/test called ---
+DEFAULT_COMPANY_ID: cmq4ok7hx000004kzfnsxp54o
+🔍 Looking up company: cmq4ok7hx000004kzfnsxp54o
+Company found: ✅ إسكندرية الدولية للسياحة
+FAQ_CACHE HIT — companyId=cmq4ok7hx000004kzfnsxp54o
+CACHE: write=12 read=22206 input=1493 output=162
+RAW_REPLY: تمام يا أستاذ أحمد معاك ٤ أفراد↵↵الإجمالي لـ ٤ أفراد (رباعي): ٢١٠٬٨٠٠ جنيه↵الإجمالي لـ ٤ أفراد (ثلاثي): ٢٢٢٬٨٠٠ جنيه↵الإجمالي لـ ٤ أفراد (ثنائي): ٢٥٠٬٨٠٠ جنيه
+EXTRACT: msg=10 run=true (booking=false mod5=true)
+TEST split: 2 part(s)
+  [1] تمام يا أستاذ أحمد معاك ٤ أفراد
+  [2] الإجمالي لـ ٤ أفراد (رباعي): ٢١٠٬٨٠٠ جنيه
+الإجمالي لـ ٤ أفراد (ثلاثي): ٢٢٢٬٨٠٠ ج
+--- /webhook/test called ---
+DEFAULT_COMPANY_ID: cmq4ok7hx000004kzfnsxp54o
+🔍 Looking up company: cmq4ok7hx000004kzfnsxp54o
+Company found: ✅ إسكندرية الدولية للسياحة
+FAQ_CACHE HIT — companyId=cmq4ok7hx000004kzfnsxp54o
+CACHE: write=12 read=22206 input=1618 output=270
+RAW_REPLY: تمام يا أستاذ أحمد البرنامج الأول أزكى الصفا وجراند بلازا ١٠ أيام من ١٥ لـ ٢٤ يوليو اختيار ممتاز يافندم↵↵الإجمالي لـ ٤ أفراد (رباعي): ٢١٠٬٨٠٠ جنيه↵الإجمالي لـ ٤ أفراد (ثلاثي): ٢٢٢٬٨٠٠ جنيه↵الإجمالي لـ ٤ أفراد (ثنائي): ٢٥٠٬٨٠٠ جنيه↵↵هحول حضرتك لزميلي المختص يكمل معاك خطوات الحجز إن شاء الله وللتواصل 
+EXTRACT: msg=10 run=true (booking=false mod5=true)
+TEST split: 3 part(s)
+  [1] تمام يا أستاذ أحمد البرنامج الأول أزكى الصفا وجراند بلازا ١٠ أيام من ١٥ لـ ٢٤ يو
+  [2] الإجمالي لـ ٤ أفراد (رباعي): ٢١٠٬٨٠٠ جنيه
+الإجمالي لـ ٤ أفراد (ثلاثي): ٢٢٢٬٨٠٠ ج
+  [3] هحول حضرتك لزميلي المختص يكمل معاك خطوات الحجز إن شاء الله وللتواصل المباشر: 015
+--- /webhook/test called ---
+DEFAULT_COMPANY_ID: cmq4ok7hx000004kzfnsxp54o
+🔍 Looking up company: cmq4ok7hx000004kzfnsxp54o
+Company found: ✅ إسكندرية الدولية للسياحة
+FAQ_CACHE HIT — companyId=cmq4ok7hx000004kzfnsxp54o
+CACHE: write=12 read=22206 input=1769 output=63
+RAW_REPLY: وعليكم السلام ورحمة الله وبركاته أهلاً بيك في إسكندرية الدولية للسياحة تشرفنا باسم حضرتك؟
+EXTRACT: msg=10 run=true (booking=false mod5=true)
+TEST split: 1 part(s)
+  [1] وعليكم السلام ورحمة الله وبركاته أهلاً بيك في إسكندرية الدولية للسياحة تشرفنا با
+--- /webhook/test called ---
+DEFAULT_COMPANY_ID: cmq4ok7hx000004kzfnsxp54o
+🔍 Looking up company: cmq4ok7hx000004kzfnsxp54o
+Company found: ✅ إسكندرية الدولية للسياحة
+FAQ_CACHE HIT — companyId=cmq4ok7hx000004kzfnsxp54o
+CACHE: write=12 read=22206 input=664 output=49
+RAW_REPLY: أهلاً يا أستاذ محمود نورتنا يافندم بتسأل عن عمرة ولا حج يافندم؟
+EXTRACT: msg=10 run=true (booking=false mod5=true)
+TEST split: 1 part(s)
+  [1] أهلاً يا أستاذ محمود نورتنا يافندم بتسأل عن عمرة ولا حج يافندم؟
+--- /webhook/test called ---
+DEFAULT_COMPANY_ID: cmq4ok7hx000004kzfnsxp54o
+🔍 Looking up company: cmq4ok7hx000004kzfnsxp54o
+Company found: ✅ إسكندرية الدولية للسياحة
+FAQ_CACHE HIT — companyId=cmq4ok7hx000004kzfnsxp54o
+CACHE: write=22203 read=0 input=685 output=41
+RAW_REPLY: أهلاً يا أستاذ محمود نورتنا يافندم معاك كام شخص يافندم؟
+EXTRACT: msg=10 run=true (booking=false mod5=true)
+TEST split: 1 part(s)
+  [1] أهلاً يا أستاذ محمود نورتنا يافندم معاك كام شخص يافندم؟
+--- /webhook/test called ---
+DEFAULT_COMPANY_ID: cmq4ok7hx000004kzfnsxp54o
+🔍 Looking up company: cmq4ok7hx000004kzfnsxp54o
+Company found: ✅ إسكندرية الدولية للسياحة
+FAQ_CACHE HIT — companyId=cmq4ok7hx000004kzfnsxp54o
+CACHE: write=12 read=22203 input=641 output=50
+RAW_REPLY: تمام يا أستاذ محمود ٣ أفراد حاضر يافندم تفضل أي شهر تحب يافندم؟
+EXTRACT: msg=10 run=true (booking=false mod5=true)
+TEST split: 1 part(s)
+  [1] تمام يا أستاذ محمود ٣ أفراد حاضر يافندم تفضل أي شهر تحب يافندم؟
+--- /webhook/test called ---
+DEFAULT_COMPANY_ID: cmq4ok7hx000004kzfnsxp54o
+🔍 Looking up company: cmq4ok7hx000004kzfnsxp54o
+Company found: ✅ إسكندرية الدولية للسياحة
+FAQ_CACHE HIT — companyId=cmq4ok7hx000004kzfnsxp54o
+CACHE: write=12 read=22203 input=526 output=134
+RAW_REPLY: تمام يا أستاذ محمود يوليو اختيار ممتاز يافندم تفضل مستوى إيه يافندم؟↵↵اقتصادي: فنادق مريحة بأسعار مناسبة↵اقتصادي متميز: فنادق راقية بخدمات أفضل↵خمس نجوم: أفضل الفنادق وأعلى مستوى خدمة
+EXTRACT: msg=10 run=true (booking=false mod5=true)
+TEST split: 4 part(s)
+  [1] تمام يا أستاذ محمود يوليو اختيار ممتاز يافندم تفضل مستوى إيه يافندم؟
+  [2] اقتصادي: فنادق مريحة بأسعار مناسبة
+  [3] اقتصادي متميز: فنادق راقية بخدمات أفضل
+  [4] خمس نجوم: أفضل الفنادق وأعلى مستوى خدمة
+--- /webhook/test called ---
+DEFAULT_COMPANY_ID: cmq4ok7hx000004kzfnsxp54o
+🔍 Looking up company: cmq4ok7hx000004kzfnsxp54o
+Company found: ✅ إسكندرية الدولية للسياحة
+FAQ_CACHE HIT — companyId=cmq4ok7hx000004kzfnsxp54o
+CACHE: write=12 read=22203 input=394 output=780
+RAW_REPLY: تمام يا أستاذ محمود اقتصادي متميز في يوليو حاضر يافندم عندنا برامج ممتازة ليك↵↵سنود الريان (بدون إفطار) + أوديست (بدون إفطار)↵قطار الحرمين: غير مشمول↵رباعي (٤+): ٤٧٬٥٠٠ جنيه/فرد↵ثلاثي (٣): ٥٢٬٥٠٠ جنيه/فرد↵ثنائي (٢): ٥٩٬٠٠٠ جنيه/فرد↵الإجمالي لـ ٣ أفراد (رباعي): ١٤٢٬٥٠٠ جنيه / (ثلاثي): ١٥٧٬٥٠٠ جنيه / 
+EXTRACT: msg=10 run=true (booking=false mod5=true)
+TEST split: 4 part(s)
+  [1] تمام يا أستاذ محمود اقتصادي متميز في يوليو حاضر يافندم عندنا برامج ممتازة ليك
+  [2] سنود الريان (بدون إفطار) + أوديست (بدون إفطار)
+قطار الحرمين: غير مشمول
+رباعي (٤+
+  [3] أزكى الصفا (شامل الإفطار) + جراند بلازا (بدون إفطار)
+قطار الحرمين: مشمول
+رباعي (
+  [4] رمادا الفائزين (بدون إفطار) + أوديست (بدون إفطار)
+قطار الحرمين: غير مشمول
+رباعي 
+[95m[Nest] 21640  - [39m06/15/2026, 8:00:00 AM [95m  DEBUG[39m [38;5;3m[FollowUpService] [39m[95mFollow-up check skipped — outside Cairo window (hour=7)[39m
+--- /webhook/test called ---
+DEFAULT_COMPANY_ID: cmq4ok7hx000004kzfnsxp54o
+🔍 Looking up company: cmq4ok7hx000004kzfnsxp54o
+Company found: ✅ إسكندرية الدولية للسياحة
+NEW_CONV → phone=01200000101 existingLead=null knownName=undefined
+FAQ_CACHE MISS — companyId=cmq4ok7hx000004kzfnsxp54o fetched 1 FAQs
+CACHE: write=21684 read=0 input=13 output=63
+RAW_REPLY: وعليكم السلام ورحمة الله وبركاته أهلاً بيك في إسكندرية الدولية للسياحة تشرفنا باسم حضرتك؟
+EXTRACT: msg=1 run=true (booking=false mod5=false)
+TEST split: 1 part(s)
+  [1] وعليكم السلام ورحمة الله وبركاته أهلاً بيك في إسكندرية الدولية للسياحة تشرفنا با
+--- /webhook/test called ---
+DEFAULT_COMPANY_ID: cmq4ok7hx000004kzfnsxp54o
+🔍 Looking up company: cmq4ok7hx000004kzfnsxp54o
+Company found: ✅ إسكندرية الدولية للسياحة
+FAQ_CACHE HIT — companyId=cmq4ok7hx000004kzfnsxp54o
+CACHE: write=10 read=21684 input=73 output=50
+RAW_REPLY: أهلاً يا أستاذ أحمد نورتنا يافندم بتسأل عن عمرة ولا حج يافندم؟
+EXTRACT: msg=3 run=false (booking=false mod5=false)
+TEST split: 1 part(s)
+  [1] أهلاً يا أستاذ أحمد نورتنا يافندم بتسأل عن عمرة ولا حج يافندم؟
+--- /webhook/test called ---
+DEFAULT_COMPANY_ID: cmq4ok7hx000004kzfnsxp54o
+🔍 Looking up company: cmq4ok7hx000004kzfnsxp54o
+Company found: ✅ إسكندرية الدولية للسياحة
+FAQ_CACHE HIT — companyId=cmq4ok7hx000004kzfnsxp54o
+CACHE: write=10 read=21684 input=130 output=38
+RAW_REPLY: تمام يا أستاذ أحمد إن شاء الله معاك كام شخص يافندم؟
+EXTRACT: msg=5 run=true (booking=false mod5=true)
+TEST split: 1 part(s)
+  [1] تمام يا أستاذ أحمد إن شاء الله معاك كام شخص يافندم؟
+--- /webhook/test called ---
+DEFAULT_COMPANY_ID: cmq4ok7hx000004kzfnsxp54o
+🔍 Looking up company: cmq4ok7hx000004kzfnsxp54o
+Company found: ✅ إسكندرية الدولية للسياحة
+FAQ_CACHE HIT — companyId=cmq4ok7hx000004kzfnsxp54o
+CACHE: write=22206 read=0 input=185 output=133
+RAW_REPLY: تمام يا أستاذ أحمد برامجنا في يوليو متنوعة يافندم تفضل مستوى إيه؟↵↵اقتصادي: فنادق مريحة بأسعار مناسبة↵اقتصادي متميز: فنادق راقية بخدمات أفضل↵خمس نجوم: أفضل الفنادق وأعلى مستوى خدمة
+EXTRACT: msg=7 run=false (booking=false mod5=false)
+TEST split: 4 part(s)
+  [1] تمام يا أستاذ أحمد برامجنا في يوليو متنوعة يافندم تفضل مستوى إيه؟
+  [2] اقتصادي: فنادق مريحة بأسعار مناسبة
+  [3] اقتصادي متميز: فنادق راقية بخدمات أفضل
+  [4] خمس نجوم: أفضل الفنادق وأعلى مستوى خدمة
+--- /webhook/test called ---
+DEFAULT_COMPANY_ID: cmq4ok7hx000004kzfnsxp54o
+🔍 Looking up company: cmq4ok7hx000004kzfnsxp54o
+Company found: ✅ إسكندرية الدولية للسياحة
+FAQ_CACHE HIT — companyId=cmq4ok7hx000004kzfnsxp54o
+CACHE: write=182 read=22206 input=145 output=376
+RAW_REPLY: تمام يا أستاذ أحمد عندنا برامج اقتصادي في يوليو يافندم↵↵سنود الريان (بدون إفطار) + أوديست (بدون إفطار)↵قطار الحرمين: غير مشمول↵١٥ يوم من ٨ لـ ٢٢ يوليو↵رباعي (٤+): ٤١٬٠٠٠ جنيه/فرد↵ثلاثي (٣): ٤٤٬٥٠٠ جنيه/فرد↵ثنائي (٢): ٥٠٬٥٠٠ جنيه/فرد↵↵سنود الريان (بدون إفطار) + أوديست (بدون إفطار)↵قطار الحرمين: غير م
+EXTRACT: msg=9 run=false (booking=false mod5=false)
+TEST split: 3 part(s)
+  [1] تمام يا أستاذ أحمد عندنا برامج اقتصادي في يوليو يافندم
+  [2] سنود الريان (بدون إفطار) + أوديست (بدون إفطار)
+قطار الحرمين: غير مشمول
+١٥ يوم من
+  [3] سنود الريان (بدون إفطار) + أوديست (بدون إفطار)
+قطار الحرمين: غير مشمول
+١٥ يوم من
+--- /webhook/test called ---
+DEFAULT_COMPANY_ID: cmq4ok7hx000004kzfnsxp54o
+🔍 Looking up company: cmq4ok7hx000004kzfnsxp54o
+Company found: ✅ إسكندرية الدولية للسياحة
+FAQ_CACHE HIT — companyId=cmq4ok7hx000004kzfnsxp54o
+CACHE: write=0 read=22206 input=715 output=44
+RAW_REPLY: تمام يا أستاذ أحمد قبل ما نكمل معاك، معاك كام شخص يافندم؟
+EXTRACT: msg=10 run=true (booking=false mod5=true)
+HOT LEAD → 01200000101 | Score: 85 | العميل جاهز للحجز | firstHandoff=true
+TEST split: 1 part(s)
+  [1] تمام يافندم هحول حضرتك لزميلي المختص يكمل معاك خطوات الحجز إن شاء الله وللتواصل 
+--- /webhook/test called ---
+DEFAULT_COMPANY_ID: cmq4ok7hx000004kzfnsxp54o
+🔍 Looking up company: cmq4ok7hx000004kzfnsxp54o
+Company found: ✅ إسكندرية الدولية للسياحة
+NEW_CONV → phone=01200000102 existingLead=null knownName=undefined
+FAQ_CACHE HIT — companyId=cmq4ok7hx000004kzfnsxp54o
+CACHE: write=0 read=21684 input=13 output=63
+RAW_REPLY: وعليكم السلام ورحمة الله وبركاته أهلاً بيك في إسكندرية الدولية للسياحة تشرفنا باسم حضرتك؟
+EXTRACT: msg=1 run=true (booking=false mod5=false)
+TEST split: 1 part(s)
+  [1] وعليكم السلام ورحمة الله وبركاته أهلاً بيك في إسكندرية الدولية للسياحة تشرفنا با
+--- /webhook/test called ---
+DEFAULT_COMPANY_ID: cmq4ok7hx000004kzfnsxp54o
+🔍 Looking up company: cmq4ok7hx000004kzfnsxp54o
+Company found: ✅ إسكندرية الدولية للسياحة
+FAQ_CACHE HIT — companyId=cmq4ok7hx000004kzfnsxp54o
+CACHE: write=63 read=21694 input=9 output=60
+RAW_REPLY: أهلاً يا أستاذة سارة نورتينا يافندم إيه اللي تحبي تعرفي عنه يافندم عمرة ولا حج؟
+EXTRACT: msg=3 run=false (booking=false mod5=false)
+TEST split: 1 part(s)
+  [1] أهلاً يا أستاذة سارة نورتينا يافندم إيه اللي تحبي تعرفي عنه يافندم عمرة ولا حج؟
+--- /webhook/test called ---
+DEFAULT_COMPANY_ID: cmq4ok7hx000004kzfnsxp54o
+🔍 Looking up company: cmq4ok7hx000004kzfnsxp54o
+Company found: ✅ إسكندرية الدولية للسياحة
+FAQ_CACHE HIT — companyId=cmq4ok7hx000004kzfnsxp54o
+CACHE: write=63 read=21694 input=76 output=32
+RAW_REPLY: تمام يا أستاذة سارة معاكِ كام شخص يافندم؟
+EXTRACT: msg=5 run=true (booking=false mod5=true)
+TEST split: 1 part(s)
+  [1] تمام يا أستاذة سارة معاكِ كام شخص يافندم؟
+--- /webhook/test called ---
+DEFAULT_COMPANY_ID: cmq4ok7hx000004kzfnsxp54o
+🔍 Looking up company: cmq4ok7hx000004kzfnsxp54o
+Company found: ✅ إسكندرية الدولية للسياحة
+FAQ_CACHE HIT — companyId=cmq4ok7hx000004kzfnsxp54o
+CACHE: write=22203 read=0 input=188 output=37
+RAW_REPLY: حاضر يا أستاذة سارة إيه الشهر المفضل عندك يافندم؟
+EXTRACT: msg=7 run=false (booking=false mod5=false)
+TEST split: 1 part(s)
+  [1] حاضر يا أستاذة سارة إيه الشهر المفضل عندك يافندم؟
+--- /webhook/test called ---
+DEFAULT_COMPANY_ID: cmq4ok7hx000004kzfnsxp54o
+🔍 Looking up company: cmq4ok7hx000004kzfnsxp54o
+Company found: ✅ إسكندرية الدولية للسياحة
+FAQ_CACHE HIT — companyId=cmq4ok7hx000004kzfnsxp54o
+CACHE: write=185 read=22203 input=48 output=118
+RAW_REPLY: تمام يا أستاذة سارة تفضلي مستوى إيه يافندم؟↵اقتصادي: فنادق مريحة بأسعار مناسبة↵اقتصادي متميز: فنادق راقية بخدمات أفضل↵خمس نجوم: أفضل الفنادق وأعلى مستوى خدمة
+EXTRACT: msg=9 run=false (booking=false mod5=false)
+TEST split: 4 part(s)
+  [1] تمام يا أستاذة سارة تفضلي مستوى إيه يافندم؟
+  [2] اقتصادي: فنادق مريحة بأسعار مناسبة
+  [3] اقتصادي متميز: فنادق راقية بخدمات أفضل
+  [4] خمس نجوم: أفضل الفنادق وأعلى مستوى خدمة
+--- /webhook/test called ---
+DEFAULT_COMPANY_ID: cmq4ok7hx000004kzfnsxp54o
+🔍 Looking up company: cmq4ok7hx000004kzfnsxp54o
+Company found: ✅ إسكندرية الدولية للسياحة
+FAQ_CACHE HIT — companyId=cmq4ok7hx000004kzfnsxp54o
+CACHE: write=0 read=22203 input=363 output=1241
+RAW_REPLY: تمام يا أستاذة سارة عندنا برامج خمس نجوم رائعة في أغسطس يافندم↵↵الصفوة (شامل الإفطار) + الحارثية (شامل الإفطار)↵قطار الحرمين: مشمول↵رباعي (٤+): ٦٩٬٠٠٠ جنيه/فرد↵ثلاثي (٣): ٧٣٬٥٠٠ جنيه/فرد↵ثنائي (٢): ٨٣٬٠٠٠ جنيه/فرد↵الإجمالي لـ ٢ فرد (رباعي): ١٣٨٬٠٠٠ جنيه / (ثلاثي): ١٤٧٬٠٠٠ جنيه / (ثنائي): ١٦٦٬٠٠٠ جني
+EXTRACT: msg=10 run=true (booking=false mod5=true)
+TEST split: 5 part(s)
+  [1] تمام يا أستاذة سارة عندنا برامج خمس نجوم رائعة في أغسطس يافندم
+  [2] الصفوة (شامل الإفطار) + الحارثية (شامل الإفطار)
+قطار الحرمين: مشمول
+رباعي (٤+): 
+  [3] موفنبيك (شامل الإفطار) + الحارثية (شامل الإفطار)
+قطار الحرمين: مشمول
+رباعي (٤+):
+  [4] الصفوة (شامل الإفطار) + شذا ريجنسي (بدون إفطار)
+قطار الحرمين: مشمول
+رباعي (٤+): 
+  [5] موفنبيك (شامل الإفطار) + شذا ريجنسي (بدون إفطار)
+قطار الحرمين: مشمول
+رباعي (٤+):
+--- /webhook/test called ---
+DEFAULT_COMPANY_ID: cmq4ok7hx000004kzfnsxp54o
+🔍 Looking up company: cmq4ok7hx000004kzfnsxp54o
+Company found: ✅ إسكندرية الدولية للسياحة
+FAQ_CACHE HIT — companyId=cmq4ok7hx000004kzfnsxp54o
+CACHE: write=12 read=22203 input=1533 output=123
+RAW_REPLY: يا أستاذة سارة البرامج اللي عرضتها دي هي كل برامج خمس نجوم المتاحة في أغسطس يافندم الأربع برامج اللي فوق كاملة مع كل الفنادق والأسعار والإجماليات↵↵إيه رأيك يافندم أي برنامج منهم نال إعجابك؟
+EXTRACT: msg=10 run=true (booking=false mod5=true)
+TEST split: 2 part(s)
+  [1] يا أستاذة سارة البرامج اللي عرضتها دي هي كل برامج خمس نجوم المتاحة في أغسطس يافن
+  [2] إيه رأيك يافندم أي برنامج منهم نال إعجابك؟
+--- /webhook/test called ---
+DEFAULT_COMPANY_ID: cmq4ok7hx000004kzfnsxp54o
+🔍 Looking up company: cmq4ok7hx000004kzfnsxp54o
+Company found: ✅ إسكندرية الدولية للسياحة
+FAQ_CACHE HIT — companyId=cmq4ok7hx000004kzfnsxp54o
+CACHE: write=12 read=22203 input=1602 output=100
+RAW_REPLY: يا أستاذة سارة لو حابة أسعار أرخص ممكن نعرض عليك برامج اقتصادي متميز في أغسطس بفنادق راقية جداً وبفرق بسيط في السعر يافندم تحبي أشوفك البرامج دي؟
+EXTRACT: msg=10 run=true (booking=false mod5=true)
+TEST split: 1 part(s)
+  [1] يا أستاذة سارة لو حابة أسعار أرخص ممكن نعرض عليك برامج اقتصادي متميز في أغسطس بف
+--- /webhook/test called ---
+DEFAULT_COMPANY_ID: cmq4ok7hx000004kzfnsxp54o
+🔍 Looking up company: cmq4ok7hx000004kzfnsxp54o
+Company found: ✅ إسكندرية الدولية للسياحة
+FAQ_CACHE HIT — companyId=cmq4ok7hx000004kzfnsxp54o
+CACHE: write=12 read=22203 input=1670 output=60
+RAW_REPLY: تمام يا أستاذة سارة خدي وقتك إن شاء الله حابة أتواصل معك بكرة تكوني فكرتي يناسبك؟
+EXTRACT: msg=10 run=true (booking=false mod5=true)
+TEST split: 1 part(s)
+  [1] تمام يا أستاذة سارة خدي وقتك إن شاء الله حابة أتواصل معك بكرة تكوني فكرتي يناسبك
+--- /webhook/test called ---
+DEFAULT_COMPANY_ID: cmq4ok7hx000004kzfnsxp54o
+🔍 Looking up company: cmq4ok7hx000004kzfnsxp54o
+Company found: ✅ إسكندرية الدولية للسياحة
+FAQ_CACHE HIT — companyId=cmq4ok7hx000004kzfnsxp54o
+CACHE: write=12 read=22203 input=1692 output=29
+RAW_REPLY: تمام إن شاء الله هأتواصل معك بكرة يافندم
+EXTRACT: msg=10 run=true (booking=false mod5=true)
+FOLLOW-UP SCHEDULED → 01200000102 in 1d at 2026-06-16T07:00:00.000Z
+TEST split: 1 part(s)
+  [1] تمام إن شاء الله هأتواصل معك بكرة يافندم
+--- /webhook/test called ---
+DEFAULT_COMPANY_ID: cmq4ok7hx000004kzfnsxp54o
+🔍 Looking up company: cmq4ok7hx000004kzfnsxp54o
+Company found: ✅ إسكندرية الدولية للسياحة
+NEW_CONV → phone=01200000103 existingLead=null knownName=undefined
+FAQ_CACHE HIT — companyId=cmq4ok7hx000004kzfnsxp54o
+CACHE: write=0 read=21694 input=3 output=63
+RAW_REPLY: وعليكم السلام ورحمة الله وبركاته أهلاً بيك في إسكندرية الدولية للسياحة تشرفنا باسم حضرتك؟
+EXTRACT: msg=1 run=true (booking=false mod5=false)
+TEST split: 1 part(s)
+  [1] وعليكم السلام ورحمة الله وبركاته أهلاً بيك في إسكندرية الدولية للسياحة تشرفنا با
+--- /webhook/test called ---
+DEFAULT_COMPANY_ID: cmq4ok7hx000004kzfnsxp54o
+🔍 Looking up company: cmq4ok7hx000004kzfnsxp54o
+Company found: ✅ إسكندرية الدولية للسياحة
+FAQ_CACHE HIT — companyId=cmq4ok7hx000004kzfnsxp54o
+CACHE: write=63 read=21694 input=9 output=49
+RAW_REPLY: أهلاً يا أستاذ محمود نورتنا يافندم بتسأل عن عمرة ولا حج يافندم؟
+EXTRACT: msg=3 run=false (booking=false mod5=false)
+TEST split: 1 part(s)
+  [1] أهلاً يا أستاذ محمود نورتنا يافندم بتسأل عن عمرة ولا حج يافندم؟
+--- /webhook/test called ---
+DEFAULT_COMPANY_ID: cmq4ok7hx000004kzfnsxp54o
+🔍 Looking up company: cmq4ok7hx000004kzfnsxp54o
+Company found: ✅ إسكندرية الدولية للسياحة
+FAQ_CACHE HIT — companyId=cmq4ok7hx000004kzfnsxp54o
+CACHE: write=63 read=21694 input=63 output=37
+RAW_REPLY: تمام يا أستاذ محمود إن شاء الله معاك كام شخص يافندم؟
+EXTRACT: msg=5 run=true (booking=false mod5=true)
+TEST split: 1 part(s)
+  [1] تمام يا أستاذ محمود إن شاء الله معاك كام شخص يافندم؟
+--- /webhook/test called ---
+DEFAULT_COMPANY_ID: cmq4ok7hx000004kzfnsxp54o
+🔍 Looking up company: cmq4ok7hx000004kzfnsxp54o
+Company found: ✅ إسكندرية الدولية للسياحة
+FAQ_CACHE HIT — companyId=cmq4ok7hx000004kzfnsxp54o
+CACHE: write=22203 read=0 input=183 output=133
+RAW_REPLY: حاضر يافندم ثلاثة أفراد إن شاء الله تفضل أي مستوى يناسبك يافندم؟↵↵اقتصادي: فنادق مريحة بأسعار مناسبة↵اقتصادي متميز: فنادق راقية بخدمات أفضل↵خمس نجوم: أفضل الفنادق وأعلى مستوى خدمة
+EXTRACT: msg=7 run=false (booking=false mod5=false)
+TEST split: 4 part(s)
+  [1] حاضر يافندم ثلاثة أفراد إن شاء الله تفضل أي مستوى يناسبك يافندم؟
+  [2] اقتصادي: فنادق مريحة بأسعار مناسبة
+  [3] اقتصادي متميز: فنادق راقية بخدمات أفضل
+  [4] خمس نجوم: أفضل الفنادق وأعلى مستوى خدمة
+--- /webhook/test called ---
+DEFAULT_COMPANY_ID: cmq4ok7hx000004kzfnsxp54o
+🔍 Looking up company: cmq4ok7hx000004kzfnsxp54o
+Company found: ✅ إسكندرية الدولية للسياحة
+FAQ_CACHE HIT — companyId=cmq4ok7hx000004kzfnsxp54o
+CACHE: write=180 read=22203 input=145 output=434
+RAW_REPLY: تمام يا أستاذ محمود عندنا برنامج حج اقتصادي ممتاز يافندم↵↵برنامج الحج البري — ٢٣٩٬٠٠٠ جنيه للفرد (بدون تذكرة العبّارة)↵المدينة: ١ إلى ٤ ذي الحجة | فندق أوديست | إفطار وعشاء أوبن بوفيه↵العزيزية: ٤ إلى ١٤ ذي الحجة | فندق مواسم الخير | إفطار وعشاء↵عرفات: مخيمات اقتصادية | منى: مخيمات منى المطورة↵التحسي
+EXTRACT: msg=9 run=false (booking=false mod5=false)
+TEST split: 8 part(s)
+  [1] تمام يا أستاذ محمود عندنا برنامج حج اقتصادي ممتاز يافندم
+  [2] برنامج الحج البري ٢٣٩٬٠٠٠ جنيه للفرد (بدون تذكرة العبّارة)
+  [3] المدينة: ١ إلى ٤ ذي الحجة | فندق أوديست | إفطار وعشاء أوبن بوفيه
+  [4] العزيزية: ٤ إلى ١٤ ذي الحجة | فندق مواسم الخير | إفطار وعشاء
+  [5] عرفات: مخيمات اقتصادية | منى: مخيمات منى المطورة
+  [6] التحسين: ١٤ إلى ٢٠ ذي الحجة | فندق موفنبيك هاجر (برج الساعة) | إفطار أوبن بوفيه
+  [7] الإجمالي لـ ٣ أفراد: ٧١٧٬٠٠٠ جنيه (بدون تذكرة العبّارة)
+  [8] يافندم هذا البرنامج فيه ميزة إن التحسين في موفنبيك هاجر مطل على الحرم مباشرة وبت
+--- /webhook/test called ---
+DEFAULT_COMPANY_ID: cmq4ok7hx000004kzfnsxp54o
+🔍 Looking up company: cmq4ok7hx000004kzfnsxp54o
+Company found: ✅ إسكندرية الدولية للسياحة
+FAQ_CACHE HIT — companyId=cmq4ok7hx000004kzfnsxp54o
+CACHE: write=0 read=22203 input=770 output=539
+RAW_REPLY: تمام يا أستاذ محمود عندنا برامج حج اقتصادية أخرى يافندم↵↵برنامج الحج الاقتصادي - تحسين ٥ نجوم ٢٥٥٬٠٠٠ جنيه للفرد (بدون تذكرة الطيران)↵المدينة: ٢ إلى ٦ ذي الحجة | فندق أوديست | إفطار وعشاء أوبن بوفيه↵الانتقال لمكة بقطار الحرمين السريع↵العزيزية: ٦ إلى ٨ ذي الحجة فقط (يومان) | فندق نزل البشائر | إفطار 
+EXTRACT: msg=10 run=true (booking=false mod5=true)
+TEST split: 10 part(s)
+  [1] تمام يا أستاذ محمود عندنا برامج حج اقتصادية أخرى يافندم
+  [2] برنامج الحج الاقتصادي - تحسين ٥ نجوم ٢٥٥٬٠٠٠ جنيه للفرد (بدون تذكرة الطيران)
+  [3] المدينة: ٢ إلى ٦ ذي الحجة | فندق أوديست | إفطار وعشاء أوبن بوفيه
+  [4] الانتقال لمكة بقطار الحرمين السريع
+  [5] العزيزية: ٦ إلى ٨ ذي الحجة فقط (يومان) | فندق نزل البشائر | إفطار وعشاء
+  [6] عرفات: مخيمات اقتصادية قريبة من الجمرات | منى: مخيمات مصر الاقتصادية السياحية | 
+  [7] التحسين: ١٤ إلى ٢٠ ذي الحجة | فندق موفنبيك هاجر (برج الساعة) | إفطار أوبن بوفيه
+  [8] مع مشايخ ودعاة متخصصين يرافقونكم طول الرحلة
+  [9] الإجمالي لـ ٣ أفراد: ٧٦٥٬٠٠٠ جنيه (بدون تذكرة الطيران)
+  [10] الفرق يا أستاذ محمود إن هذا البرنامج فيه قطار الحرمين السريع وفيه مشايخ ودعاة مع
+--- /webhook/test called ---
+DEFAULT_COMPANY_ID: cmq4ok7hx000004kzfnsxp54o
+🔍 Looking up company: cmq4ok7hx000004kzfnsxp54o
+Company found: ✅ إسكندرية الدولية للسياحة
+FAQ_CACHE HIT — companyId=cmq4ok7hx000004kzfnsxp54o
+[95m[Nest] 21640  - [39m06/15/2026, 8:15:00 AM [95m  DEBUG[39m [38;5;3m[FollowUpService] [39m[95mFollow-up check skipped — outside Cairo window (hour=7)[39m
+CACHE: write=0 read=22203 input=1255 output=322
+RAW_REPLY: يا أستاذ محمود عندنا أربع مزايا رئيسية يافندم↵↵أولاً أطول فترة تحسين ٥ نجوم مطلة على الحرم في السوق من ١٤ لـ ٢٠ ذي الحجة تستمتع بالحرم براحتك بعد تعب المناسك↵↵ثانياً الإقامة في العزيزية يومين بس مش فترة طويلة مجهدة زي البرامج التانية↵↵ثالثاً بنبدأ بالمدينة المنورة للراحة والسكينة قبل المناسك تستعد ن
+EXTRACT: msg=10 run=true (booking=false mod5=true)
+TEST split: 5 part(s)
+  [1] يا أستاذ محمود عندنا أربع مزايا رئيسية يافندم
+  [2] أولاً أطول فترة تحسين ٥ نجوم مطلة على الحرم في السوق من ١٤ لـ ٢٠ ذي الحجة تستمتع
+  [3] ثانياً الإقامة في العزيزية يومين بس مش فترة طويلة مجهدة زي البرامج التانية
+  [4] ثالثاً بنبدأ بالمدينة المنورة للراحة والسكينة قبل المناسك تستعد نفسياً وروحياً
+  [5] رابعاً مشايخ ودعاة متخصصون معاكم طول الرحلة يشرحون كل خطوة وسافر معنا العام الما
+--- /webhook/test called ---
+DEFAULT_COMPANY_ID: cmq4ok7hx000004kzfnsxp54o
+🔍 Looking up company: cmq4ok7hx000004kzfnsxp54o
+Company found: ✅ إسكندرية الدولية للسياحة
+FAQ_CACHE HIT — companyId=cmq4ok7hx000004kzfnsxp54o
+CACHE: write=12 read=22203 input=1524 output=111
+RAW_REPLY: آه يافندم في تقسيط متاح إن شاء الله لكن التفاصيل الدقيقة بخصوص خطط التقسيط والدفع هحول حضرتك لزميلي المختص يكمل معاك كل التفاصيل إن شاء الله وللتواصل المباشر: 01554565115
+EXTRACT: msg=10 run=true (booking=false mod5=true)
+AI_SELF_HANDOFF DETECTED → 01200000103 — handoffMessageSent stamped
+TEST split: 1 part(s)
+  [1] آه يافندم في تقسيط متاح إن شاء الله لكن التفاصيل الدقيقة بخصوص خطط التقسيط والدف
+--- /webhook/test called ---
+DEFAULT_COMPANY_ID: cmq4ok7hx000004kzfnsxp54o
+🔍 Looking up company: cmq4ok7hx000004kzfnsxp54o
+Company found: ✅ إسكندرية الدولية للسياحة
+FAQ_CACHE HIT — companyId=cmq4ok7hx000004kzfnsxp54o
+CACHE: write=12 read=22203 input=1602 output=108
+RAW_REPLY: تمام يا أستاذ محمود لو تبعتلي تفاصيل البرنامج التاني عشان نراجعه ونقارن المواصفات والخدمات بشكل صحيح يافندم مش كل البرامج بتحمل نفس المواصفات والفنادق والخدمات المضافة
+EXTRACT: msg=10 run=true (booking=false mod5=true)
+TEST split: 1 part(s)
+  [1] تمام يا أستاذ محمود لو تبعتلي تفاصيل البرنامج التاني عشان نراجعه ونقارن المواصفا
+--- /webhook/test called ---
+DEFAULT_COMPANY_ID: cmq4ok7hx000004kzfnsxp54o
+🔍 Looking up company: cmq4ok7hx000004kzfnsxp54o
+Company found: ✅ إسكندرية الدولية للسياحة
+FAQ_CACHE HIT — companyId=cmq4ok7hx000004kzfnsxp54o
+CACHE: write=12 read=22203 input=1581 output=108
+RAW_REPLY: الأضحية في السوق بتتراوح من ٥٠٠ لـ ٨٠٠ ريال سعودي يافندم بس إحنا بنساعدك في شراء الصك وبنجيبه لك وسعره بإذن الله ما هيتجاوزش ٥٠٠ ريال
+EXTRACT: msg=10 run=true (booking=false mod5=true)
+TEST split: 1 part(s)
+  [1] الأضحية في السوق بتتراوح من ٥٠٠ لـ ٨٠٠ ريال سعودي يافندم بس إحنا بنساعدك في شراء
+--- /webhook/test called ---
+DEFAULT_COMPANY_ID: cmq4ok7hx000004kzfnsxp54o
+🔍 Looking up company: cmq4ok7hx000004kzfnsxp54o
+Company found: ✅ إسكندرية الدولية للسياحة
+FAQ_CACHE HIT — companyId=cmq4ok7hx000004kzfnsxp54o
+CACHE: write=12 read=22203 input=1261 output=52
+RAW_REPLY: آه يافندم كل البرامج شاملة الوجبات متقلقش من موضوع الأكل طول الرحلة إن شاء الله
+EXTRACT: msg=10 run=true (booking=false mod5=true)
+TEST split: 1 part(s)
+  [1] آه يافندم كل البرامج شاملة الوجبات متقلقش من موضوع الأكل طول الرحلة إن شاء الله
+--- /webhook/test called ---
+DEFAULT_COMPANY_ID: cmq4ok7hx000004kzfnsxp54o
+🔍 Looking up company: cmq4ok7hx000004kzfnsxp54o
+Company found: ✅ إسكندرية الدولية للسياحة
+FAQ_CACHE HIT — companyId=cmq4ok7hx000004kzfnsxp54o
+CACHE: write=12 read=22203 input=771 output=180
+RAW_REPLY: فهمت يافندم والدك كبير في السن تمام للأمانة الأفضل يكون معاه حد من الأقارب كمرافق يساعده طول الرحلة وإحنا من جانبنا بنأمن تتبع ذكي GPS لكل حاج عشان نطمن عليه في أي وقت يافندم↵↵بخصوص الحركة والمشي في المناسك هنساعده قدر الإمكان لكن الموضوع يحتاج مرافق من العيلة يكون معاه طول الوقت
+EXTRACT: msg=10 run=true (booking=false mod5=true)
+TEST split: 2 part(s)
+  [1] فهمت يافندم والدك كبير في السن تمام للأمانة الأفضل يكون معاه حد من الأقارب كمراف
+  [2] بخصوص الحركة والمشي في المناسك هنساعده قدر الإمكان لكن الموضوع يحتاج مرافق من ال
+--- /webhook/test called ---
+DEFAULT_COMPANY_ID: cmq4ok7hx000004kzfnsxp54o
+🔍 Looking up company: cmq4ok7hx000004kzfnsxp54o
+Company found: ✅ إسكندرية الدولية للسياحة
+FAQ_CACHE HIT — companyId=cmq4ok7hx000004kzfnsxp54o
+CACHE: write=12 read=22203 input=626 output=57
+RAW_REPLY: تمام يا أستاذ محمود خد وقتك إن شاء الله حابب أتواصل معك بكرة تكون فكرت يناسبك؟
+EXTRACT: msg=10 run=true (booking=false mod5=true)
+TEST split: 1 part(s)
+  [1] تمام يا أستاذ محمود خد وقتك إن شاء الله حابب أتواصل معك بكرة تكون فكرت يناسبك؟
+--- /webhook/test called ---
+DEFAULT_COMPANY_ID: cmq4ok7hx000004kzfnsxp54o
+🔍 Looking up company: cmq4ok7hx000004kzfnsxp54o
+Company found: ✅ إسكندرية الدولية للسياحة
+FAQ_CACHE HIT — companyId=cmq4ok7hx000004kzfnsxp54o
+CACHE: write=12 read=22203 input=565 output=29
+RAW_REPLY: تمام إن شاء الله هأتواصل معك بكرة يافندم
+EXTRACT: msg=10 run=true (booking=false mod5=true)
+FOLLOW-UP SCHEDULED → 01200000103 in 1d at 2026-06-16T07:00:00.000Z
+TEST split: 1 part(s)
+  [1] تمام إن شاء الله هأتواصل معك بكرة يافندم
+--- /webhook/test called ---
+DEFAULT_COMPANY_ID: cmq4ok7hx000004kzfnsxp54o
+🔍 Looking up company: cmq4ok7hx000004kzfnsxp54o
+Company found: ✅ إسكندرية الدولية للسياحة
+FOLLOW-UP CANCELLED — 01200000103 replied before deadline
+FAQ_CACHE HIT — companyId=cmq4ok7hx000004kzfnsxp54o
+CACHE: write=12 read=22203 input=480 output=41
+RAW_REPLY: العفو يافندم بارك الله فيك وفي انتظار تواصل حضرتك إن شاء الله
+EXTRACT: msg=10 run=true (booking=false mod5=true)
+TEST split: 1 part(s)
+  [1] العفو يافندم بارك الله فيك وفي انتظار تواصل حضرتك إن شاء الله
+--- /webhook/test called ---
+DEFAULT_COMPANY_ID: cmq4ok7hx000004kzfnsxp54o
+🔍 Looking up company: cmq4ok7hx000004kzfnsxp54o
+Company found: ✅ إسكندرية الدولية للسياحة
+NEW_CONV → phone=01200000104 existingLead=null knownName=undefined
+FAQ_CACHE HIT — companyId=cmq4ok7hx000004kzfnsxp54o
+CACHE: write=0 read=21694 input=3 output=63
+RAW_REPLY: وعليكم السلام ورحمة الله وبركاته أهلاً بيك في إسكندرية الدولية للسياحة تشرفنا باسم حضرتك؟
+EXTRACT: msg=1 run=true (booking=false mod5=false)
+TEST split: 1 part(s)
+  [1] وعليكم السلام ورحمة الله وبركاته أهلاً بيك في إسكندرية الدولية للسياحة تشرفنا با
+--- /webhook/test called ---
+DEFAULT_COMPANY_ID: cmq4ok7hx000004kzfnsxp54o
+🔍 Looking up company: cmq4ok7hx000004kzfnsxp54o
+Company found: ✅ إسكندرية الدولية للسياحة
+FAQ_CACHE HIT — companyId=cmq4ok7hx000004kzfnsxp54o
+CACHE: write=63 read=21694 input=9 output=43
+RAW_REPLY: أهلاً يا أستاذ كريم نورتنا يافندم إيه اللي تحب تعرفه؟
+EXTRACT: msg=3 run=false (booking=false mod5=false)
+TEST split: 1 part(s)
+  [1] أهلاً يا أستاذ كريم نورتنا يافندم إيه اللي تحب تعرفه؟
+--- /webhook/test called ---
+DEFAULT_COMPANY_ID: cmq4ok7hx000004kzfnsxp54o
+🔍 Looking up company: cmq4ok7hx000004kzfnsxp54o
+Company found: ✅ إسكندرية الدولية للسياحة
+FAQ_CACHE HIT — companyId=cmq4ok7hx000004kzfnsxp54o
+CACHE: write=63 read=21694 input=57 output=30
+RAW_REPLY: تمام يا أستاذ كريم معاك كام شخص يافندم؟
+EXTRACT: msg=5 run=true (booking=false mod5=true)
+TEST split: 1 part(s)
+  [1] تمام يا أستاذ كريم معاك كام شخص يافندم؟
+--- /webhook/test called ---
+DEFAULT_COMPANY_ID: cmq4ok7hx000004kzfnsxp54o
+🔍 Looking up company: cmq4ok7hx000004kzfnsxp54o
+Company found: ✅ إسكندرية الدولية للسياحة
+FAQ_CACHE HIT — companyId=cmq4ok7hx000004kzfnsxp54o
+CACHE: write=22203 read=0 input=175 output=288
+RAW_REPLY: عندنا أربع مزايا رئيسية يا أستاذ كريم أولاً أطول فترة تحسين خمس نجوم مطلة على الحرم في السوق من ١٤ لـ ٢٠ ذي الحجة تستمتع بالحرم براحتك ثانياً الإقامة في العزيزية يومين بس مش فترة طويلة مجهدة ثالثاً بنبدأ بالمدينة المنورة للراحة والسكينة قبل المناسك رابعاً مشايخ ودعاة متخصصون معاك طول الرحلة يشرحون ك
+EXTRACT: msg=7 run=false (booking=false mod5=false)
+TEST split: 1 part(s)
+  [1] عندنا أربع مزايا رئيسية يا أستاذ كريم أولاً أطول فترة تحسين خمس نجوم مطلة على ال
+--- /webhook/test called ---
+DEFAULT_COMPANY_ID: cmq4ok7hx000004kzfnsxp54o
+🔍 Looking up company: cmq4ok7hx000004kzfnsxp54o
+Company found: ✅ إسكندرية الدولية للسياحة
+FAQ_CACHE HIT — companyId=cmq4ok7hx000004kzfnsxp54o
+CACHE: write=172 read=22203 input=309 output=206
+RAW_REPLY: التمتع يا أستاذ كريم معناه تؤدي عمرة أولاً ثم تتحلل من الإحرام وتستريح شوية ثم تحرم من جديد للحج يوم الثامن من ذي الحجة وده الأكثر شيوعاً للمصريين أما القِران فمعناه تحرم بنية العمرة والحج معاً بإحرام واحد بدون ما تتحلل بينهما وفي الحالتين بتؤدي المناسك كاملة بس الفرق في طريقة الإحرام والنية يافندم 
+EXTRACT: msg=9 run=false (booking=false mod5=false)
+TEST split: 1 part(s)
+  [1] التمتع يا أستاذ كريم معناه تؤدي عمرة أولاً ثم تتحلل من الإحرام وتستريح شوية ثم ت
+--- /webhook/test called ---
+DEFAULT_COMPANY_ID: cmq4ok7hx000004kzfnsxp54o
+🔍 Looking up company: cmq4ok7hx000004kzfnsxp54o
+Company found: ✅ إسكندرية الدولية للسياحة
+FAQ_CACHE HIT — companyId=cmq4ok7hx000004kzfnsxp54o
+CACHE: write=0 read=22203 input=706 output=185
+RAW_REPLY: الفرق يا أستاذ كريم إن مخيمات البري بتكون بعيدة عن الجمرات والمشي ممكن يوصل ٤ كيلو ونص أما مخيماتنا الاقتصادية وخمس النجوم فقريبة من الجمرات وتوفر راحة أكتر منى بشكل عام ضيقة في كل المستويات ما عدا أبراج كدانة اللي هي أبراج فندقية مجهزة ومريحة جداً يافندم معاك كام شخص؟
+EXTRACT: msg=10 run=true (booking=false mod5=true)
+TEST split: 1 part(s)
+  [1] الفرق يا أستاذ كريم إن مخيمات البري بتكون بعيدة عن الجمرات والمشي ممكن يوصل ٤ كي
+--- /webhook/test called ---
+DEFAULT_COMPANY_ID: cmq4ok7hx000004kzfnsxp54o
+🔍 Looking up company: cmq4ok7hx000004kzfnsxp54o
+Company found: ✅ إسكندرية الدولية للسياحة
+FAQ_CACHE HIT — companyId=cmq4ok7hx000004kzfnsxp54o
+CACHE: write=12 read=22203 input=833 output=150
+RAW_REPLY: تمام يا أستاذ كريم برامجنا ليها مواصفات ومميزات محددة وضحناها لحضرتك عشان نقارن صح يفضل تبعتلنا تفاصيل البرنامج التاني عشان نراجعه ونقارن المميزات ونرد عليك بشكل وافٍ مش كل البرامج بتحمل نفس المواصفات يافندم معاك كام شخص؟
+EXTRACT: msg=10 run=true (booking=false mod5=true)
+TEST split: 1 part(s)
+  [1] تمام يا أستاذ كريم برامجنا ليها مواصفات ومميزات محددة وضحناها لحضرتك عشان نقارن 
+--- /webhook/test called ---
+DEFAULT_COMPANY_ID: cmq4ok7hx000004kzfnsxp54o
+🔍 Looking up company: cmq4ok7hx000004kzfnsxp54o
+Company found: ✅ إسكندرية الدولية للسياحة
+FAQ_CACHE HIT — companyId=cmq4ok7hx000004kzfnsxp54o
+CACHE: write=12 read=22203 input=942 output=57
+RAW_REPLY: تمام يا أستاذ كريم خد وقتك إن شاء الله حابب أتواصل معك بكرة تكون فكرت يناسبك؟
+EXTRACT: msg=10 run=true (booking=false mod5=true)
+TEST split: 1 part(s)
+  [1] تمام يا أستاذ كريم خد وقتك إن شاء الله حابب أتواصل معك بكرة تكون فكرت يناسبك؟
+--- /webhook/test called ---
+DEFAULT_COMPANY_ID: cmq4ok7hx000004kzfnsxp54o
+🔍 Looking up company: cmq4ok7hx000004kzfnsxp54o
+Company found: ✅ إسكندرية الدولية للسياحة
+NEW_CONV → phone=01200000105 existingLead=null knownName=undefined
+FAQ_CACHE HIT — companyId=cmq4ok7hx000004kzfnsxp54o
+CACHE: write=0 read=21694 input=3 output=63
+RAW_REPLY: وعليكم السلام ورحمة الله وبركاته أهلاً بيك في إسكندرية الدولية للسياحة تشرفنا باسم حضرتك؟
+EXTRACT: msg=1 run=true (booking=false mod5=false)
+TEST split: 1 part(s)
+  [1] وعليكم السلام ورحمة الله وبركاته أهلاً بيك في إسكندرية الدولية للسياحة تشرفنا با
+--- /webhook/test called ---
+DEFAULT_COMPANY_ID: cmq4ok7hx000004kzfnsxp54o
+🔍 Looking up company: cmq4ok7hx000004kzfnsxp54o
+Company found: ✅ إسكندرية الدولية للسياحة
+FAQ_CACHE HIT — companyId=cmq4ok7hx000004kzfnsxp54o
+CACHE: write=63 read=21694 input=14 output=12
+RAW_REPLY: اتفضل يافندم
+EXTRACT: msg=3 run=false (booking=false mod5=false)
+TEST split: 1 part(s)
+  [1] اتفضل يافندم
+--- /webhook/test called ---
+DEFAULT_COMPANY_ID: cmq4ok7hx000004kzfnsxp54o
+🔍 Looking up company: cmq4ok7hx000004kzfnsxp54o
+Company found: ✅ إسكندرية الدولية للسياحة
+FAQ_CACHE HIT — companyId=cmq4ok7hx000004kzfnsxp54o
+CACHE: write=63 read=21694 input=32 output=43
+RAW_REPLY: أهلاً يا أستاذ محمود نورتنا يافندم إيه اللي تحب تعرفه؟
+EXTRACT: msg=5 run=true (booking=false mod5=true)
+TEST split: 1 part(s)
+  [1] أهلاً يا أستاذ محمود نورتنا يافندم إيه اللي تحب تعرفه؟
+--- /webhook/test called ---
+DEFAULT_COMPANY_ID: cmq4ok7hx000004kzfnsxp54o
+🔍 Looking up company: cmq4ok7hx000004kzfnsxp54o
+Company found: ✅ إسكندرية الدولية للسياحة
+FAQ_CACHE HIT — companyId=cmq4ok7hx000004kzfnsxp54o
+CACHE: write=73 read=22203 input=88 output=117
+RAW_REPLY: تمام يا أستاذ محمود تفضل مستوى إيه يافندم؟↵اقتصادي: فنادق مريحة بأسعار مناسبة↵اقتصادي متميز: فنادق راقية بخدمات أفضل↵خمس نجوم: أفضل الفنادق وأعلى مستوى خدمة
+EXTRACT: msg=7 run=false (booking=false mod5=false)
+TEST split: 4 part(s)
+  [1] تمام يا أستاذ محمود تفضل مستوى إيه يافندم؟
+  [2] اقتصادي: فنادق مريحة بأسعار مناسبة
+  [3] اقتصادي متميز: فنادق راقية بخدمات أفضل
+  [4] خمس نجوم: أفضل الفنادق وأعلى مستوى خدمة
+--- /webhook/test called ---
+DEFAULT_COMPANY_ID: cmq4ok7hx000004kzfnsxp54o
+🔍 Looking up company: cmq4ok7hx000004kzfnsxp54o
+Company found: ✅ إسكندرية الدولية للسياحة
+FAQ_CACHE HIT — companyId=cmq4ok7hx000004kzfnsxp54o
+CACHE: write=73 read=22203 input=215 output=849
+RAW_REPLY: تمام يا أستاذ محمود إليك برامج خمس نجوم في سبتمبر يافندم↵↵الصفوة (بدون إفطار) + الحارثية (بدون إفطار)↵قطار الحرمين: غير مشمول↵رباعي (٤+): ٦٩٬٩٠٠ جنيه/فرد↵ثلاثي (٣): ٧٤٬٩٠٠ جنيه/فرد↵ثنائي (٢): ٨٥٬٩٠٠ جنيه/فرد↵يمكن حضرتك تطلع على الفنادق من هنا: https://www.booking.com/Share-8hDcymv و https://www.book
+EXTRACT: msg=9 run=false (booking=false mod5=false)
+TEST split: 5 part(s)
+  [1] تمام يا أستاذ محمود إليك برامج خمس نجوم في سبتمبر يافندم
+  [2] الصفوة (بدون إفطار) + الحارثية (بدون إفطار)
+قطار الحرمين: غير مشمول
+رباعي (٤+): 
+  [3] موفنبيك (بدون إفطار) + الحارثية (بدون إفطار)
+قطار الحرمين: غير مشمول
+رباعي (٤+):
+  [4] الصفوة (شامل الإفطار) + شذا ريجنسي (بدون إفطار)
+قطار الحرمين: مشمول
+رباعي (٤+): 
+  [5] موفنبيك (شامل الإفطار) + شذا ريجنسي (بدون إفطار)
+قطار الحرمين: مشمول
+رباعي (٤+):

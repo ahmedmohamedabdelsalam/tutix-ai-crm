@@ -185,7 +185,20 @@ export async function getAgentReply(
     });
 
     const u = response.usage;
-    console.log(`CACHE: write=${u.cache_creation_input_tokens ?? 0} read=${u.cache_read_input_tokens ?? 0} input=${u.input_tokens} output=${u.output_tokens}`);
+    const cacheRead = u.cache_read_input_tokens ?? 0;
+    const cacheWrite = u.cache_creation_input_tokens ?? 0;
+    const costUSD = (
+      (u.input_tokens * 0.80 / 1_000_000) +
+      (u.output_tokens * 4.00 / 1_000_000) +
+      (cacheRead * 0.08 / 1_000_000) +
+      (cacheWrite * 1.00 / 1_000_000)
+    ).toFixed(6);
+    console.log('TOKEN_USAGE:', JSON.stringify({
+      type: 'reply', msgCount: history.length,
+      inputTokens: u.input_tokens, outputTokens: u.output_tokens,
+      cacheReadTokens: cacheRead, cacheWriteTokens: cacheWrite,
+      estimatedCostUSD: costUSD,
+    }));
 
     const rawReply = prefill +
       (response.content[0]?.type === 'text'
@@ -216,6 +229,17 @@ ${history.map((m) => `${m.role === 'user' ? 'العميل' : 'المساعد'}: 
       max_tokens: 150,
       messages: [{ role: 'user', content: prompt }],
     });
+    const eu = response.usage;
+    const eCostUSD = (
+      (eu.input_tokens * 0.80 / 1_000_000) +
+      (eu.output_tokens * 4.00 / 1_000_000)
+    ).toFixed(6);
+    console.log('TOKEN_USAGE:', JSON.stringify({
+      type: 'extract', msgCount: history.length,
+      inputTokens: eu.input_tokens, outputTokens: eu.output_tokens,
+      cacheReadTokens: 0, cacheWriteTokens: 0,
+      estimatedCostUSD: eCostUSD,
+    }));
     const text =
       response.content[0]?.type === 'text' ? response.content[0].text : '{}';
     const json = text.match(/\{[\s\S]*\}/)?.[0] ?? '{}';

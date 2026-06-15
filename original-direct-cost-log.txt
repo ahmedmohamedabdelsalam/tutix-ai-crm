@@ -1,0 +1,222 @@
+◇ injected env (9) from .env // tip: ◈ encrypted .env [www.dotenvx.com]
+ORIGINAL PROMPT COST TEST — claude-haiku-4-5-20251001
+Prompt: prompt-backup-optimized.txt
+Pricing: $0.80/M input | $4.00/M output | $0.08/M cache-read | $1.00/M cache-write
+
+
+============================================================
+JOURNEY_START: A-SHORT
+============================================================
+
+--- MSG 1/6: "السلام عليكم" ---
+TOKEN_USAGE: {"journey":"A-SHORT","msgCount":1,"inputTokens":13,"outputTokens":63,"cacheReadTokens":0,"cacheWriteTokens":21684,"estimatedCostUSD":"0.021946"}
+REPLY: وعليكم السلام ورحمة الله وبركاته أهلاً بيك في إسكندرية الدولية للسياحة تشرفنا باسم حضرتك؟
+
+--- MSG 2/6: "أحمد" ---
+TOKEN_USAGE: {"journey":"A-SHORT","msgCount":3,"inputTokens":73,"outputTokens":50,"cacheReadTokens":21684,"cacheWriteTokens":10,"estimatedCostUSD":"0.002003"}
+REPLY: أهلاً يا أستاذ أحمد نورتنا يافندم بتسأل عن عمرة ولا حج يافندم؟
+
+--- MSG 3/6: "عمرة" ---
+TOKEN_USAGE: {"journey":"A-SHORT","msgCount":5,"inputTokens":130,"outputTokens":38,"cacheReadTokens":21684,"cacheWriteTokens":10,"estimatedCostUSD":"0.002001"}
+REPLY: تمام يا أستاذ أحمد إن شاء الله معاك كام شخص يافندم؟
+
+--- MSG 4/6: "يوليو" ---
+TOKEN_USAGE: {"journey":"A-SHORT","msgCount":7,"inputTokens":105,"outputTokens":132,"cacheReadTokens":21694,"cacheWriteTokens":70,"estimatedCostUSD":"0.002418"}
+REPLY: تمام يا أستاذ أحمد برنامج يوليو حلو جداً يافندم تفضل مستوى إيه؟↵↵اقتصادي: فنادق مريحة بأسعار مناسبة↵اقتصادي متميز: فنادق راقية بخدمات أفضل↵خمس نجوم: أفضل الفنادق وأعلى مستوى خدمة
+
+--- MSG 5/6: "اقتصادي" ---
+TOKEN_USAGE: {"journey":"A-SHORT","msgCount":9,"inputTokens":189,"outputTokens":392,"cacheReadTokens":21764,"cacheWriteTokens":57,"estimatedCostUSD":"0.003517"}
+REPLY: تمام يا أستاذ أحمد عندنا برامج اقتصادي في يوليو يافندم↵↵سنود الريان (بدون إفطار) + أوديست (بدون إفطار)↵قطار الحرمين: غير مشمول↵١٥ يوم (٨-٢٢ يوليو)↵رباعي (٤+): ٤١٬٠٠٠ جنيه/فرد↵ثلاثي (٣): ٤٤٬٥٠٠ جنيه/فر
+
+--- MSG 6/6: "عايز أحجز" ---
+TOKEN_USAGE: {"journey":"A-SHORT","msgCount":11,"inputTokens":546,"outputTokens":46,"cacheReadTokens":21821,"cacheWriteTokens":45,"estimatedCostUSD":"0.002411"}
+REPLY: تمام يا أستاذ أحمد قبل ما نكمل معاك كام شخص هيسافروا يافندم؟
+
+JOURNEY_END: A-SHORT
+
+============================================================
+JOURNEY_START: B-MEDIUM
+============================================================
+
+--- MSG 1/10: "السلام عليكم" ---
+TOKEN_USAGE: {"journey":"B-MEDIUM","msgCount":1,"inputTokens":13,"outputTokens":63,"cacheReadTokens":21684,"cacheWriteTokens":0,"estimatedCostUSD":"0.001997"}
+REPLY: وعليكم السلام ورحمة الله وبركاته أهلاً بيك في إسكندرية الدولية للسياحة تشرفنا باسم حضرتك؟
+
+--- MSG 2/10: "سارة" ---
+TOKEN_USAGE: {"journey":"B-MEDIUM","msgCount":3,"inputTokens":9,"outputTokens":60,"cacheReadTokens":21694,"cacheWriteTokens":63,"estimatedCostUSD":"0.002046"}
+REPLY: أهلاً يا أستاذة سارة نورتينا يافندم إيه اللي تحبي تعرفي عنه يافندم عمرة ولا حج؟
+
+--- MSG 3/10: "عمرة" ---
+TOKEN_USAGE: {"journey":"B-MEDIUM","msgCount":5,"inputTokens":76,"outputTokens":32,"cacheReadTokens":21694,"cacheWriteTokens":63,"estimatedCostUSD":"0.001987"}
+REPLY: تمام يا أستاذة سارة معاكِ كام شخص يافندم؟
+
+--- MSG 4/10: "اتنين" ---
+TOKEN_USAGE: {"journey":"B-MEDIUM","msgCount":7,"inputTokens":49,"outputTokens":36,"cacheReadTokens":21823,"cacheWriteTokens":0,"estimatedCostUSD":"0.001929"}
+REPLY: تمام يا أستاذة سارة إيه الشهر المفضل عندك يافندم؟
+
+--- MSG 5/10: "أغسطس" ---
+TOKEN_USAGE: {"journey":"B-MEDIUM","msgCount":9,"inputTokens":86,"outputTokens":118,"cacheReadTokens":21823,"cacheWriteTokens":7,"estimatedCostUSD":"0.002294"}
+REPLY: تمام يا أستاذة سارة تفضلي مستوى إيه يافندم؟↵↵اقتصادي: فنادق مريحة بأسعار مناسبة↵اقتصادي متميز: فنادق راقية بخدمات أفضل↵خمس نجوم: أفضل الفنادق وأعلى مستوى خدمة
+
+--- MSG 6/10: "خمس نجوم" ---
+TOKEN_USAGE: {"journey":"B-MEDIUM","msgCount":11,"inputTokens":175,"outputTokens":1225,"cacheReadTokens":21830,"cacheWriteTokens":39,"estimatedCostUSD":"0.006825"}
+REPLY: تمام يا أستاذة سارة عندنا برامج خمس نجوم رائعة في أغسطس يافندم↵↵الصفوة (شامل الإفطار) + الحارثية (شامل الإفطار)↵قطار الحرمين: مشمول↵رباعي (٤+): ٦٩٬٠٠٠ جنيه/فرد↵ثلاثي (٣): ٧٣٬٥٠٠ جنيه/فرد↵ثنائي (٢): ٨٣
+
+--- MSG 7/10: "وريني البرامج" ---
+TOKEN_USAGE: {"journey":"B-MEDIUM","msgCount":13,"inputTokens":1366,"outputTokens":271,"cacheReadTokens":21869,"cacheWriteTokens":44,"estimatedCostUSD":"0.003970"}
+REPLY: يا أستاذة سارة البرامج اللي عرضتها دي هي كل برامج خمس نجوم المتاحة في أغسطس يافندم↵↵البرنامج الأول والثاني فيهم الحارثية في المدينة وهي قريبة جداً من المسجد النبوي وفيها إفطار وعشاء أوبن بوفيه↵↵البرنا
+
+--- MSG 8/10: "مفيش أرخص؟" ---
+TOKEN_USAGE: {"journey":"B-MEDIUM","msgCount":15,"inputTokens":1522,"outputTokens":149,"cacheReadTokens":21913,"cacheWriteTokens":128,"estimatedCostUSD":"0.003695"}
+REPLY: يا أستاذة سارة برامج خمس النجوم في أغسطس دي هي الأسعار المتاحة يافندم↵↵لو تحبي سعر أوفر ممكن نعرض عليك برامج اقتصادي متميز في نفس الشهر بفنادق راقية جداً وبفرق بسيط في السعر والخدمات كويسة جداً يافندم
+
+--- MSG 9/10: "هفكر" ---
+TOKEN_USAGE: {"journey":"B-MEDIUM","msgCount":17,"inputTokens":443,"outputTokens":60,"cacheReadTokens":22041,"cacheWriteTokens":1235,"estimatedCostUSD":"0.003593"}
+REPLY: تمام يا أستاذة سارة خدي وقتك إن شاء الله حابب أتواصل معك بكرة تكوني فكرتي يناسبك؟
+
+--- MSG 10/10: "ماشي" ---
+TOKEN_USAGE: {"journey":"B-MEDIUM","msgCount":19,"inputTokens":226,"outputTokens":29,"cacheReadTokens":23276,"cacheWriteTokens":284,"estimatedCostUSD":"0.002443"}
+REPLY: تمام إن شاء الله هأتواصل معك بكرة يافندم
+
+JOURNEY_END: B-MEDIUM
+
+============================================================
+JOURNEY_START: C-LONG
+============================================================
+
+--- MSG 1/15: "السلام عليكم" ---
+TOKEN_USAGE: {"journey":"C-LONG","msgCount":1,"inputTokens":3,"outputTokens":63,"cacheReadTokens":21694,"cacheWriteTokens":0,"estimatedCostUSD":"0.001990"}
+REPLY: وعليكم السلام ورحمة الله وبركاته أهلاً بيك في إسكندرية الدولية للسياحة تشرفنا باسم حضرتك؟
+
+--- MSG 2/15: "محمود" ---
+TOKEN_USAGE: {"journey":"C-LONG","msgCount":3,"inputTokens":9,"outputTokens":61,"cacheReadTokens":21694,"cacheWriteTokens":63,"estimatedCostUSD":"0.002050"}
+REPLY: أهلاً يا أستاذ محمود نورتنا يافندم إيه اللي تحب تعرفه بخصوص العمرة أو الحج يافندم؟
+
+--- MSG 3/15: "حج" ---
+TOKEN_USAGE: {"journey":"C-LONG","msgCount":5,"inputTokens":75,"outputTokens":37,"cacheReadTokens":21694,"cacheWriteTokens":63,"estimatedCostUSD":"0.002007"}
+REPLY: تمام يا أستاذ محمود إن شاء الله معاك كام شخص يافندم؟
+
+--- MSG 4/15: "3 أفراد" ---
+TOKEN_USAGE: {"journey":"C-LONG","msgCount":7,"inputTokens":55,"outputTokens":112,"cacheReadTokens":21824,"cacheWriteTokens":0,"estimatedCostUSD":"0.002238"}
+REPLY: حاضر يافندم تفضل مستوى إيه يافندم؟↵↵اقتصادي: فنادق مريحة بأسعار مناسبة↵اقتصادي متميز: فنادق راقية بخدمات أفضل↵خمس نجوم: أفضل الفنادق وأعلى مستوى خدمة
+
+--- MSG 5/15: "اقتصادي" ---
+TOKEN_USAGE: {"journey":"C-LONG","msgCount":9,"inputTokens":171,"outputTokens":551,"cacheReadTokens":21824,"cacheWriteTokens":5,"estimatedCostUSD":"0.004092"}
+REPLY: تمام يا أستاذ محمود عندنا برنامجين اقتصاديين متاحين يافندم↵↵البرنامج الأول:↵سنود الريان (بدون إفطار) + أوديست (بدون إفطار)↵المدة: ١٥ يوم↵رباعي (٤+): ٤١٬٠٠٠ جنيه/فرد↵ثلاثي (٣): ٤٤٬٥٠٠ جنيه/فرد↵ثنائي (٢
+
+--- MSG 6/15: "وريني البرامج" ---
+TOKEN_USAGE: {"journey":"C-LONG","msgCount":11,"inputTokens":685,"outputTokens":978,"cacheReadTokens":21829,"cacheWriteTokens":47,"estimatedCostUSD":"0.006253"}
+REPLY: تمام يا أستاذ محمود عندنا برامج حج متنوعة يافندم↵↵[برنامج الحج البري] — ٢٣٩٬٠٠٠ جنيه للفرد (بدون تذكرة العبّارة)↵المدينة: ١ إلى ٤ ذي الحجة | فندق أوديست | رباعي/خماسي | إفطار وعشاء أوبن بوفيه↵الانتقال
+
+--- MSG 7/15: "ليه أحج معاكم؟" ---
+TOKEN_USAGE: {"journey":"C-LONG","msgCount":13,"inputTokens":1557,"outputTokens":308,"cacheReadTokens":21876,"cacheWriteTokens":121,"estimatedCostUSD":"0.004349"}
+REPLY: عندنا ٤ مزايا رئيسية يا أستاذ محمود↵↵أولاً أطول فترة تحسين ٥ نجوم مطلة على الحرم في السوق من ١٤ لـ ٢٠ ذي الحجة تستمتع بالحرم براحتك↵↵ثانياً الإقامة في العزيزية يومين بس مش فترة طويلة مجهدة↵↵ثالثاً بنب
+
+--- MSG 8/15: "فيه تقسيط؟" ---
+TOKEN_USAGE: {"journey":"C-LONG","msgCount":15,"inputTokens":1317,"outputTokens":103,"cacheReadTokens":21997,"cacheWriteTokens":561,"estimatedCostUSD":"0.003786"}
+REPLY: آه يافندم في تقسيط متاح بس التفاصيل الدقيقة بخصوص عدد الأقساط والشروط هحول حضرتك لزميلي المختص يكمل معاك كل التفاصيل إن شاء الله وللتواصل المباشر: 01554565115
+
+--- MSG 9/15: "شفت برنامج أرخص" ---
+TOKEN_USAGE: {"journey":"C-LONG","msgCount":17,"inputTokens":441,"outputTokens":95,"cacheReadTokens":22558,"cacheWriteTokens":993,"estimatedCostUSD":"0.003530"}
+REPLY: تمام يا أستاذ محمود ممكن تبعتلي تفاصيل البرنامج التاني عشان نراجعه ونقارن المميزات بشكل صحيح يافندم مش كل البرامج بتحمل نفس المواصفات والخدمات
+
+--- MSG 10/15: "الأضحية بكام؟" ---
+TOKEN_USAGE: {"journey":"C-LONG","msgCount":19,"inputTokens":228,"outputTokens":136,"cacheReadTokens":23551,"cacheWriteTokens":321,"estimatedCostUSD":"0.002931"}
+REPLY: الأضحية في السوق بتتراوح من ٥٠٠ لـ ٨٠٠ ريال سعودي يا أستاذ محمود وإحنا بنساعدك في شراء الصك وبنجيبه لك وسعره بإذن الله ما هيتجاوزش ٥٠٠ ريال↵↵أيهما البرنامج اللي تفضل يافندم؟
+
+--- MSG 11/15: "هل الأكل مشمول؟" ---
+TOKEN_USAGE: {"journey":"C-LONG","msgCount":21,"inputTokens":262,"outputTokens":86,"cacheReadTokens":23872,"cacheWriteTokens":117,"estimatedCostUSD":"0.002580"}
+REPLY: آه يافندم كل البرامج شاملة الوجبات متقلقش من موضوع الأكل طول الرحلة↵↵أيهما البرنامج اللي يناسبك يافندم البري ولا التحسين ٥ نجوم؟
+
+--- MSG 12/15: "والدي كبير في السن" ---
+TOKEN_USAGE: {"journey":"C-LONG","msgCount":23,"inputTokens":252,"outputTokens":156,"cacheReadTokens":23989,"cacheWriteTokens":108,"estimatedCostUSD":"0.002853"}
+REPLY: إحنا بنعمل دورنا ومش بنبخل في أي جهد يا أستاذ محمود للأمانة الأفضل يكون معاه حد من الأقارب كمرافق وإحنا من جانبنا بنأمن تتبع ذكي GPS لكل حاج عشان نطمن عليه في أي وقت↵↵بخصوص البرنامج هل تفضل البري ولا 
+
+--- MSG 13/15: "تمام هفكر" ---
+TOKEN_USAGE: {"journey":"C-LONG","msgCount":25,"inputTokens":267,"outputTokens":57,"cacheReadTokens":24097,"cacheWriteTokens":151,"estimatedCostUSD":"0.002520"}
+REPLY: تمام يا أستاذ محمود خد وقتك إن شاء الله حابب أتواصل معك بكرة تكون فكرت يناسبك؟
+
+--- MSG 14/15: "ماشي" ---
+TOKEN_USAGE: {"journey":"C-LONG","msgCount":27,"inputTokens":233,"outputTokens":29,"cacheReadTokens":24248,"cacheWriteTokens":98,"estimatedCostUSD":"0.002340"}
+REPLY: تمام إن شاء الله هأتواصل معك بكرة يافندم
+
+--- MSG 15/15: "شكراً" ---
+TOKEN_USAGE: {"journey":"C-LONG","msgCount":29,"inputTokens":103,"outputTokens":45,"cacheReadTokens":24346,"cacheWriteTokens":166,"estimatedCostUSD":"0.002376"}
+REPLY: العفو يا أستاذ محمود بارك الله فيك في انتظار تواصل حضرتك إن شاء الله
+
+JOURNEY_END: C-LONG
+
+============================================================
+JOURNEY_START: D-FAQ
+============================================================
+
+--- MSG 1/8: "السلام عليكم" ---
+TOKEN_USAGE: {"journey":"D-FAQ","msgCount":1,"inputTokens":3,"outputTokens":63,"cacheReadTokens":21694,"cacheWriteTokens":0,"estimatedCostUSD":"0.001990"}
+REPLY: وعليكم السلام ورحمة الله وبركاته أهلاً بيك في إسكندرية الدولية للسياحة تشرفنا باسم حضرتك؟
+
+--- MSG 2/8: "كريم" ---
+TOKEN_USAGE: {"journey":"D-FAQ","msgCount":3,"inputTokens":9,"outputTokens":43,"cacheReadTokens":21694,"cacheWriteTokens":63,"estimatedCostUSD":"0.001978"}
+REPLY: أهلاً يا أستاذ كريم نورتنا يافندم إيه اللي تحب تعرفه؟
+
+--- MSG 3/8: "حج" ---
+TOKEN_USAGE: {"journey":"D-FAQ","msgCount":5,"inputTokens":57,"outputTokens":37,"cacheReadTokens":21694,"cacheWriteTokens":63,"estimatedCostUSD":"0.001992"}
+REPLY: تمام يا أستاذ كريم إن شاء الله معاك كام شخص يافندم؟
+
+--- MSG 4/8: "ليه أحج معاكم؟" ---
+TOKEN_USAGE: {"journey":"D-FAQ","msgCount":7,"inputTokens":60,"outputTokens":293,"cacheReadTokens":21806,"cacheWriteTokens":0,"estimatedCostUSD":"0.002964"}
+REPLY: عندنا أربع مزايا رئيسية يا أستاذ كريم↵↵أولاً أطول فترة تحسين خمس نجوم مطلة على الحرم في السوق من ١٤ لـ ٢٠ ذي الحجة تستمتع بالحرم براحتك↵↵ثانياً الإقامة في العزيزية يومين بس مش فترة طويلة مجهدة↵↵ثالثاً
+
+--- MSG 5/8: "الفرق بين التمتع والقران؟" ---
+TOKEN_USAGE: {"journey":"D-FAQ","msgCount":9,"inputTokens":366,"outputTokens":200,"cacheReadTokens":21806,"cacheWriteTokens":5,"estimatedCostUSD":"0.002842"}
+REPLY: التمتع يا أستاذ كريم معناه تؤدي عمرة أولاً ثم تتحلل من الإحرام وبعدين تحرم من جديد للحج يوم الثامن من ذي الحجة وده الأكثر شيوعاً عند المصريين↵↵القِران معناه تحرم بنية العمرة والحج معاً في إحرام واحد ب
+
+--- MSG 6/8: "المخيمات إيه الفرق؟" ---
+TOKEN_USAGE: {"journey":"D-FAQ","msgCount":11,"inputTokens":531,"outputTokens":195,"cacheReadTokens":21811,"cacheWriteTokens":52,"estimatedCostUSD":"0.003002"}
+REPLY: مخيمات البري يا أستاذ كريم بتكون بعيدة عن الجمرات والمشي ممكن يوصل ٤ كيلو ونص↵↵مخيماتنا الاقتصادية وخمس النجوم قريبة من الجمرات وأحسن بكتير↵↵مخيمات منى بشكل عام ضيقة في كل المستويات ما عدا أبراج كدانة
+
+--- MSG 7/8: "شفت برنامج أرخص بـ 30 ألف" ---
+TOKEN_USAGE: {"journey":"D-FAQ","msgCount":13,"inputTokens":438,"outputTokens":130,"cacheReadTokens":21863,"cacheWriteTokens":311,"estimatedCostUSD":"0.002930"}
+REPLY: تمام يا أستاذ كريم لو بعتلنا تفاصيل البرنامج التاني نقدر نراجعه ونقارن المميزات بشكل وافٍ مش كل البرامج بتحمل نفس المواصفات يافندم↵↵بس قبل كده معاك كام شخص يافندم عشان أعرضلك البرامج المناسبة؟
+
+--- MSG 8/8: "هفكر" ---
+TOKEN_USAGE: {"journey":"D-FAQ","msgCount":15,"inputTokens":358,"outputTokens":57,"cacheReadTokens":22174,"cacheWriteTokens":217,"estimatedCostUSD":"0.002505"}
+REPLY: تمام يا أستاذ كريم خد وقتك إن شاء الله حابب أتواصل معك بكرة تكون فكرت يناسبك؟
+
+JOURNEY_END: D-FAQ
+
+============================================================
+JOURNEY_START: E-SHORT-RETURN
+============================================================
+
+--- MSG 1/5: "السلام عليكم" ---
+TOKEN_USAGE: {"journey":"E-SHORT-RETURN","msgCount":1,"inputTokens":3,"outputTokens":63,"cacheReadTokens":21694,"cacheWriteTokens":0,"estimatedCostUSD":"0.001990"}
+REPLY: وعليكم السلام ورحمة الله وبركاته أهلاً بيك في إسكندرية الدولية للسياحة تشرفنا باسم حضرتك؟
+
+--- MSG 2/5: "ممكن تكتب" ---
+TOKEN_USAGE: {"journey":"E-SHORT-RETURN","msgCount":3,"inputTokens":14,"outputTokens":12,"cacheReadTokens":21694,"cacheWriteTokens":63,"estimatedCostUSD":"0.001858"}
+REPLY: اتفضل يافندم
+
+--- MSG 3/5: "محمود" ---
+TOKEN_USAGE: {"journey":"E-SHORT-RETURN","msgCount":5,"inputTokens":32,"outputTokens":43,"cacheReadTokens":21694,"cacheWriteTokens":63,"estimatedCostUSD":"0.001996"}
+REPLY: أهلاً يا أستاذ محمود نورتنا يافندم إيه اللي تحب تعرفه؟
+
+--- MSG 4/5: "عمرة سبتمبر" ---
+TOKEN_USAGE: {"journey":"E-SHORT-RETURN","msgCount":7,"inputTokens":65,"outputTokens":117,"cacheReadTokens":21780,"cacheWriteTokens":0,"estimatedCostUSD":"0.002262"}
+REPLY: تمام يا أستاذ محمود تفضل مستوى إيه يافندم؟↵↵اقتصادي: فنادق مريحة بأسعار مناسبة↵اقتصادي متميز: فنادق راقية بخدمات أفضل↵خمس نجوم: أفضل الفنادق وأعلى مستوى خدمة
+
+--- MSG 5/5: "خمس نجوم" ---
+TOKEN_USAGE: {"journey":"E-SHORT-RETURN","msgCount":9,"inputTokens":186,"outputTokens":914,"cacheReadTokens":21780,"cacheWriteTokens":6,"estimatedCostUSD":"0.005553"}
+REPLY: تمام يا أستاذ محمود عندنا برامج خمس نجوم في سبتمبر:↵↵**البرنامج الأول:**↵الصفوة (بدون إفطار) + الحارثية (بدون إفطار)↵قطار الحرمين: غير مشمول↵رباعي (٤+): ٦٩٬٩٠٠ جنيه/فرد↵ثلاثي (٣): ٧٤٬٩٠٠ جنيه/فرد↵ثنائ
+
+JOURNEY_END: E-SHORT-RETURN
+
+============================================================
+OPTIMIZED SUMMARY
+============================================================
+Journey A-SHORT: $0.034297 (6 msgs)
+Journey B-MEDIUM: $0.030779 (10 msgs)
+Journey C-LONG: $0.045896 (15 msgs)
+Journey D-FAQ: $0.020204 (8 msgs)
+Journey E-SHORT-RETURN: $0.013659 (5 msgs)
+
+TOTAL_OPTIMIZED: {"messages":44,"inputTokens":12801,"outputTokens":7748,"cacheReadTokens":952571,"cacheWriteTokens":27396,"totalCostUSD":"0.144834"}
