@@ -267,15 +267,21 @@ export class WhatsAppService {
       orderBy: { createdAt: 'asc' },
     })
 
-    // Single Arabic letter (e.g. "ت") = typo or accidental tap — skip AI entirely.
-    // The LLM treats single letters as continuation fillers ("اتفضل") no matter the prompt.
-    const LONE_ARABIC_LETTER = /^[ء-ي]$/
-    if (LONE_ARABIC_LETTER.test(text.trim())) {
+    // Meaningless-short guard: 1–2 Arabic chars with no semantic content = accidental tap / typo.
+    // Handled here in code so the LLM never sees these inputs and can't mis-apply clarification rules.
+    // Whitelisted 1–2 char words that ARE genuine responses (حج, اه/yes, لا/no, etc.) pass through.
+    const SHORT_WHITELIST = new Set([
+      'حج',                           // hajj
+      'لأ', 'لا',                     // no
+      'اه', 'أه', 'آه', 'اى', 'اي', 'إي', // yes / affirmative
+    ])
+    const trimmedText = text.trim()
+    if (/^[ء-ي]{1,2}$/.test(trimmedText) && !SHORT_WHITELIST.has(trimmedText)) {
       const clarify = 'معلش يافندم مفهمتش، تحب تقولي إيه بالتحديد؟'
       await this.prisma.message.create({
         data: { conversationId: conv.id, role: 'ASSISTANT', content: clarify },
       })
-      console.log(`SINGLE-CHAR GUARD → ${phone} sent "${text.trim()}"`)
+      console.log(`SHORT-MSG GUARD → ${phone} sent "${trimmedText}"`)
       return clarify
     }
 
