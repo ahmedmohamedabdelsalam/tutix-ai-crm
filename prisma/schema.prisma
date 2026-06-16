@@ -32,6 +32,7 @@ model Company {
   payments          Payment[]
   agentInsights     AgentInsight[]
   faqs              CompanyFAQ[]
+  notifications     SystemNotification[]
 }
 
 model User {
@@ -109,6 +110,9 @@ model Conversation {
   followUpStatus       FollowUpStatus @default(NONE)
   handoffMessageSent   Boolean        @default(false)
   dropOffAnalyzed      Boolean        @default(false)
+  needsSalesContact    Boolean        @default(false)
+  salesAlertReason     String?
+  bookingStage         String         @default("NONE")
   createdAt            DateTime       @default(now())
   updatedAt            DateTime       @updatedAt
   company    Company    @relation(fields: [companyId], references: [id])
@@ -276,6 +280,18 @@ model CompanyFAQ {
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  company   Company  @relation(fields: [companyId], references: [id])
+
+  @@index([companyId])
+}
+
+model SystemNotification {
+  id        String   @id @default(cuid())
+  companyId String
+  type      String
+  message   String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
   company   Company  @relation(fields: [companyId], references: [id])
 
   @@index([companyId])

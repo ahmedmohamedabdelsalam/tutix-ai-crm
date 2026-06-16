@@ -26,9 +26,7 @@ function buildSystemPrompt(
   knownCustomerName?: string,
   dynamicFAQs?: { question: string; answer: string }[],
 ): string {
-  const bookingCta = waPhone
-    ? `قل: "تمام يافندم هحول حضرتك لزميلي المختص يكمل معاك خطوات الحجز إن شاء الله وللتواصل المباشر: ${waPhone}"`
-    : `قل: "تمام يافندم هحول حضرتك لزميلي المختص يكمل معاك خطوات الحجز إن شاء الله"`;
+  const bookingCta = `قل: "تمام يافندم هحول حضرتك لزميلي المختص يكمل معاك خطوات الحجز إن شاء الله"`;
 
   const { identity, catalog, hotels } = getIndustryPrompt(industry, companyName);
   let prompt = buildBasePersonality(identity, catalog, bookingCta, hotels, returningCustomer, knownCustomerName, companyName);
@@ -265,6 +263,9 @@ const BOOKING_KEYWORDS = [
   'ابدأ الحجز', 'خليني احجز', 'اوك نحجز', 'اوكيه نحجز',
   // hamza variants (أ vs ا — both common in Egyptian typing)
   'عايز أحجز', 'عايزة أحجز', 'خليني أحجز', 'أحجزلي',
+  // payment intent
+  'عايز أدفع', 'عايز ادفع', 'عايزة ادفع', 'عايزة أدفع', 'هدفع',
+  'فودافون كاش', 'إنستاباي', 'انستاباي', 'اتمم الدفع', 'ادفع النه',
 ];
 
 function hasExplicitBookingIntent(lastUserMessage: string): boolean {

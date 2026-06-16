@@ -3,6 +3,88 @@ import { PrismaService } from '../prisma/prisma.service'
 import { ConvStatus, FollowUpStatus, LeadStatus } from '@prisma/client'
 import { getAgentReply, extractLeadData, calculateScore, shouldHandoff, LeadData } from '../agent/agent.service'
 
+// ── Branch mapping ───────────────────────────────────────────────────────────
+
+const BRANCH_MAP: Array<[string[], string]> = [
+  [
+    ['الإسكندرية', 'البحيرة', 'مطروح'],
+    'فرع الإسكندرية — شقة 2، الدور الأول، عمارة 4 البانسيون، عمارات أزهار السرايا، شارع فوزي معاذ، سموحة',
+  ],
+  [
+    ['القاهرة', 'الجيزة', 'القليوبية', 'الإسماعيلية', 'السويس'],
+    'فرع القاهرة — عمارة 18، شارع الطاقة، مشروع 27، مدينة نصر',
+  ],
+  [
+    ['بورسعيد'],
+    'وكيلنا في بورسعيد (أفيلابول) — مساكن الحزب الوطني ع33، بجوار استوديو محسن',
+  ],
+  [
+    ['دمياط', 'الدقهلية', 'المنوفية', 'الغربية', 'الشرقية', 'كفر الشيخ'],
+    'فرع دمياط الجديدة — المنطقة المركزية، شارع البنك الأهلي القديم',
+  ],
+]
+
+const CAIRO_GOVS = new Set(['القاهرة', 'الجيزة', 'القليوبية', 'الإسماعيلية', 'السويس'])
+
+const GOV_PATTERNS: Array<[RegExp, string]> = [
+  [/إسكندرية|اسكندرية|أسكندرية|سكندرية/, 'الإسكندرية'],
+  [/البحيرة|بحيرة/, 'البحيرة'],
+  [/مطروح/, 'مطروح'],
+  [/القاهرة|قاهرة/, 'القاهرة'],
+  [/الجيزة|جيزة/, 'الجيزة'],
+  [/القليوبية|قليوبية/, 'القليوبية'],
+  [/دمياط/, 'دمياط'],
+  [/بورسعيد/, 'بورسعيد'],
+  [/الدقهلية|دقهلية/, 'الدقهلية'],
+  [/المنوفية|منوفية/, 'المنوفية'],
+  [/الغربية|غربية/, 'الغربية'],
+  [/الشرقية|شرقية/, 'الشرقية'],
+  [/كفر الشيخ|كفرالشيخ/, 'كفر الشيخ'],
+  [/الإسماعيلية|اسماعيلية|إسماعيلية/, 'الإسماعيلية'],
+  [/السويس|سويس/, 'السويس'],
+  [/أسوان|اسوان/, 'أسوان'],
+  [/الأقصر|اقصر|أقصر/, 'الأقصر'],
+  [/سوهاج/, 'سوهاج'],
+  [/أسيوط|اسيوط/, 'أسيوط'],
+  [/قنا/, 'قنا'],
+  [/المنيا|منيا/, 'المنيا'],
+  [/بني سويف|بنى سويف/, 'بني سويف'],
+  [/الفيوم|فيوم/, 'الفيوم'],
+]
+
+function getGovFromText(text: string): string | null {
+  for (const [pat, gov] of GOV_PATTERNS) {
+    if (pat.test(text)) return gov
+  }
+  return null
+}
+
+function getBranch(gov: string): string {
+  for (const [govs, branch] of BRANCH_MAP) {
+    if (govs.includes(gov)) return branch
+  }
+  return 'فرع القاهرة — عمارة 18، شارع الطاقة، مشروع 27، مدينة نصر'
+}
+
+function branchMessage(gov: string): string {
+  const branch = getBranch(gov)
+  const remoteSuffix = !CAIRO_GOVS.has(gov) && branch.startsWith('فرع القاهرة')
+    ? '\n(أو تواصل مع زميلنا المختص لترتيب أنسب طريقة ليك)' : ''
+  return `📍 ${branch}${remoteSuffix}`
+}
+
+function detectOnlinePayment(text: string): boolean {
+  return /فودافون\s*كاش|إنستاباي|انستاباي|تحويل\s*بنكي|أونلاين|اونلاين|فيزا|محفظة/.test(text)
+}
+
+function detectFarFromBranch(text: string): boolean {
+  return /بعيد|مش قادر|ما\s*أقدر|مش هينفع|مش ممكن|ما\s*ينفعش|بعد عني|مش عارف أجي/.test(text)
+}
+
+function detectVisitConfirm(text: string): boolean {
+  return /تمام|هيجي|هجي|هنيجي|هنجي|موافق|طيب|أيوه|ايوه|اوكي|حاضر|هروح|هحضر|ماشي/.test(text)
+}
+
 // ── Follow-up scheduling utilities ──────────────────────────────────────────
 
 const ARABIC_INDIC = '٠١٢٣٤٥٦٧٨٩'
@@ -102,6 +184,34 @@ export class WhatsAppService {
   private faqCache = new Map<string, { data: { question: string; answer: string }[]; expiresAt: number }>()
 
   constructor(private prisma: PrismaService) {}
+
+  private async completeBookingAlert(
+    convId: string,
+    companyId: string,
+    phone: string,
+    reason: string,
+    reply: string,
+  ): Promise<void> {
+    const lead = await this.prisma.lead.findFirst({
+      where: { companyId, phone },
+      select: { name: true },
+    })
+    const display = lead?.name ? `${lead.name} (${phone})` : phone
+    const notifMsg = `عميل جاهز للدفع — يحتاج تواصل من فريق المبيعات: ${display}`
+    await Promise.all([
+      this.prisma.conversation.update({
+        where: { id: convId },
+        data: { needsSalesContact: true, salesAlertReason: reason, bookingStage: 'DONE' },
+      }),
+      this.prisma.systemNotification.create({
+        data: { companyId, type: 'SALES_CONTACT_NEEDED', message: notifMsg },
+      }),
+    ])
+    await this.prisma.message.create({
+      data: { conversationId: convId, role: 'ASSISTANT', content: reply },
+    })
+    console.log(`BOOKING_ALERT → ${phone} | reason=${reason}`)
+  }
 
   private async getCompanyFAQ(companyId: string): Promise<{ question: string; answer: string }[]> {
     const cached = this.faqCache.get(companyId)
@@ -212,7 +322,51 @@ export class WhatsAppService {
       // NEEDS_HUMAN = still waiting for a human agent → AI responds normally
       // (per system prompt: "لو حصل تحويل وبعدين العميل بعت رسالة تانية — جاوبه عادي")
       if (conv.status === ConvStatus.NEEDS_HUMAN) {
-        // Repeat booking keyword after handoff already sent → short ack, no AI call, no phone repeat
+        // ── Booking flow stage handlers ───────────────────────────────────────
+        if (conv.bookingStage === 'AWAITING_GOVERNORATE') {
+          const gov = getGovFromText(text)
+          if (gov) {
+            await this.prisma.lead.updateMany({ where: { companyId, phone }, data: { governorate: gov } })
+            const bMsg = `شكراً يافندم! بناءً على موقعك في ${gov} — أقرب فرع ليك هو:\n${branchMessage(gov)}\n\nهتيجي للفرع لإتمام الحجز؟`
+            await this.prisma.conversation.update({ where: { id: conv.id }, data: { bookingStage: 'AWAITING_BRANCH_CONFIRM' } })
+            await this.prisma.message.create({ data: { conversationId: conv.id, role: 'ASSISTANT', content: bMsg } })
+            console.log(`BOOKING_GOV_RESOLVED → ${phone} gov=${gov}`)
+            return bMsg
+          }
+          const askAgain = 'معلش يافندم، مفهمتش — حضرتك من أنهي محافظة بالضبط؟'
+          await this.prisma.message.create({ data: { conversationId: conv.id, role: 'ASSISTANT', content: askAgain } })
+          return askAgain
+        }
+
+        if (conv.bookingStage === 'AWAITING_BRANCH_CONFIRM') {
+          if (detectOnlinePayment(text)) {
+            const r = 'تمام يافندم، هنترتبلك مع زميلنا المختص بخصوص طريقة الدفع الأونلاين وسيتواصل معك قريباً إن شاء الله'
+            await this.completeBookingAlert(conv.id, companyId, phone, 'wants_online_payment', r)
+            return r
+          }
+          if (detectFarFromBranch(text)) {
+            const r = 'تمام يافندم، هنترتبلك أنسب حاجة مع زميلنا المختص وسيتواصل معك قريباً إن شاء الله'
+            await this.completeBookingAlert(conv.id, companyId, phone, 'far_from_branch', r)
+            return r
+          }
+          if (detectVisitConfirm(text)) {
+            const r = 'ممتاز يافندم! فريقنا هيكون في انتظارك بالفرع إن شاء الله، وأي استفسار أنا هنا'
+            await this.completeBookingAlert(conv.id, companyId, phone, 'wants_branch_visit', r)
+            return r
+          }
+          const clarify = 'معلش يافندم، هتيجي للفرع؟ أم تفضل يتواصل معك أحد زملائنا؟'
+          await this.prisma.message.create({ data: { conversationId: conv.id, role: 'ASSISTANT', content: clarify } })
+          return clarify
+        }
+
+        // After booking confirmed — short ack for any follow-up messages
+        if (conv.needsSalesContact) {
+          const ack = 'تمام يافندم، فريق المبيعات هيتواصل معك قريباً إن شاء الله'
+          await this.prisma.message.create({ data: { conversationId: conv.id, role: 'ASSISTANT', content: ack } })
+          return ack
+        }
+
+        // Repeat booking keyword after handoff already sent → short ack, no AI call
         const BOOKING_REPEAT = ['عايز احجز', 'عايزة احجز', 'هحجز', 'احجزلي', 'عايز أحجز', 'عايزة أحجز', 'موافق نحجز']
         if (conv.handoffMessageSent && BOOKING_REPEAT.some(kw => text.includes(kw))) {
           const repeatAck = 'تمام يافندم زميلنا هيتواصل معك في أقرب وقت إن شاء الله'
@@ -382,13 +536,30 @@ export class WhatsAppService {
       return reply
     }
 
-    // Handoff: booking confirmed
-    // First time → full message with contact number. Repeat → short acknowledgment only.
-    const closingFull = waPhone
-      ? `تمام يافندم هحول حضرتك لزميلي المختص يكمل معاك خطوات الحجز إن شاء الله وللتواصل المباشر: ${waPhone}`
-      : 'تمام يافندم هحول حضرتك لزميلي المختص يكمل معاك خطوات الحجز إن شاء الله'
-    const closingRepeat = 'تمام يافندم زميلنا هيتواصل معك في أقرب وقت إن شاء الله'
-    const closing = conv.handoffMessageSent ? closingRepeat : closingFull
+    // Handoff: booking confirmed — start branch-first flow
+    // If booking flow already in progress (AI self-handoff edge case), send short ack
+    if (conv.bookingStage !== 'NONE') {
+      const ack = 'تمام يافندم، زميلنا هيتواصل معك في أقرب وقت إن شاء الله'
+      await this.prisma.message.create({ data: { conversationId: conv.id, role: 'ASSISTANT', content: ack } })
+      return ack
+    }
+
+    const leadForBooking = await this.prisma.lead.findFirst({
+      where: { companyId, phone },
+      select: { governorate: true },
+    })
+    const knownGov = leadForBooking?.governorate ?? null
+
+    let bookingMsg: string
+    let newStage: string
+
+    if (knownGov) {
+      bookingMsg = `تمام يافندم! بناءً على موقعك في ${knownGov} — أقرب فرع ليك هو:\n${branchMessage(knownGov)}\n\nهتيجي للفرع لإتمام الحجز؟`
+      newStage = 'AWAITING_BRANCH_CONFIRM'
+    } else {
+      bookingMsg = 'تمام يافندم! عشان نوصلك لأقرب فرع ليك — حضرتك من أنهي محافظة؟'
+      newStage = 'AWAITING_GOVERNORATE'
+    }
 
     await this.prisma.conversation.update({
       where: { id: conv.id },
@@ -397,20 +568,18 @@ export class WhatsAppService {
         agentMode: 'HUMAN',
         agentNotes: `${reason} | Score: ${score}/100`,
         handoffMessageSent: true,
+        bookingStage: newStage,
       },
     })
     await this.prisma.message.create({
-      data: { conversationId: conv.id, role: 'ASSISTANT', content: closing },
+      data: { conversationId: conv.id, role: 'ASSISTANT', content: bookingMsg },
     })
-    // On first handoff, force lead to HOT regardless of score
-    if (!conv.handoffMessageSent) {
-      await this.prisma.lead.updateMany({
-        where: { companyId, phone },
-        data: { status: LeadStatus.PENDING_PAYMENT, isHot: true },
-      })
-      console.log(`Lead auto-promoted to PENDING_PAYMENT → ${phone}`)
-    }
-    console.log(`HOT LEAD → ${phone} | Score: ${score} | ${reason} | firstHandoff=${!conv.handoffMessageSent}`)
-    return closing
+    // First booking flow trigger → promote lead to PENDING_PAYMENT
+    await this.prisma.lead.updateMany({
+      where: { companyId, phone },
+      data: { status: LeadStatus.PENDING_PAYMENT, isHot: true },
+    })
+    console.log(`BOOKING_FLOW → ${phone} stage=${newStage} | Score: ${score} | ${reason}`)
+    return bookingMsg
   }
 }
