@@ -406,9 +406,9 @@ export class WhatsAppService {
     if (!conv.handoffMessageSent) {
       await this.prisma.lead.updateMany({
         where: { companyId, phone },
-        data: { status: LeadStatus.HOT, isHot: true },
+        data: { status: LeadStatus.PENDING_PAYMENT, isHot: true },
       })
-      console.log(`Lead auto-promoted to HOT → ${phone}`)
+      console.log(`Lead auto-promoted to PENDING_PAYMENT → ${phone}`)
     }
     console.log(`HOT LEAD → ${phone} | Score: ${score} | ${reason} | firstHandoff=${!conv.handoffMessageSent}`)
     return closing
