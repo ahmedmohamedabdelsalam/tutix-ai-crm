@@ -402,6 +402,14 @@ export class WhatsAppService {
     await this.prisma.message.create({
       data: { conversationId: conv.id, role: 'ASSISTANT', content: closing },
     })
+    // On first handoff, force lead to HOT regardless of score
+    if (!conv.handoffMessageSent) {
+      await this.prisma.lead.updateMany({
+        where: { companyId, phone },
+        data: { status: LeadStatus.HOT, isHot: true },
+      })
+      console.log(`Lead auto-promoted to HOT → ${phone}`)
+    }
     console.log(`HOT LEAD → ${phone} | Score: ${score} | ${reason} | firstHandoff=${!conv.handoffMessageSent}`)
     return closing
   }
