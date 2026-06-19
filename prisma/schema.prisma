@@ -33,6 +33,7 @@ model Company {
   agentInsights     AgentInsight[]
   faqs              CompanyFAQ[]
   notifications     SystemNotification[]
+  dailyTasks        DailyTask[]
 }
 
 model User {
@@ -283,6 +284,26 @@ model CompanyFAQ {
   company   Company  @relation(fields: [companyId], references: [id])
 
   @@index([companyId])
+}
+
+model DailyTask {
+  id          String   @id @default(cuid())
+  companyId   String
+  userId      String
+  title       String
+  description String?
+  dueDate     DateTime
+  dueTime     String?
+  isCompleted Boolean  @default(false)
+  isReminded  Boolean  @default(false)
+  priority    String   @default("normal")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  company     Company  @relation(fields: [companyId], references: [id])
+
+  @@index([companyId])
+  @@index([userId])
+  @@index([dueDate])
 }
 
 model SystemNotification {
