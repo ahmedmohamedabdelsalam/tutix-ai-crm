@@ -232,6 +232,7 @@ model PermanentCustomer {
   address       String?
   governorate   String?
   tripsCount    Int       @default(1)
+  idNumber      String?
   source        String    @default("manual")
   notes         String?
   createdAt     DateTime  @default(now())
