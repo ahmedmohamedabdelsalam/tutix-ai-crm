@@ -217,7 +217,7 @@ model CallLog {
 }
 
 model PermanentCustomer {
-  id            String    @id @default(cuid())
+  id            String         @id @default(cuid())
   companyId     String
   fullName      String
   phone         String?
@@ -231,16 +231,31 @@ model PermanentCustomer {
   jobTitle      String?
   address       String?
   governorate   String?
-  tripsCount    Int       @default(1)
+  tripsCount    Int            @default(1)
   idNumber      String?
-  source        String    @default("manual")
+  isFamily      Boolean        @default(false)
+  source        String         @default("manual")
   notes         String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  company       Company   @relation(fields: [companyId], references: [id])
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  company       Company        @relation(fields: [companyId], references: [id])
+  familyMembers FamilyMember[]
 
   @@index([companyId])
   @@index([phone])
+}
+
+model FamilyMember {
+  id         String            @id @default(cuid())
+  customerId String
+  name       String
+  idNumber   String?
+  relation   String
+  birthDate  DateTime?
+  createdAt  DateTime          @default(now())
+  customer   PermanentCustomer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId])
 }
 
 model Payment {
