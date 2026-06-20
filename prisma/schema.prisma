@@ -217,32 +217,38 @@ model CallLog {
 }
 
 model PermanentCustomer {
-  id            String         @id @default(cuid())
-  companyId     String
-  fullName      String
-  phone         String?
-  phoneAlt      String?
-  tripDate      DateTime?
-  hotelName     String?
-  packageLevel  Int?
-  gender        String?
-  birthDate     DateTime?
-  age           Int?
-  jobTitle      String?
-  address       String?
-  governorate   String?
-  tripsCount    Int            @default(1)
-  idNumber      String?
-  isFamily      Boolean        @default(false)
-  source        String         @default("manual")
-  notes         String?
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-  company       Company        @relation(fields: [companyId], references: [id])
-  familyMembers FamilyMember[]
+  id                 String         @id @default(cuid())
+  companyId          String
+  fullName           String
+  phone              String?
+  phoneAlt           String?
+  tripDate           DateTime?
+  hotelName          String?
+  packageLevel       Int?
+  gender             String?
+  birthDate          DateTime?
+  age                Int?
+  jobTitle           String?
+  address            String?
+  governorate        String?
+  tripsCount         Int            @default(1)
+  idNumber           String?
+  isFamily           Boolean        @default(false)
+  isCancelled        Boolean        @default(false)
+  cancelledAt        DateTime?
+  cancelledBy        String?
+  cancellationReason String?
+  refundAmount       Float?
+  source             String         @default("manual")
+  notes              String?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  company            Company        @relation(fields: [companyId], references: [id])
+  familyMembers      FamilyMember[]
 
   @@index([companyId])
   @@index([phone])
+  @@index([isCancelled])
 }
 
 model FamilyMember {
@@ -259,7 +265,7 @@ model FamilyMember {
 }
 
 model Payment {
-  id            String   @id @default(cuid())
+  id            String    @id @default(cuid())
   leadId        String
   companyId     String
   amount        Float
@@ -267,12 +273,18 @@ model Payment {
   receiptNumber String?
   notes         String?
   confirmedBy   String
-  createdAt     DateTime @default(now())
-  lead          Lead     @relation(fields: [leadId], references: [id])
-  company       Company  @relation(fields: [companyId], references: [id])
+  isRefunded    Boolean   @default(false)
+  refundedAt    DateTime?
+  refundedBy    String?
+  refundAmount  Float?
+  refundReason  String?
+  createdAt     DateTime  @default(now())
+  lead          Lead      @relation(fields: [leadId], references: [id])
+  company       Company   @relation(fields: [companyId], references: [id])
 
   @@index([companyId])
   @@index([leadId])
+  @@index([isRefunded])
 }
 
 model AgentInsight {
