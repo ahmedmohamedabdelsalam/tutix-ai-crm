@@ -260,6 +260,37 @@ export class WhatsAppController {
     return { type: mediaType, label: media.label, reply: media.reply }
   }
 
+  // Dashboard "take over with AI reply" — generates one AI reply for an existing
+  // conversation without duplicating the user message. Called by the dashboard before
+  // switching agentMode to HUMAN, so the customer gets a reply before the rep takes over.
+  @Post('convreply')
+  async convReply(@Body() body: { convId: string }) {
+    try {
+      if (!body.convId) return { error: 'convId required' }
+      const { reply, phone, waToken, waPhoneId } = await this.whatsapp.triggerAIReply(body.convId)
+      if (!reply) return { success: false, error: 'no reply generated' }
+
+      if (waToken && waPhoneId) {
+        const parts = splitIntoMessages(reply)
+        for (let pi = 0; pi < parts.length; pi++) {
+          const delay = getTypingDelay(parts[pi])
+          await new Promise(r => setTimeout(r, delay))
+          await metaPost(waPhoneId, waToken, {
+            messaging_product: 'whatsapp',
+            to: phone,
+            type: 'text',
+            text: { body: parts[pi] },
+          })
+        }
+      }
+
+      return { success: true, reply }
+    } catch (err: any) {
+      console.error('convReply error:', err)
+      return { error: err?.message ?? 'Internal error' }
+    }
+  }
+
   // Manually trigger the follow-up cron (bypasses time window — for testing only)
   @Post('test-followup')
   async testFollowup() {

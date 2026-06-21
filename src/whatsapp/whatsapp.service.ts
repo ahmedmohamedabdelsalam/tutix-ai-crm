@@ -213,6 +213,11 @@ export class WhatsAppService {
         },
       })
     }
+    // Bump conversation.updatedAt so the inbox list re-sorts by latest activity
+    await this.prisma.conversation.update({
+      where: { id: conversationId },
+      data: { updatedAt: new Date() },
+    })
   }
 
   private async completeBookingAlert(
@@ -607,5 +612,63 @@ export class WhatsAppService {
     })
     console.log(`BOOKING_FLOW → ${phone} stage=${newStage} | Score: ${score} | ${reason}`)
     return bookingMsg
+  }
+
+  // Generates one AI reply for an existing conversation without creating a duplicate
+  // USER message — used by the dashboard "take over with AI reply" flow.
+  async triggerAIReply(convId: string): Promise<{
+    reply: string; phone: string; waToken: string | null; waPhoneId: string | null
+  }> {
+    const empty = { reply: '', phone: '', waToken: null, waPhoneId: null }
+    const conv = await this.prisma.conversation.findUnique({
+      where: { id: convId },
+      select: { id: true, phone: true, companyId: true, leadId: true },
+    })
+    if (!conv) return empty
+
+    const company = await this.prisma.company.findUnique({ where: { id: conv.companyId } })
+    if (!company || !company.isActive) return { ...empty, phone: conv.phone }
+
+    const freshMessages = await this.prisma.message.findMany({
+      where: { conversationId: convId },
+      orderBy: { createdAt: 'desc' },
+      take: 10,
+    })
+    const history = freshMessages.reverse().map(m => ({
+      role: m.role === 'USER' ? 'user' : 'assistant',
+      content: m.content,
+    }))
+
+    let knownCustomerName: string | undefined
+    let knownLeadFacts: LeadFacts | undefined
+    if (conv.leadId) {
+      const lead = await this.prisma.lead.findUnique({
+        where: { id: conv.leadId },
+        select: { name: true, packageType: true, groupSize: true, travelDate: true, budget: true },
+      })
+      if (lead?.name) knownCustomerName = lead.name
+      if (lead && (lead.packageType || lead.groupSize != null || lead.travelDate || lead.budget)) {
+        knownLeadFacts = {
+          packageType: lead.packageType,
+          groupSize: lead.groupSize,
+          travelDate: lead.travelDate,
+          budget: lead.budget,
+        }
+      }
+    }
+
+    const packages = company.packages ?? ''
+    const aiPrompt = company.aiPrompt ?? ''
+    const waPhone  = company.phone ?? company.ownerPhone ?? ''
+    const faqs = await this.getCompanyFAQ(conv.companyId)
+
+    const reply = applyHajjDateDisclaimer(
+      await getAgentReply(history, company.name, packages, aiPrompt, waPhone, company.industry, undefined, knownCustomerName, faqs, knownLeadFacts)
+    )
+
+    await this.saveAssistantMessage(convId, reply)
+    console.log(`MANUAL_AI_REPLY → conv=${convId} phone=${conv.phone}`)
+
+    return { reply, phone: conv.phone, waToken: company.waToken, waPhoneId: company.waPhoneId }
   }
 }
