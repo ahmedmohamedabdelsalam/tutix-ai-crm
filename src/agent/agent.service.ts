@@ -16,6 +16,15 @@ function getClient(): Anthropic {
   return _anthropic;
 }
 
+export class ApiCreditsExhaustedError extends Error {
+  constructor(public readonly reason: string) {
+    super(`Anthropic API credits exhausted: ${reason}`);
+    this.name = 'ApiCreditsExhaustedError';
+  }
+}
+
+export const AI_ERROR_REPLY = 'عذراً حدث خطأ سيتواصل معك أحد المتخصصين قريباً';
+
 function buildSystemPrompt(
   companyName: string,
   packages: string,
@@ -163,7 +172,7 @@ export async function getAgentReply(
   knownCustomerName?: string,
   dynamicFAQs?: { question: string; answer: string }[],
   knownLeadFacts?: LeadFacts,
-): Promise<string> {
+): Promise<{ reply: string; costUSD: number }> {
   try {
     let messages = history.map((m) => ({
       role: m.role.toLowerCase() === 'user' ? 'user' as const : 'assistant' as const,
@@ -225,18 +234,26 @@ export async function getAgentReply(
     const rawReply = prefill +
       (response.content[0]?.type === 'text'
         ? response.content[0].text
-        : 'عذراً حدث خطأ سيتواصل معك أحد المتخصصين');
+        : AI_ERROR_REPLY);
     console.log(`RAW_REPLY: ${rawReply.substring(0, 300).replace(/\n/g, '↵')}`);
-    return cleanAgentResponse(rawReply);
-  } catch (err) {
+    return { reply: cleanAgentResponse(rawReply), costUSD: Number(costUSD) };
+  } catch (err: any) {
+    if (err.status === 400 && err.error?.type === 'credit_balance_too_low') {
+      console.error('🔴 ANTHROPIC_CREDITS_EXHAUSTED: credit_balance_too_low');
+      throw new ApiCreditsExhaustedError('credit_balance_too_low');
+    }
+    if (err.status === 429) {
+      console.error('🔴 ANTHROPIC_CREDITS_EXHAUSTED: rate_limit_429');
+      throw new ApiCreditsExhaustedError('rate_limit_429');
+    }
     console.error('AI error:', err);
-    return 'عذراً حدث خطأ سيتواصل معك أحد المتخصصين قريباً';
+    return { reply: AI_ERROR_REPLY, costUSD: 0 };
   }
 }
 
 export async function extractLeadData(
   history: { role: string; content: string }[],
-): Promise<Partial<LeadData>> {
+): Promise<{ data: Partial<LeadData>; costUSD: number }> {
   const prompt = `من المحادثة التالية استخرج بيانات العميل. أجب بـ JSON فقط:
 {"name":"الاسم أو null","packageType":"حج أو عمرة أو null","groupSize":عدد صحيح أو null,"budget":"الميزانية أو null","travelDate":"الموعد أو null","isReadyToBook":true أو false}
 
@@ -283,9 +300,17 @@ ${history.map((m) => `${m.role === 'user' ? 'العميل' : 'المساعد'}: 
     const text =
       response.content[0]?.type === 'text' ? response.content[0].text : '{}';
     const json = text.match(/\{[\s\S]*\}/)?.[0] ?? '{}';
-    return JSON.parse(json) as Partial<LeadData>;
-  } catch {
-    return {};
+    return { data: JSON.parse(json) as Partial<LeadData>, costUSD: Number(eCostUSD) };
+  } catch (err: any) {
+    if (err.status === 400 && err.error?.type === 'credit_balance_too_low') {
+      console.error('🔴 ANTHROPIC_CREDITS_EXHAUSTED: credit_balance_too_low (extract)');
+      throw new ApiCreditsExhaustedError('credit_balance_too_low');
+    }
+    if (err.status === 429) {
+      console.error('🔴 ANTHROPIC_CREDITS_EXHAUSTED: rate_limit_429 (extract)');
+      throw new ApiCreditsExhaustedError('rate_limit_429');
+    }
+    return { data: {}, costUSD: 0 };
   }
 }
 

@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import { ConvStatus, FollowUpStatus, LeadStatus } from '@prisma/client'
-import { getAgentReply, extractLeadData, calculateScore, shouldHandoff, LeadData, LeadFacts } from '../agent/agent.service'
+import { getAgentReply, extractLeadData, calculateScore, shouldHandoff, LeadData, LeadFacts, ApiCreditsExhaustedError, AI_ERROR_REPLY } from '../agent/agent.service'
 import { splitIntoMessages } from './message-splitter'
 
 // ── Branch mapping ───────────────────────────────────────────────────────────
@@ -195,8 +195,33 @@ export function clampToWindow(date: Date): Date {
 @Injectable()
 export class WhatsAppService {
   private faqCache = new Map<string, { data: { question: string; answer: string }[]; expiresAt: number }>()
+  private readonly aiFailureCount = new Map<string, number>()
 
   constructor(private prisma: PrismaService) {}
+
+  private async handleAICreditsExhausted(companyId: string): Promise<void> {
+    console.error(`🔴 ANTHROPIC_CREDITS_EXHAUSTED — companyId=${companyId}`)
+    this.prisma.systemNotification.create({
+      data: {
+        companyId,
+        type: 'API_CREDITS_LOW',
+        message: 'تنبيه عاجل: رصيد Anthropic API نفذ — النظام متوقف عن الرد على العملاء',
+      },
+    }).catch(e => console.error('SystemNotification create error:', e))
+  }
+
+  private writeCostRecord(companyId: string, conversationId: string, costUSD: number): void {
+    if (costUSD <= 0) return
+    this.prisma.agentInsight.create({
+      data: {
+        companyId,
+        conversationId,
+        type: 'api_cost',
+        category: new Date().toISOString().slice(0, 10),
+        content: costUSD.toFixed(6),
+      },
+    }).catch(e => console.error('AgentInsight cost write error:', e))
+  }
 
   // Save each WhatsApp-split part as its own Message record so the dashboard
   // shows the same number of bubbles the customer sees on their phone.
@@ -430,7 +455,15 @@ export class WhatsAppService {
         // Suppress phone in CTA once handoff message already sent — prevents repeat
         const waPhoneNH  = conv.handoffMessageSent ? '' : (company.phone ?? company.ownerPhone ?? '')
         const faqsNH = await this.getCompanyFAQ(companyId)
-        const replyNH = applyHajjDateDisclaimer(await getAgentReply(historyNH, company.name, packagesNH, aiPromptNH, waPhoneNH, company.industry, undefined, knownCustomerName, faqsNH, knownLeadFacts))
+        let rawNHReply = AI_ERROR_REPLY
+        try {
+          const r = await getAgentReply(historyNH, company.name, packagesNH, aiPromptNH, waPhoneNH, company.industry, undefined, knownCustomerName, faqsNH, knownLeadFacts)
+          rawNHReply = r.reply
+          this.writeCostRecord(companyId, conv.id, r.costUSD)
+        } catch (err) {
+          if (err instanceof ApiCreditsExhaustedError) await this.handleAICreditsExhausted(companyId)
+        }
+        const replyNH = applyHajjDateDisclaimer(rawNHReply)
         await this.saveAssistantMessage(conv.id, replyNH)
         console.log(`POST-HANDOFF AI — ${phone}`)
         return replyNH
@@ -501,7 +534,36 @@ export class WhatsAppService {
       return clarify
     }
 
-    const reply = applyHajjDateDisclaimer(await getAgentReply(history, company.name, packages, aiPrompt, waPhone, company.industry, returningCustomer, knownCustomerName, companyFAQs, knownLeadFacts))
+    let rawAIReply = AI_ERROR_REPLY
+    let aiCostUSD = 0
+    try {
+      const r = await getAgentReply(history, company.name, packages, aiPrompt, waPhone, company.industry, returningCustomer, knownCustomerName, companyFAQs, knownLeadFacts)
+      rawAIReply = r.reply
+      aiCostUSD = r.costUSD
+    } catch (err) {
+      if (err instanceof ApiCreditsExhaustedError) await this.handleAICreditsExhausted(companyId)
+    }
+
+    if (rawAIReply === AI_ERROR_REPLY) {
+      const fc = (this.aiFailureCount.get(conv.id) ?? 0) + 1
+      this.aiFailureCount.set(conv.id, fc)
+      if (fc >= 2) {
+        await this.prisma.conversation.update({
+          where: { id: conv.id },
+          data: { needsSalesContact: true, salesAlertReason: 'تكرار أخطاء الذكاء الاصطناعي' },
+        })
+        this.aiFailureCount.delete(conv.id)
+        console.log(`AI_FAILURE_ESCALATED → ${phone} (${fc} consecutive failures)`)
+        return ''
+      }
+      await this.saveAssistantMessage(conv.id, rawAIReply)
+      console.log(`AI_FAILURE_1 → ${phone} (failure count: ${fc})`)
+      return rawAIReply
+    }
+
+    this.aiFailureCount.delete(conv.id)
+    this.writeCostRecord(companyId, conv.id, aiCostUSD)
+    const reply = applyHajjDateDisclaimer(rawAIReply)
 
     await this.saveAssistantMessage(conv.id, reply)
 
@@ -523,7 +585,12 @@ export class WhatsAppService {
     let extracted: Partial<LeadData> = {}
     let score = 0
     if (runExtract) {
-      extracted = await extractLeadData([...history, { role: 'assistant', content: reply }])
+      try {
+        const extractResult = await extractLeadData([...history, { role: 'assistant', content: reply }])
+        extracted = extractResult.data
+      } catch (err) {
+        if (err instanceof ApiCreditsExhaustedError) await this.handleAICreditsExhausted(companyId)
+      }
       score = calculateScore(extracted)
       await this.prisma.lead.updateMany({
         where: { companyId, phone },
@@ -662,9 +729,15 @@ export class WhatsAppService {
     const waPhone  = company.phone ?? company.ownerPhone ?? ''
     const faqs = await this.getCompanyFAQ(conv.companyId)
 
-    const reply = applyHajjDateDisclaimer(
-      await getAgentReply(history, company.name, packages, aiPrompt, waPhone, company.industry, undefined, knownCustomerName, faqs, knownLeadFacts)
-    )
+    let rawTriggerReply = AI_ERROR_REPLY
+    try {
+      const r = await getAgentReply(history, company.name, packages, aiPrompt, waPhone, company.industry, undefined, knownCustomerName, faqs, knownLeadFacts)
+      rawTriggerReply = r.reply
+      this.writeCostRecord(conv.companyId, convId, r.costUSD)
+    } catch (err) {
+      if (err instanceof ApiCreditsExhaustedError) await this.handleAICreditsExhausted(conv.companyId)
+    }
+    const reply = applyHajjDateDisclaimer(rawTriggerReply)
 
     await this.saveAssistantMessage(convId, reply)
     console.log(`MANUAL_AI_REPLY → conv=${convId} phone=${conv.phone}`)
