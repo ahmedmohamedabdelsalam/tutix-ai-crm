@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import { ConvStatus, FollowUpStatus, LeadStatus } from '@prisma/client'
 import { getAgentReply, extractLeadData, calculateScore, shouldHandoff, LeadData } from '../agent/agent.service'
+import { splitIntoMessages } from './message-splitter'
 
 // ── Branch mapping ───────────────────────────────────────────────────────────
 
@@ -185,6 +186,23 @@ export class WhatsAppService {
 
   constructor(private prisma: PrismaService) {}
 
+  // Save each WhatsApp-split part as its own Message record so the dashboard
+  // shows the same number of bubbles the customer sees on their phone.
+  private async saveAssistantMessage(conversationId: string, content: string): Promise<void> {
+    const parts = splitIntoMessages(content)
+    const baseTs = new Date()
+    for (let i = 0; i < parts.length; i++) {
+      await this.prisma.message.create({
+        data: {
+          conversationId,
+          role: 'ASSISTANT',
+          content: parts[i],
+          createdAt: new Date(baseTs.getTime() + i * 200),
+        },
+      })
+    }
+  }
+
   private async completeBookingAlert(
     convId: string,
     companyId: string,
@@ -207,9 +225,7 @@ export class WhatsAppService {
         data: { companyId, type: 'SALES_CONTACT_NEEDED', message: notifMsg },
       }),
     ])
-    await this.prisma.message.create({
-      data: { conversationId: convId, role: 'ASSISTANT', content: reply },
-    })
+    await this.saveAssistantMessage(convId, reply)
     console.log(`BOOKING_ALERT → ${phone} | reason=${reason}`)
   }
 
@@ -288,9 +304,7 @@ export class WhatsAppService {
           data: { conversationId: conv.id, role: 'USER', content: text },
         })
         const welcomeBack = 'أهلاً بعودتك يافندم نورتنا تاني سيتواصل معك أحد متخصصينا قريباً إن شاء الله'
-        await this.prisma.message.create({
-          data: { conversationId: conv.id, role: 'ASSISTANT', content: welcomeBack },
-        })
+        await this.saveAssistantMessage(conv.id, welcomeBack)
         await this.prisma.conversation.update({
           where: { id: conv.id },
           data: {
@@ -329,12 +343,12 @@ export class WhatsAppService {
             await this.prisma.lead.updateMany({ where: { companyId, phone }, data: { governorate: gov } })
             const bMsg = `شكراً يافندم! بناءً على موقعك في ${gov} — أقرب فرع ليك هو:\n${branchMessage(gov)}\n\nهتيجي للفرع لإتمام الحجز؟`
             await this.prisma.conversation.update({ where: { id: conv.id }, data: { bookingStage: 'AWAITING_BRANCH_CONFIRM' } })
-            await this.prisma.message.create({ data: { conversationId: conv.id, role: 'ASSISTANT', content: bMsg } })
+            await this.saveAssistantMessage(conv.id, bMsg)
             console.log(`BOOKING_GOV_RESOLVED → ${phone} gov=${gov}`)
             return bMsg
           }
           const askAgain = 'معلش يافندم، مفهمتش — حضرتك من أنهي محافظة بالضبط؟'
-          await this.prisma.message.create({ data: { conversationId: conv.id, role: 'ASSISTANT', content: askAgain } })
+          await this.saveAssistantMessage(conv.id, askAgain)
           return askAgain
         }
 
@@ -355,14 +369,14 @@ export class WhatsAppService {
             return r
           }
           const clarify = 'معلش يافندم، هتيجي للفرع؟ أم تفضل يتواصل معك أحد زملائنا؟'
-          await this.prisma.message.create({ data: { conversationId: conv.id, role: 'ASSISTANT', content: clarify } })
+          await this.saveAssistantMessage(conv.id, clarify)
           return clarify
         }
 
         // After booking confirmed — short ack for any follow-up messages
         if (conv.needsSalesContact) {
           const ack = 'تمام يافندم، فريق المبيعات هيتواصل معك قريباً إن شاء الله'
-          await this.prisma.message.create({ data: { conversationId: conv.id, role: 'ASSISTANT', content: ack } })
+          await this.saveAssistantMessage(conv.id, ack)
           return ack
         }
 
@@ -370,9 +384,7 @@ export class WhatsAppService {
         const BOOKING_REPEAT = ['عايز احجز', 'عايزة احجز', 'هحجز', 'احجزلي', 'عايز أحجز', 'عايزة أحجز', 'موافق نحجز']
         if (conv.handoffMessageSent && BOOKING_REPEAT.some(kw => text.includes(kw))) {
           const repeatAck = 'تمام يافندم زميلنا هيتواصل معك في أقرب وقت إن شاء الله'
-          await this.prisma.message.create({
-            data: { conversationId: conv.id, role: 'ASSISTANT', content: repeatAck },
-          })
+          await this.saveAssistantMessage(conv.id, repeatAck)
           console.log(`REPEAT_BOOKING_ACK → ${phone}`)
           return repeatAck
         }
@@ -392,9 +404,7 @@ export class WhatsAppService {
         const waPhoneNH  = conv.handoffMessageSent ? '' : (company.phone ?? company.ownerPhone ?? '')
         const faqsNH = await this.getCompanyFAQ(companyId)
         const replyNH = await getAgentReply(historyNH, company.name, packagesNH, aiPromptNH, waPhoneNH, company.industry, undefined, knownCustomerName, faqsNH)
-        await this.prisma.message.create({
-          data: { conversationId: conv.id, role: 'ASSISTANT', content: replyNH },
-        })
+        await this.saveAssistantMessage(conv.id, replyNH)
         console.log(`POST-HANDOFF AI — ${phone}`)
         return replyNH
       }
@@ -459,18 +469,14 @@ export class WhatsAppService {
     const trimmedText = text.trim()
     if (/^[ء-ي]{1,2}$/.test(trimmedText) && !SHORT_WHITELIST.has(trimmedText)) {
       const clarify = 'معلش يافندم مفهمتش، تحب تقولي إيه بالتحديد؟'
-      await this.prisma.message.create({
-        data: { conversationId: conv.id, role: 'ASSISTANT', content: clarify },
-      })
+      await this.saveAssistantMessage(conv.id, clarify)
       console.log(`SHORT-MSG GUARD → ${phone} sent "${trimmedText}"`)
       return clarify
     }
 
     const reply = await getAgentReply(history, company.name, packages, aiPrompt, waPhone, company.industry, returningCustomer, knownCustomerName, companyFAQs)
 
-    await this.prisma.message.create({
-      data: { conversationId: conv.id, role: 'ASSISTANT', content: reply },
-    })
+    await this.saveAssistantMessage(conv.id, reply)
 
     // Non-blocking: log deferral events for analytics
     if (DEFERRAL_PHRASES.some(p => reply.includes(p))) {
@@ -540,7 +546,7 @@ export class WhatsAppService {
     // If booking flow already in progress (AI self-handoff edge case), send short ack
     if (conv.bookingStage !== 'NONE') {
       const ack = 'تمام يافندم، زميلنا هيتواصل معك في أقرب وقت إن شاء الله'
-      await this.prisma.message.create({ data: { conversationId: conv.id, role: 'ASSISTANT', content: ack } })
+      await this.saveAssistantMessage(conv.id, ack)
       return ack
     }
 
@@ -571,9 +577,7 @@ export class WhatsAppService {
         bookingStage: newStage,
       },
     })
-    await this.prisma.message.create({
-      data: { conversationId: conv.id, role: 'ASSISTANT', content: bookingMsg },
-    })
+    await this.saveAssistantMessage(conv.id, bookingMsg)
     // First booking flow trigger → promote lead to PENDING_PAYMENT
     await this.prisma.lead.updateMany({
       where: { companyId, phone },

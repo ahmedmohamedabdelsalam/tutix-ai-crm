@@ -4,35 +4,13 @@ import { ConvStatus } from '@prisma/client'
 import { WhatsAppService } from './whatsapp.service'
 import { FollowUpService } from './followup.service'
 import { PrismaService } from '../prisma/prisma.service'
+import { splitIntoMessages } from './message-splitter'
 
 function getTypingDelay(text: string): number {
   const len = text.length
   if (len < 50)  return 1500 + Math.random() * 1000   // 1.5–2.5s per short segment
   if (len < 150) return 2500 + Math.random() * 1000   // 2.5–3.5s per medium segment
   return 3000 + Math.random() * 1500                   // 3–4.5s per long segment (package card)
-}
-
-// Split a cleaned reply into WhatsApp message parts.
-// Rules:
-//   - Split first by blank lines (paragraph breaks)
-//   - Paragraphs containing ⭐ or 2+ "جنيه" = package card → keep as one message
-//   - All other paragraphs → split further by single newlines
-function splitIntoMessages(reply: string): string[] {
-  const segments: string[] = []
-  for (const para of reply.split(/\n\n+/)) {
-    const trimmed = para.trim()
-    if (!trimmed) continue
-    const isPackageCard = trimmed.includes('⭐') || (trimmed.match(/جنيه/g) ?? []).length >= 2
-    if (isPackageCard) {
-      segments.push(trimmed)
-    } else {
-      for (const line of trimmed.split('\n')) {
-        const l = line.trim()
-        if (l) segments.push(l)
-      }
-    }
-  }
-  return segments
 }
 
 async function metaPost(phoneId: string, token: string, body: object): Promise<void> {
