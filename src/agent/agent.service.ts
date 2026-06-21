@@ -131,6 +131,27 @@ function cleanAgentResponse(text: string): string {
   return cleaned || text.trim(); // fallback to original if cleaning empties the string
 }
 
+export interface LeadFacts {
+  packageType?: string | null
+  groupSize?: number | null
+  travelDate?: string | null
+  budget?: string | null
+}
+
+function buildKnownFactsBlock(facts?: LeadFacts): string {
+  if (!facts) return ''
+  const lines: string[] = []
+  if (facts.packageType) lines.push(`نوع الرحلة: ${facts.packageType}`)
+  if (facts.groupSize) lines.push(`عدد الأفراد: ${facts.groupSize}`)
+  if (facts.travelDate) lines.push(`موعد السفر المفضل: ${facts.travelDate}`)
+  if (facts.budget) lines.push(`الميزانية: ${facts.budget}`)
+  if (lines.length === 0) return ''
+  return `## معلومات مؤكدة عن هذا العميل في هذه المحادثة
+المعلومات التالية أكدها العميل في هذه المحادثة وسُجّلت تلقائياً:
+${lines.map(l => `• ${l} ✅`).join('\n')}
+⛔ ممنوع تماماً إعادة سؤال العميل عن أي معلومة مذكورة أعلاه — استخدمها مباشرةً في ردّك بدون تكرار السؤال`
+}
+
 export async function getAgentReply(
   history: { role: string; content: string }[],
   companyName: string,
@@ -141,6 +162,7 @@ export async function getAgentReply(
   returningCustomer?: { name: string; tripsCount: number },
   knownCustomerName?: string,
   dynamicFAQs?: { question: string; answer: string }[],
+  knownLeadFacts?: LeadFacts,
 ): Promise<string> {
   try {
     let messages = history.map((m) => ({
@@ -166,11 +188,13 @@ export async function getAgentReply(
     const hotelOverride = findHotelInMessage(lastUserMsg);
 
     // Base system prompt is identical across all calls for the same company → cache it.
-    // Hotel override (when present) is appended as a second uncached block so the
-    // cached portion stays stable and gets a cache hit on every subsequent message.
+    // Known facts (conversation-specific) and hotel info are separate uncached blocks so
+    // the cached portion stays stable and gets a cache hit on every subsequent message.
     const sysPrompt = buildSystemPrompt(companyName, packages, aiPrompt, waPhone, industry, returningCustomer, knownCustomerName, dynamicFAQs);
+    const factsBlock = buildKnownFactsBlock(knownLeadFacts);
     const systemBlocks = [
       { type: 'text' as const, text: sysPrompt, cache_control: { type: 'ephemeral' as const } },
+      ...(factsBlock ? [{ type: 'text' as const, text: factsBlock }] : []),
       ...(hotelOverride ? [{ type: 'text' as const, text: hotelOverride }] : []),
     ];
 
@@ -214,9 +238,16 @@ export async function extractLeadData(
   history: { role: string; content: string }[],
 ): Promise<Partial<LeadData>> {
   const prompt = `من المحادثة التالية استخرج بيانات العميل. أجب بـ JSON فقط:
-{"name":"الاسم أو null","packageType":"حج أو عمرة أو null","groupSize":عدد أو null,"budget":"الميزانية أو null","travelDate":"الموعد أو null","isReadyToBook":true أو false}
+{"name":"الاسم أو null","packageType":"حج أو عمرة أو null","groupSize":عدد صحيح أو null,"budget":"الميزانية أو null","travelDate":"الموعد أو null","isReadyToBook":true أو false}
 
-قاعدة مهمة: isReadyToBook يكون true فقط إذا قال العميل صراحةً إنه يريد الحجز الآن بعبارات مثل "عايز احجز" أو "هحجز" أو "موافق نحجز". مجرد السؤال عن العمرة أو الأسعار لا يعني الاستعداد للحجز.
+قواعد مهمة:
+1. isReadyToBook يكون true فقط إذا قال العميل صراحةً إنه يريد الحجز الآن بعبارات مثل "عايز احجز" أو "هحجز" أو "موافق نحجز". مجرد السؤال عن العمرة أو الأسعار لا يعني الاستعداد للحجز.
+2. groupSize: استخرج عدد الأفراد من الصيغ الصريحة والضمنية:
+   - "أنا ووالدي" أو "أنا وأبويا" أو "أنا وأمي" أو "أنا وزوجتي" أو "أنا ومراتي" → 2
+   - "أنا وزوجتي وابني" أو "أنا ومراتي وولدي" أو أي صيغة تذكر ٣ أشخاص → 3
+   - "أنا لوحدي" أو "بمفردي" أو "فرد واحد" → 1
+   - "أنا وأهلي" أو "أنا وعيلتي" بدون عدد محدد → null
+   - الأرقام الصريحة: "اتنين" أو "٢" أو "2" → 2 ؛ "تلاتة" أو "٣" أو "3" → 3
 
 المحادثة:
 ${history.map((m) => `${m.role === 'user' ? 'العميل' : 'المساعد'}: ${m.content}`).join('\n')}`;

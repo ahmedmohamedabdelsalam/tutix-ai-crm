@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import { ConvStatus, FollowUpStatus, LeadStatus } from '@prisma/client'
-import { getAgentReply, extractLeadData, calculateScore, shouldHandoff, LeadData } from '../agent/agent.service'
+import { getAgentReply, extractLeadData, calculateScore, shouldHandoff, LeadData, LeadFacts } from '../agent/agent.service'
 import { splitIntoMessages } from './message-splitter'
 
 // ── Branch mapping ───────────────────────────────────────────────────────────
@@ -329,14 +329,24 @@ export class WhatsAppService {
       }
     }
 
-    // For existing conversations: resolve customer name from the Lead record so the AI
-    // can address them by name even when early messages fall outside the 10-msg history window.
-    if (!knownCustomerName && conv.leadId) {
+    // For existing conversations: resolve customer name and confirmed facts from the Lead record
+    // so the AI never re-asks for information already captured, even when early messages fall
+    // outside the 10-msg history window.
+    let knownLeadFacts: LeadFacts | undefined
+    if (conv.leadId) {
       const lead = await this.prisma.lead.findUnique({
         where: { id: conv.leadId },
-        select: { name: true },
+        select: { name: true, packageType: true, groupSize: true, travelDate: true, budget: true },
       })
-      if (lead?.name) knownCustomerName = lead.name
+      if (!knownCustomerName && lead?.name) knownCustomerName = lead.name
+      if (lead && (lead.packageType || lead.groupSize != null || lead.travelDate || lead.budget)) {
+        knownLeadFacts = {
+          packageType: lead.packageType,
+          groupSize: lead.groupSize,
+          travelDate: lead.travelDate,
+          budget: lead.budget,
+        }
+      }
     }
 
     // ── PART 2: HUMAN mode — save message ───────────────────
@@ -415,7 +425,7 @@ export class WhatsAppService {
         // Suppress phone in CTA once handoff message already sent — prevents repeat
         const waPhoneNH  = conv.handoffMessageSent ? '' : (company.phone ?? company.ownerPhone ?? '')
         const faqsNH = await this.getCompanyFAQ(companyId)
-        const replyNH = applyHajjDateDisclaimer(await getAgentReply(historyNH, company.name, packagesNH, aiPromptNH, waPhoneNH, company.industry, undefined, knownCustomerName, faqsNH))
+        const replyNH = applyHajjDateDisclaimer(await getAgentReply(historyNH, company.name, packagesNH, aiPromptNH, waPhoneNH, company.industry, undefined, knownCustomerName, faqsNH, knownLeadFacts))
         await this.saveAssistantMessage(conv.id, replyNH)
         console.log(`POST-HANDOFF AI — ${phone}`)
         return replyNH
@@ -486,7 +496,7 @@ export class WhatsAppService {
       return clarify
     }
 
-    const reply = applyHajjDateDisclaimer(await getAgentReply(history, company.name, packages, aiPrompt, waPhone, company.industry, returningCustomer, knownCustomerName, companyFAQs))
+    const reply = applyHajjDateDisclaimer(await getAgentReply(history, company.name, packages, aiPrompt, waPhone, company.industry, returningCustomer, knownCustomerName, companyFAQs, knownLeadFacts))
 
     await this.saveAssistantMessage(conv.id, reply)
 
