@@ -117,6 +117,9 @@ model Conversation {
   needsSalesContact    Boolean        @default(false)
   salesAlertReason     String?
   bookingStage         String         @default("NONE")
+  handledByUserId      String?
+  handledByName        String?
+  handledAt            DateTime?
   createdAt            DateTime       @default(now())
   updatedAt            DateTime       @updatedAt
   company    Company    @relation(fields: [companyId], references: [id])
@@ -133,6 +136,8 @@ model Message {
   conversationId String
   role           MessageRole
   content        String
+  senderUserId   String?
+  senderName     String?
   createdAt      DateTime     @default(now())
   conversation   Conversation @relation(fields: [conversationId], references: [id])
 
