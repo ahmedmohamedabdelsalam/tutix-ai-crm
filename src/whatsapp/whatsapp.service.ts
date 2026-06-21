@@ -78,6 +78,18 @@ function detectOnlinePayment(text: string): boolean {
   return /فودافون\s*كاش|إنستاباي|انستاباي|تحويل\s*بنكي|أونلاين|اونلاين|فيزا|محفظة/.test(text)
 }
 
+// Appends a provisional-date disclaimer whenever the reply mentions Hajj 1448H
+// dates. The LLM strips "تقريباً" from catalog text, so this is enforced here.
+function applyHajjDateDisclaimer(reply: string): string {
+  const mentionsHajj1448 =
+    reply.includes('ذي الحجة ١٤٤٨') ||
+    (reply.includes('ذي الحجة') && /٢٠٢٧/.test(reply))
+  if (!mentionsHajj1448) return reply
+  const disclaimer =
+    'ملاحظة: التواريخ الهجرية لبرامج الحج ١٤٤٨هـ تقديرية بناءً على الحساب الفلكي وسيُعلن الرسمي منها بعد رؤية الهلال قبل الموسم بأسابيع'
+  return `${reply}\n\n${disclaimer}`
+}
+
 function detectFarFromBranch(text: string): boolean {
   return /بعيد|مش قادر|ما\s*أقدر|مش هينفع|مش ممكن|ما\s*ينفعش|بعد عني|مش عارف أجي/.test(text)
 }
@@ -403,7 +415,7 @@ export class WhatsAppService {
         // Suppress phone in CTA once handoff message already sent — prevents repeat
         const waPhoneNH  = conv.handoffMessageSent ? '' : (company.phone ?? company.ownerPhone ?? '')
         const faqsNH = await this.getCompanyFAQ(companyId)
-        const replyNH = await getAgentReply(historyNH, company.name, packagesNH, aiPromptNH, waPhoneNH, company.industry, undefined, knownCustomerName, faqsNH)
+        const replyNH = applyHajjDateDisclaimer(await getAgentReply(historyNH, company.name, packagesNH, aiPromptNH, waPhoneNH, company.industry, undefined, knownCustomerName, faqsNH))
         await this.saveAssistantMessage(conv.id, replyNH)
         console.log(`POST-HANDOFF AI — ${phone}`)
         return replyNH
@@ -474,7 +486,7 @@ export class WhatsAppService {
       return clarify
     }
 
-    const reply = await getAgentReply(history, company.name, packages, aiPrompt, waPhone, company.industry, returningCustomer, knownCustomerName, companyFAQs)
+    const reply = applyHajjDateDisclaimer(await getAgentReply(history, company.name, packages, aiPrompt, waPhone, company.industry, returningCustomer, knownCustomerName, companyFAQs))
 
     await this.saveAssistantMessage(conv.id, reply)
 
