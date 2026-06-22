@@ -1,4 +1,4 @@
-interface HotelEntry {
+export interface HotelEntry {
   name: string;
   stars: string;
   location: string;
@@ -9,7 +9,7 @@ interface HotelEntry {
   keywords: string[];
 }
 
-const HOTELS: HotelEntry[] = [
+export const HOTELS: HotelEntry[] = [
   {
     name: 'موفنبيك برج هاجر',
     stars: '٦ نجوم',
@@ -113,8 +113,12 @@ const HOTELS: HotelEntry[] = [
 ];
 
 export function findHotelInMessage(message: string): string | null {
+  return findHotelInMessageFromData(message, HOTELS);
+}
+
+export function findHotelInMessageFromData(message: string, hotels: HotelEntry[]): string | null {
   const normalized = message.toLowerCase();
-  for (const hotel of HOTELS) {
+  for (const hotel of hotels) {
     for (const kw of hotel.keywords) {
       if (normalized.includes(kw.toLowerCase())) {
         const starsStr = hotel.stars ? ` ${hotel.stars}` : '';
@@ -132,67 +136,33 @@ export function findHotelInMessage(message: string): string | null {
 }
 
 export function buildHotelKnowledge(): string {
+  return buildHotelKnowledgeFromData(HOTELS)
+}
+
+export function buildHotelKnowledgeFromData(hotels: HotelEntry[]): string {
+  const mecca  = hotels.filter(h => !h.location.includes('المدينة المنورة'))
+  const medina = hotels.filter(h => h.location.includes('المدينة المنورة'))
+
+  function renderHotel(h: HotelEntry): string {
+    const header = h.stars ? `${h.name} (${h.stars}):` : `${h.name}:`
+    const lines: string[] = [header, `- المسافة: ${h.distance}`]
+    if (h.highlight) lines.push(`- آراء العملاء: ${h.highlight}`)
+    if (h.rating)    lines.push(`- تقييم: ${h.rating}`)
+    lines.push(`- رابط الحجز: ${h.link}`)
+    return lines.join('\n')
+  }
+
+  const meccaBlock  = mecca.map(renderHotel).join('\n\n')
+  const medinaBlock = medina.map(renderHotel).join('\n\n')
+
   return `## قسم الفنادق (مرجع البحث)
 لا تذكر هذا القسم تلقائياً إلا عند السؤال عن فندق معين
 
 ─── فنادق مكة المكرمة ───
 
-موفنبيك برج هاجر (٦ نجوم):
-- المسافة: أقل من دقيقة مشياً للحرم بممرات مكيفة وإطلالة مباشرة على الكعبة
-- آراء العملاء: موقع استثنائي ملاصق للحرم وخدمة راقية جداً
-- تقييم: ٩٫٣ من ١٠
-- رابط الحجز: https://www.booking.com/Share-zYAacjf
-
-أذكي الصفا (٥ نجوم):
-- المسافة: حوالي ١٥٠-٣٠٠ متر من المسجد الحرام
-- آراء العملاء: قريب من الحرم وأسعار معقولة وخدمة جيدة
-- تقييم: ٧٫٢ من ١٠
-- رابط الحجز: https://www.booking.com/hotel/sa/azka-al-safa.ar.html
-
-الصفوة (٣ نجوم):
-- المسافة: حوالي ٩٥٠ متر من المسجد الحرام
-- آراء العملاء: نظافة ممتازة وقيمة ممتازة مقارنة بالسعر
-- تقييم: ٩٫٢ من ١٠
-- رابط الحجز: https://www.booking.com/Share-8hDcymv
-
-رمادا دار الفائزين (٤ نجوم):
-- المسافة: ٣٠٠-٥٠٠ متر من الحرم
-- آراء العملاء: خدمة ممتازة وبوفيه إفطار جيد ومناسب للعائلات
-- تقييم: ٨ من ١٠
-- رابط الحجز: https://www.trivago.com/share/ShwM6UtJbZ
-
-سنود الريان (٢ نجوم):
-- المسافة: ٣ دقائق بالسيارة مع توصيل مجاني للحرم
-- آراء العملاء: طاقم ممتاز وخدمة نقل مجانية وسعر اقتصادي
-- تقييم: ٧٫٧ من ١٠
-- رابط الحجز: https://sa.trip.com/hotels/makkah-hotel-detail-81468178/snood-al-rayyan-hotel/
+${meccaBlock}
 
 ─── فنادق المدينة المنورة ───
 
-فرونتيل الحارثية (٤ نجوم):
-- المسافة: ٥ دقائق مشياً من الروضة مع إطلالة على المسجد النبوي
-- آراء العملاء: إطلالة رائعة وموظفون محترفون ونظافة عالية
-- تقييم: ٤ من ٥ (ترتيب ١٤ من ٢٥٦ فندق في المدينة)
-- رابط الحجز: https://www.booking.com/Share-gFleQHr
-
-إعمار المنار (٦ نجوم):
-- المسافة: حوالي ١٠٠-١٨٠ متر من المسجد النبوي
-- آراء العملاء: قريب جداً من النبوي وغرف واسعة وبوفيه إفطار متميز
-- تقييم: ٨٫٢ من ١٠
-- رابط الحجز: https://www.booking.com/Share-jCPBIDW
-
-جراند بلازا المدينة:
-- المسافة: ٦٠٠-٧٠٠ متر من المسجد النبوي
-- آراء العملاء: موقع ممتاز وخدمة ودية ومناسب للعائلات
-- رابط الحجز: https://www.booking.com/Share-t752OEg
-
-شذا ريجنسي بلازا (٣ نجوم):
-- المسافة: ٣ دقائق مشياً من المسجد النبوي
-- آراء العملاء: موقع مثالي وسعر مناسب لجودة الخدمة
-- رابط الحجز: https://www.booking.com/Share-3JCkDA
-
-أوديست المدينة:
-- المسافة: حوالي ١٠ دقائق مشياً من المسجد النبوي
-- ملاحظة: خيار اقتصادي ممتاز
-- رابط الحجز: https://www.booking.com/Share-cGbCMAy`;
+${medinaBlock}`
 }

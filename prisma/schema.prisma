@@ -34,6 +34,30 @@ model Company {
   faqs              CompanyFAQ[]
   notifications     SystemNotification[]
   dailyTasks        DailyTask[]
+  aiConfig          CompanyAIConfig?
+}
+
+model CompanyAIConfig {
+  id               String   @id @default(cuid())
+  companyId        String   @unique
+  industryType     String   // "HAJJ_UMRAH" | "EDUCATION" | etc.
+
+  // Structured catalog data (replaces hardcoded .ts files)
+  // Shape: { umrahPrograms: UmrahProgram[], hajjPrograms: HajjProgram[], hotelBookingLinks: Record<string,string> }
+  catalog          Json
+
+  // Company-specific tone / personality notes (supplements base-personality.ts)
+  salesPersonality String   @db.Text
+
+  // Industry-specific structured data: branches, hotel details, Hijri dates, FAQ text, etc.
+  industryData     Json?
+
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  company          Company  @relation(fields: [companyId], references: [id])
+
+  @@index([companyId])
 }
 
 model User {

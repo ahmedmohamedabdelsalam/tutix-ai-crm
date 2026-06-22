@@ -2,7 +2,14 @@ import Anthropic from '@anthropic-ai/sdk';
 import { Industry } from '@prisma/client';
 import { buildBasePersonality } from './prompts/base-personality';
 import { getIndustryPrompt } from './prompts/index';
-import { findHotelInMessage } from './prompts/hajj-umrah-hotels';
+import { HotelEntry, findHotelInMessage, findHotelInMessageFromData } from './prompts/hajj-umrah-hotels';
+
+export interface PrebuiltCatalog {
+  identity: string
+  catalog: string
+  hotels: string
+  hotelList: HotelEntry[]
+}
 
 // Lazy init — created on first use, after NestJS has loaded env vars
 let _anthropic: Anthropic | null = null;
@@ -34,10 +41,11 @@ function buildSystemPrompt(
   returningCustomer?: { name: string; tripsCount: number },
   knownCustomerName?: string,
   dynamicFAQs?: { question: string; answer: string }[],
+  prebuiltCatalog?: PrebuiltCatalog,
 ): string {
   const bookingCta = `قل: "تمام يافندم هحول حضرتك لزميلي المختص يكمل معاك خطوات الحجز إن شاء الله"`;
 
-  const { identity, catalog, hotels } = getIndustryPrompt(industry, companyName);
+  const { identity, catalog, hotels } = prebuiltCatalog ?? getIndustryPrompt(industry, companyName);
   let prompt = buildBasePersonality(identity, catalog, bookingCta, hotels, returningCustomer, knownCustomerName, companyName);
 
   // Append DB-driven updates (override base prices if contradicted)
@@ -172,6 +180,7 @@ export async function getAgentReply(
   knownCustomerName?: string,
   dynamicFAQs?: { question: string; answer: string }[],
   knownLeadFacts?: LeadFacts,
+  prebuiltCatalog?: PrebuiltCatalog,
 ): Promise<{ reply: string; costUSD: number }> {
   try {
     let messages = history.map((m) => ({
@@ -194,12 +203,14 @@ export async function getAgentReply(
 
     // Detect hotel name in last user message → injected as a separate uncached block
     const lastUserMsg = history.filter(m => m.role.toLowerCase() === 'user').slice(-1)[0]?.content ?? '';
-    const hotelOverride = findHotelInMessage(lastUserMsg);
+    const hotelOverride = prebuiltCatalog?.hotelList
+      ? findHotelInMessageFromData(lastUserMsg, prebuiltCatalog.hotelList)
+      : findHotelInMessage(lastUserMsg);
 
     // Base system prompt is identical across all calls for the same company → cache it.
     // Known facts (conversation-specific) and hotel info are separate uncached blocks so
     // the cached portion stays stable and gets a cache hit on every subsequent message.
-    const sysPrompt = buildSystemPrompt(companyName, packages, aiPrompt, waPhone, industry, returningCustomer, knownCustomerName, dynamicFAQs);
+    const sysPrompt = buildSystemPrompt(companyName, packages, aiPrompt, waPhone, industry, returningCustomer, knownCustomerName, dynamicFAQs, prebuiltCatalog);
     const factsBlock = buildKnownFactsBlock(knownLeadFacts);
     const systemBlocks = [
       { type: 'text' as const, text: sysPrompt, cache_control: { type: 'ephemeral' as const } },

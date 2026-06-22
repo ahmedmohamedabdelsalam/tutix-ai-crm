@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import { ConvStatus, FollowUpStatus, LeadStatus } from '@prisma/client'
-import { getAgentReply, extractLeadData, calculateScore, shouldHandoff, LeadData, LeadFacts, ApiCreditsExhaustedError, AI_ERROR_REPLY } from '../agent/agent.service'
+import { getAgentReply, extractLeadData, calculateScore, shouldHandoff, LeadData, LeadFacts, PrebuiltCatalog, ApiCreditsExhaustedError, AI_ERROR_REPLY } from '../agent/agent.service'
+import { buildIndustryPromptFromDB } from '../agent/prompts/dynamic-catalog-builder'
 import { splitIntoMessages } from './message-splitter'
 
 // ── Branch mapping ───────────────────────────────────────────────────────────
@@ -271,6 +272,14 @@ export class WhatsAppService {
     console.log(`BOOKING_ALERT → ${phone} | reason=${reason}`)
   }
 
+  private async getPrebuiltCatalog(companyId: string, companyName: string): Promise<PrebuiltCatalog | undefined> {
+    if (process.env.USE_DB_CATALOG !== 'true') return undefined
+    const config = await this.prisma.companyAIConfig.findUnique({ where: { companyId } })
+    if (!config) { console.log(`DB_CATALOG: no config for companyId=${companyId}`); return undefined }
+    console.log(`DB_CATALOG: loaded config id=${config.id} company=${companyName}`)
+    return buildIndustryPromptFromDB(config as any, companyName)
+  }
+
   private async getCompanyFAQ(companyId: string): Promise<{ question: string; answer: string }[]> {
     const cached = this.faqCache.get(companyId)
     if (cached && cached.expiresAt > Date.now()) {
@@ -455,9 +464,10 @@ export class WhatsAppService {
         // Suppress phone in CTA once handoff message already sent — prevents repeat
         const waPhoneNH  = conv.handoffMessageSent ? '' : (company.phone ?? company.ownerPhone ?? '')
         const faqsNH = await this.getCompanyFAQ(companyId)
+        const prebuiltCatalogNH = await this.getPrebuiltCatalog(companyId, company.name)
         let rawNHReply = AI_ERROR_REPLY
         try {
-          const r = await getAgentReply(historyNH, company.name, packagesNH, aiPromptNH, waPhoneNH, company.industry, undefined, knownCustomerName, faqsNH, knownLeadFacts)
+          const r = await getAgentReply(historyNH, company.name, packagesNH, aiPromptNH, waPhoneNH, company.industry, undefined, knownCustomerName, faqsNH, knownLeadFacts, prebuiltCatalogNH)
           rawNHReply = r.reply
           this.writeCostRecord(companyId, conv.id, r.costUSD)
         } catch (err) {
@@ -517,6 +527,7 @@ export class WhatsAppService {
     const waPhone  = company.phone ?? company.ownerPhone ?? ''
 
     const companyFAQs = await this.getCompanyFAQ(companyId)
+    const prebuiltCatalog = await this.getPrebuiltCatalog(companyId, company.name)
 
     // Meaningless-short guard: 1–2 Arabic chars with no semantic content = accidental tap / typo.
     // Handled here in code so the LLM never sees these inputs and can't mis-apply clarification rules.
@@ -537,7 +548,7 @@ export class WhatsAppService {
     let rawAIReply = AI_ERROR_REPLY
     let aiCostUSD = 0
     try {
-      const r = await getAgentReply(history, company.name, packages, aiPrompt, waPhone, company.industry, returningCustomer, knownCustomerName, companyFAQs, knownLeadFacts)
+      const r = await getAgentReply(history, company.name, packages, aiPrompt, waPhone, company.industry, returningCustomer, knownCustomerName, companyFAQs, knownLeadFacts, prebuiltCatalog)
       rawAIReply = r.reply
       aiCostUSD = r.costUSD
     } catch (err) {
@@ -728,10 +739,11 @@ export class WhatsAppService {
     const aiPrompt = company.aiPrompt ?? ''
     const waPhone  = company.phone ?? company.ownerPhone ?? ''
     const faqs = await this.getCompanyFAQ(conv.companyId)
+    const prebuiltCatalogTrigger = await this.getPrebuiltCatalog(conv.companyId, company.name)
 
     let rawTriggerReply = AI_ERROR_REPLY
     try {
-      const r = await getAgentReply(history, company.name, packages, aiPrompt, waPhone, company.industry, undefined, knownCustomerName, faqs, knownLeadFacts)
+      const r = await getAgentReply(history, company.name, packages, aiPrompt, waPhone, company.industry, undefined, knownCustomerName, faqs, knownLeadFacts, prebuiltCatalogTrigger)
       rawTriggerReply = r.reply
       this.writeCostRecord(conv.companyId, convId, r.costUSD)
     } catch (err) {

@@ -1,6 +1,6 @@
-type ProgramType = 'اقتصادي' | 'اقتصادي متميز' | 'خمس نجوم'
+export type ProgramType = 'اقتصادي' | 'اقتصادي متميز' | 'خمس نجوم'
 
-interface UmrahProgram {
+export interface UmrahProgram {
   tripNumber: number
   programNumber: number
   duration: number
@@ -136,23 +136,34 @@ function fmtDuration(d: number): string {
   return toAI(d) + (d <= 10 ? ' أيام' : ' يوم')
 }
 
-// ── main export ──────────────────────────────────────────────────────────────
+// ── main export (static path — unchanged) ────────────────────────────────────
 
 export function buildUmrahCatalogTable(): string {
-  const MONTHS = ['يوليو', 'أغسطس', 'سبتمبر']
+  return buildUmrahCatalogTableFromData(UMRAH_PROGRAMS_2026, HOTEL_BOOKING_LINKS)
+}
+
+// ── data-parameterised renderer (used by dynamic-catalog-builder) ─────────────
+
+export function buildUmrahCatalogTableFromData(
+  programs: UmrahProgram[],
+  hotelLinks: Record<string, string>,
+): string {
+  const MONTHS = [...new Set(programs.map(p => p.month))]
+    .sort((a, b) => {
+      const order = ['يوليو', 'أغسطس', 'سبتمبر']
+      return (order.indexOf(a) ?? 99) - (order.indexOf(b) ?? 99)
+    })
   const TYPE_ORDER: ProgramType[] = ['اقتصادي', 'اقتصادي متميز', 'خمس نجوم']
 
-  // Availability summary by program type per month (Gregorian + Hijri)
   const availLines = MONTHS.map(m => {
     const types = [...new Set(
-      UMRAH_PROGRAMS_2026.filter(p => p.month === m).map(p => p.programType),
+      programs.filter(p => p.month === m).map(p => p.programType),
     )].sort((a, b) => TYPE_ORDER.indexOf(a) - TYPE_ORDER.indexOf(b))
     const hijri = MONTH_HIJRI_RANGE[m] ?? ''
     return `${m} ٢٠٢٦م (${hijri}): ${types.join(' و ')}`
   })
 
-  // Booking links section for the AI
-  const linksBlock = Object.entries(HOTEL_BOOKING_LINKS)
+  const linksBlock = Object.entries(hotelLinks)
     .map(([hotel, url]) => `${hotel}: ${url}`)
     .join('\n')
 
@@ -175,7 +186,7 @@ ${linksBlock}`
   const sections: string[] = [header]
 
   for (const month of MONTHS) {
-    const progs = UMRAH_PROGRAMS_2026
+    const progs = programs
       .filter(p => p.month === month)
       .sort((a, b) =>
         TYPE_ORDER.indexOf(a.programType) - TYPE_ORDER.indexOf(b.programType) ||
