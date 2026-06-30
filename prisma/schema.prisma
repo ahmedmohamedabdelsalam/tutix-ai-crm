@@ -35,6 +35,8 @@ model Company {
   notifications     SystemNotification[]
   dailyTasks        DailyTask[]
   aiConfig          CompanyAIConfig?
+  branches          Branch[]
+  attendanceRecords AttendanceRecord[]
 }
 
 model CompanyAIConfig {
@@ -72,7 +74,8 @@ model User {
   company       Company  @relation(fields: [companyId], references: [id])
   assignedLeads Lead[]   @relation("LeadAssignment")
   tasks         Task[]
-  callLogs      CallLog[]
+  callLogs          CallLog[]
+  attendanceRecords AttendanceRecord[]
 
   @@index([companyId])
 }
@@ -377,5 +380,43 @@ model SystemNotification {
   company   Company  @relation(fields: [companyId], references: [id])
 
   @@index([companyId])
+}
+
+model Branch {
+  id           String             @id @default(cuid())
+  companyId    String
+  name         String
+  lat          Float
+  lng          Float
+  radiusMeters Int                @default(200)
+  isActive     Boolean            @default(true)
+  createdAt    DateTime           @default(now())
+  company      Company            @relation(fields: [companyId], references: [id])
+  attendance   AttendanceRecord[]
+
+  @@index([companyId])
+}
+
+model AttendanceRecord {
+  id          String    @id @default(cuid())
+  companyId   String
+  userId      String
+  branchId    String
+  checkInAt   DateTime
+  checkOutAt  DateTime?
+  checkInLat  Float
+  checkInLng  Float
+  checkOutLat Float?
+  checkOutLng Float?
+  notes       String?
+  createdAt   DateTime  @default(now())
+  company     Company   @relation(fields: [companyId], references: [id])
+  user        User      @relation(fields: [userId], references: [id])
+  branch      Branch    @relation(fields: [branchId], references: [id])
+
+  @@index([companyId])
+  @@index([userId])
+  @@index([branchId])
+  @@index([checkInAt])
 }
 
