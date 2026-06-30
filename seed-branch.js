@@ -21,7 +21,7 @@ async function main() {
   const branch = await prisma.branch.create({
     data: {
       companyId,
-      name: 'الفرع الرئيسي - بورسعيد',
+      name: 'الفرع الرئيسي - دمياط',
       lat: 31.439500,
       lng: 31.678472,
       radiusMeters: 200,
