@@ -99,6 +99,15 @@ function detectVisitConfirm(text: string): boolean {
   return /تمام|هيجي|هجي|هنيجي|هنجي|موافق|طيب|أيوه|ايوه|اوكي|حاضر|هروح|هحضر|ماشي/.test(text)
 }
 
+// Returns true when the customer's first message contains a real question or service intent,
+// so the AI can send an immediate answer after the welcome instead of waiting for a name.
+// "هل" uses a lookbehind to avoid matching inside greetings like "أهلاً".
+function containsFirstMessageQuestion(text: string): boolean {
+  const QUESTION_SIGNALS = /عايز|أريد|اريد|كام|بكام|عندكم|فيه|ينفع|إيه|ايه|ما هو|(?<![ء-ي])هل|متى|فين|أسعار|اسعار|برامج|رحلة/
+  const SERVICE_SIGNALS  = /عمرة|حج|يوليو|أغسطس|سبتمبر|سعر|فندق|برنامج/
+  return QUESTION_SIGNALS.test(text) || SERVICE_SIGNALS.test(text)
+}
+
 // ── Follow-up scheduling utilities ──────────────────────────────────────────
 
 const ARABIC_INDIC = '٠١٢٣٤٥٦٧٨٩'
@@ -296,7 +305,7 @@ export class WhatsAppService {
     return faqs
   }
 
-  async handleMessage(companyId: string, phone: string, text: string, source = 'direct', referralData?: object | null): Promise<string> {
+  async handleMessage(companyId: string, phone: string, text: string, source = 'direct', referralData?: object | null): Promise<string | string[]> {
     const company = await this.prisma.company.findUnique({ where: { id: companyId } })
     if (!company || !company.isActive) return ''
 
@@ -644,6 +653,37 @@ export class WhatsAppService {
       } else if (fu.declined) {
         console.log(`FOLLOW-UP DECLINED → ${phone}`)
       }
+
+      // First-message question: send an immediate answer after the welcome without waiting for name
+      if (totalMsgCount === 1 && containsFirstMessageQuestion(text)) {
+        // Synthetic third turn: customer asks for programs/prices for one person so the AI
+        // can display the catalog directly without asking for group size or name.
+        const secondHistory = [
+          { role: 'user' as const, content: text },
+          { role: 'assistant' as const, content: reply },
+          { role: 'user' as const, content: `اعرضلي البرامج والأسعار المتاحة للفرد الواحد من فضلك` },
+        ]
+        const secondAiPrompt = aiPrompt
+          ? `${aiPrompt}\n\n[تعليمات: اعرض البرامج والأسعار الآن مباشرة — العميل أعطى عدد الأشخاص ١ شخص، لا تطلب أي معلومات إضافية]`
+          : '[تعليمات: اعرض البرامج والأسعار الآن مباشرة — العميل أعطى عدد الأشخاص ١ شخص، لا تطلب أي معلومات إضافية]'
+        let secondReply = ''
+        let secondCost = 0
+        try {
+          const r2 = await getAgentReply(secondHistory, company.name, packages, secondAiPrompt, waPhone, company.industry, returningCustomer, knownCustomerName, companyFAQs, knownLeadFacts, prebuiltCatalog)
+          secondReply = r2.reply
+          secondCost = r2.costUSD
+        } catch (err) {
+          if (err instanceof ApiCreditsExhaustedError) await this.handleAICreditsExhausted(companyId)
+        }
+        if (secondReply && secondReply !== AI_ERROR_REPLY) {
+          const secondCleaned = applyHajjDateDisclaimer(secondReply)
+          await this.saveAssistantMessage(conv.id, secondCleaned)
+          this.writeCostRecord(companyId, conv.id, secondCost)
+          console.log(`FIRST_MSG_QUESTION_ANSWER → ${phone}`)
+          return [reply, secondCleaned]
+        }
+      }
+
       return reply
     }
 

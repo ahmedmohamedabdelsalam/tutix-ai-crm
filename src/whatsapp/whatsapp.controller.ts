@@ -153,40 +153,45 @@ export class WhatsAppController {
         return
       }
 
-      const reply = await this.whatsapp.handleMessage(company.id, message.from, message.text.body, adSource, referral)
+      const result = await this.whatsapp.handleMessage(company.id, message.from, message.text.body, adSource, referral)
+      const replyList = Array.isArray(result) ? result : (result ? [result] : [])
 
-      // Send reply back via Meta WhatsApp Cloud API — split into multiple messages with typing delays
-      if (reply && company.waToken && company.waPhoneId) {
-        const parts = splitIntoMessages(reply)
-        console.log(`Sending ${parts.length} part(s) to ${message.from}`)
-        for (let pi = 0; pi < parts.length; pi++) {
-          const part = parts[pi]
-          const delay = getTypingDelay(part)
-          console.log(`Part ${pi + 1}/${parts.length} (${part.length} chars, delay ${Math.round(delay / 1000)}s): ${part.substring(0, 60)}`)
-          await new Promise(r => setTimeout(r, delay))
-          const metaRes = await fetch(
-            `https://graph.facebook.com/v18.0/${company.waPhoneId}/messages`,
-            {
-              method: 'POST',
-              headers: {
-                Authorization: `Bearer ${company.waToken}`,
-                'Content-Type': 'application/json',
+      // Send each reply via Meta WhatsApp Cloud API — split into parts with typing delays
+      const hasContent = replyList.some(r => r)
+      if (hasContent && company.waToken && company.waPhoneId) {
+        for (const r of replyList) {
+          if (!r) continue
+          const parts = splitIntoMessages(r)
+          console.log(`Sending ${parts.length} part(s) to ${message.from}`)
+          for (let pi = 0; pi < parts.length; pi++) {
+            const part = parts[pi]
+            const delay = getTypingDelay(part)
+            console.log(`Part ${pi + 1}/${parts.length} (${part.length} chars, delay ${Math.round(delay / 1000)}s): ${part.substring(0, 60)}`)
+            await new Promise(r => setTimeout(r, delay))
+            const metaRes = await fetch(
+              `https://graph.facebook.com/v18.0/${company.waPhoneId}/messages`,
+              {
+                method: 'POST',
+                headers: {
+                  Authorization: `Bearer ${company.waToken}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  messaging_product: 'whatsapp',
+                  to: message.from,
+                  type: 'text',
+                  text: { body: part },
+                }),
               },
-              body: JSON.stringify({
-                messaging_product: 'whatsapp',
-                to: message.from,
-                type: 'text',
-                text: { body: part },
-              }),
-            },
-          )
-          if (!metaRes.ok) {
-            const err = await metaRes.text()
-            console.error(`Meta API error on part ${pi + 1} (${metaRes.status}):`, err)
+            )
+            if (!metaRes.ok) {
+              const err = await metaRes.text()
+              console.error(`Meta API error on part ${pi + 1} (${metaRes.status}):`, err)
+            }
           }
+          console.log(`All ${parts.length} part(s) sent to ${message.from} via ${company.waPhoneId}`)
         }
-        console.log(`All ${parts.length} part(s) sent to ${message.from} via ${company.waPhoneId}`)
-      } else if (reply) {
+      } else if (hasContent) {
         console.warn(`Reply generated but not sent — waToken or waPhoneId missing for company: ${company.name}`)
       }
     } catch (err) {
@@ -215,15 +220,19 @@ export class WhatsAppController {
         return { error: `Company ${companyId} not found in database` }
       }
 
-      const reply = await this.whatsapp.handleMessage(
+      const result = await this.whatsapp.handleMessage(
         companyId,
         body.phone ?? '201234567890',
         body.message ?? 'مرحباً',
       )
-      const parts = reply ? splitIntoMessages(reply) : []
-      console.log(`TEST split: ${parts.length} part(s)`)
-      parts.forEach((p, i) => console.log(`  [${i + 1}] ${p.substring(0, 80)}`))
-      return { reply, parts }
+      const replies = Array.isArray(result) ? result : (result ? [result] : [])
+      const parts = replies.flatMap(r => r ? splitIntoMessages(r) : [])
+      console.log(`TEST: ${replies.length} message(s), ${parts.length} part(s) total`)
+      replies.forEach((r, i) => {
+        const rParts = r ? splitIntoMessages(r) : []
+        rParts.forEach((p, pi) => console.log(`  [msg${i + 1} part${pi + 1}] ${p.substring(0, 80)}`))
+      })
+      return { replies, parts }
     } catch (err: any) {
       console.error('❌ /webhook/test error:', err?.message ?? err)
       return { error: err?.message ?? 'Internal server error', stack: err?.stack?.split('\n').slice(0, 3) }
