@@ -119,16 +119,20 @@ export function findHotelInMessage(message: string): string | null {
 export function findHotelInMessageFromData(message: string, hotels: HotelEntry[]): string | null {
   const normalized = message.toLowerCase();
   for (const hotel of hotels) {
-    for (const kw of hotel.keywords) {
+    for (const kw of (hotel.keywords ?? [])) {
       if (normalized.includes(kw.toLowerCase())) {
-        const starsStr = hotel.stars ? ` ${hotel.stars}` : '';
-        const ratingStr = hotel.rating ? ` تقييم: ${hotel.rating}` : '';
-        return `[تعليمة: العميل سأل بالاسم عن فندق "${hotel.name}" — ارد بهذه المعلومات مباشرة بدون أسئلة متابعة]
-فندق: ${hotel.name}${starsStr}
-الموقع: ${hotel.location}
-المسافة من الحرم: ${hotel.distance}
-أبرز ميزة: ${hotel.highlight}${ratingStr}
-رابط الحجز: ${hotel.link}`;
+        const starsStr    = hotel.stars     ? ` ${hotel.stars}`            : '';
+        const ratingStr   = hotel.rating    ? ` تقييم: ${hotel.rating}`    : '';
+        const location    = hotel.location  ?? (hotel as any).city ?? '';
+        const distance    = hotel.distance  ?? '';
+        const highlight   = hotel.highlight ?? '';
+        const link        = hotel.link      ?? (hotel as any).bookingLink ?? '';
+        return `[تعليمة: العميل سأل بالاسم عن فندق "${hotel.name ?? ''}" — ارد بهذه المعلومات مباشرة بدون أسئلة متابعة]
+فندق: ${hotel.name ?? ''}${starsStr}
+الموقع: ${location}
+المسافة من الحرم: ${distance}
+أبرز ميزة: ${highlight}${ratingStr}
+رابط الحجز: ${link}`;
       }
     }
   }
@@ -144,11 +148,14 @@ export function buildHotelKnowledgeFromData(hotels: HotelEntry[]): string {
   const medina = hotels.filter(h =>  h.location?.includes('المدينة المنورة') ?? false)
 
   function renderHotel(h: HotelEntry): string {
-    const header = h.stars ? `${h.name} (${h.stars}):` : `${h.name}:`
-    const lines: string[] = [header, `- المسافة: ${h.distance}`]
+    const header    = h.stars    ? `${h.name ?? ''} (${h.stars}):` : `${h.name ?? ''}:`
+    const distance  = h.distance ?? ''
+    const link      = h.link     ?? (h as any).bookingLink ?? ''
+    const lines: string[] = [header]
+    if (distance) lines.push(`- المسافة: ${distance}`)
     if (h.highlight) lines.push(`- آراء العملاء: ${h.highlight}`)
     if (h.rating)    lines.push(`- تقييم: ${h.rating}`)
-    lines.push(`- رابط الحجز: ${h.link}`)
+    if (link)        lines.push(`- رابط الحجز: ${link}`)
     return lines.join('\n')
   }
 
