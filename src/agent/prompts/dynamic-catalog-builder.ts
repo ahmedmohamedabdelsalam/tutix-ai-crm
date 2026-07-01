@@ -10,7 +10,7 @@
  */
 
 import { CompanyAIConfig } from '@prisma/client'
-import { UmrahProgram, buildUmrahCatalogTableFromData } from './umrah-packages-2026'
+import { UmrahProgram, ProgramType, buildUmrahCatalogTableFromData } from './umrah-packages-2026'
 import { HotelEntry, buildHotelKnowledgeFromData, findHotelInMessageFromData } from './hajj-umrah-hotels'
 
 // ── JSON shape definitions (mirrors the migration script + agent data) ────────
@@ -62,6 +62,70 @@ interface IndustryDataJson {
   hotels: HotelEntry[]
   hajjHijriDates: Array<{ hijri: string; gregorian: string }>
   installmentContact: { city: string; agentName: string; phone: string }
+}
+
+// ── Normalise DB umrah program records → UmrahProgram ─────────────────────────
+// DB programs (from the migration script) use different field names than the
+// UmrahProgram interface.  This mapper bridges the gap so the renderer always
+// receives correctly-shaped objects regardless of which schema was used.
+function normDbUmrahProgram(p: any, idx: number): UmrahProgram {
+  const AR_DIGITS = '٠١٢٣٤٥٦٧٨٩'
+  const toAr = (n: number): string =>
+    String(n).split('').map(c => AR_DIGITS['0123456789'.indexOf(c) ?? -1] ?? c).join('')
+
+  const MONTH_NAMES: Record<number, string> = { 7: 'يوليو', 8: 'أغسطس', 9: 'سبتمبر' }
+
+  // Convert ISO date → Arabic display, e.g. '2026-07-26' → '٢٦ يوليو ٢٠٢٦'
+  const isoToArabic = (iso: string): string => {
+    if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso ?? ''
+    const day = parseInt(iso.slice(8), 10)
+    const mon = parseInt(iso.slice(5, 7), 10)
+    return `${toAr(day)} ${MONTH_NAMES[mon] ?? iso.slice(5, 7)} ٢٠٢٦`
+  }
+
+  const isoDepart: string = p.departureDate ?? ''
+  const monthNum = parseInt(isoDepart.slice(5, 7), 10)
+  const month = MONTH_NAMES[monthNum] ?? 'يوليو'
+
+  // Derive programType from Arabic name field
+  const name: string = p.name ?? ''
+  let programType: ProgramType = 'اقتصادي متميز'
+  if (name.includes('خمس نجوم') || name.includes('فاخر')) programType = 'خمس نجوم'
+  else if (name.includes('اقتصادي متميز')) programType = 'اقتصادي متميز'
+  else if (name.includes('اقتصادي')) programType = 'اقتصادي'
+
+  // Extract tripNumber / programNumber from id  e.g. 'trip1a-...' or 'trip10c-...'
+  const idMatch = (p.id ?? '').match(/^trip(\d+)([a-e])/i)
+  const tripNumber = idMatch ? parseInt(idMatch[1], 10) : idx + 1
+  const letterMap: Record<string, number> = { a: 1, b: 2, c: 3, d: 4, e: 5 }
+  const programNumber = idMatch ? (letterMap[idMatch[2].toLowerCase()] ?? 1) : 1
+
+  const nights: number = p.nights ?? 0
+
+  return {
+    tripNumber,
+    programNumber,
+    duration: nights + 1,
+    nights,
+    departureDate:    isoDepart.includes('-') ? isoToArabic(isoDepart) : (isoDepart || ''),
+    returnDate:       (p.returnDate ?? '').includes('-') ? isoToArabic(p.returnDate) : (p.returnDate ?? ''),
+    departureDateISO: isoDepart,
+    returnDateISO:    p.returnDate ?? '',
+    departureDateHijri: p.departureDateHijri ?? '',  // empty → fmtHijriRange returns ''
+    returnDateHijri:    p.returnDateHijri    ?? '',
+    month,
+    haramainTrain:    p.haramainTrain    ?? false,
+    meccaNights:      p.makkahNights     ?? p.meccaNights      ?? 0,
+    medinaNights:     p.madinahNights    ?? p.medinaNights     ?? 0,
+    medinaHotel:      p.madinahHotel     ?? p.medinaHotel      ?? '',
+    medinaBreakfast:  p.madinahBreakfast ?? p.medinaBreakfast  ?? false,
+    meccaHotel:       p.makkahHotel      ?? p.meccaHotel       ?? '',
+    meccaBreakfast:   p.makkahBreakfast  ?? p.meccaBreakfast   ?? false,
+    priceQuad:        p.quadPrice        ?? p.priceQuad        ?? 0,
+    priceTriple:      p.triplePrice      ?? p.priceTriple      ?? 0,
+    priceDouble:      p.doublePrice      ?? p.priceDouble      ?? 0,
+    programType,
+  }
 }
 
 // ── Identity block ────────────────────────────────────────────────────────────
@@ -260,10 +324,11 @@ export function buildIndustryPromptFromDB(
     ? buildIdentityFromDB(companyName, ind)
     : `## القسم ١ — من أنت\nأنت مستشار حجز عمرة محترف تعمل لصالح "${companyName}"`
 
-  // Umrah catalog table (rendered from structured JSON)
+  // Umrah catalog table — normalise field names from DB schema → UmrahProgram
+  const umrahPrograms = (cat.umrahPrograms as any[]).map(normDbUmrahProgram)
   const umrahCatalog = buildUmrahCatalogTableFromData(
-    cat.umrahPrograms,
-    cat.hotelBookingLinks,
+    umrahPrograms,
+    cat.hotelBookingLinks ?? {},
   )
 
   // Hajj catalog rendered from structured JSON

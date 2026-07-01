@@ -111,7 +111,8 @@ function toAI(n: number): string {
   }).join('')
 }
 
-function fmtHijriRange(dep: string, ret: string): string {
+function fmtHijriRange(dep: string | undefined | null, ret: string | undefined | null): string {
+  if (!dep || !ret) return ''
   // Compress same-month ranges: "١ صفر ١٤٤٨هـ" / "١٠ صفر ١٤٤٨هـ" → "١-١٠ صفر ١٤٤٨هـ"
   const dp = dep.split(' ')   // [day, month, year]
   const rp = ret.split(' ')
