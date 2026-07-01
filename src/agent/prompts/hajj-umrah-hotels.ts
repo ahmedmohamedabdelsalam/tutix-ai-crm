@@ -140,8 +140,8 @@ export function buildHotelKnowledge(): string {
 }
 
 export function buildHotelKnowledgeFromData(hotels: HotelEntry[]): string {
-  const mecca  = hotels.filter(h => !h.location.includes('المدينة المنورة'))
-  const medina = hotels.filter(h => h.location.includes('المدينة المنورة'))
+  const mecca  = hotels.filter(h => !h.location?.includes('المدينة المنورة'))
+  const medina = hotels.filter(h =>  h.location?.includes('المدينة المنورة') ?? false)
 
   function renderHotel(h: HotelEntry): string {
     const header = h.stars ? `${h.name} (${h.stars}):` : `${h.name}:`
