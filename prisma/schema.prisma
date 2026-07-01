@@ -373,6 +373,7 @@ model DailyTask {
 model SystemNotification {
   id        String   @id @default(cuid())
   companyId String
+  userId    String?
   type      String
   message   String
   isRead    Boolean  @default(false)
@@ -380,6 +381,7 @@ model SystemNotification {
   company   Company  @relation(fields: [companyId], references: [id])
 
   @@index([companyId])
+  @@index([userId])
 }
 
 model Branch {
