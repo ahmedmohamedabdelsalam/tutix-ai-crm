@@ -6,11 +6,8 @@ import { FollowUpService } from './followup.service'
 import { PrismaService } from '../prisma/prisma.service'
 import { splitIntoMessages } from './message-splitter'
 
-function getTypingDelay(text: string): number {
-  const len = text.length
-  if (len < 50)  return 1500 + Math.random() * 1000   // 1.5–2.5s per short segment
-  if (len < 150) return 2500 + Math.random() * 1000   // 2.5–3.5s per medium segment
-  return 3000 + Math.random() * 1500                   // 3–4.5s per long segment (package card)
+function getTypingDelay(_text: string): number {
+  return 5000
 }
 
 async function metaPost(phoneId: string, token: string, body: object): Promise<void> {
