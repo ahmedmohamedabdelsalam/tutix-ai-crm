@@ -28,7 +28,7 @@ interface HajjProgramSection {
 interface HajjProgram {
   id: string
   name: string
-  pricePerPerson: number
+  pricePerPerson: number | null
   discountedPrice?: number
   discountAmount?: number
   discountNote?: string
@@ -115,9 +115,11 @@ function buildHajjCatalogFromDB(
     .join('\n')
 
   const programBlocks = hajjPrograms.map(p => {
-    const priceLabel = p.discountedPrice
-      ? `${formatPrice(p.pricePerPerson)} جنيه للفرد (بدون تذكرة ${p.ticketType}) | بعد الخصم: ${formatPrice(p.discountedPrice)} جنيه (خصم ${formatPrice(p.discountAmount ?? 0)} جنيه، ${p.discountNote ?? ''})`
-      : `${formatPrice(p.pricePerPerson)} جنيه للفرد (بدون تذكرة ${p.ticketType})`
+    const priceLabel = !p.pricePerPerson
+      ? `السعر غير محدد (للتواصل مع المبيعات)`
+      : p.discountedPrice
+        ? `${formatPrice(p.pricePerPerson)} جنيه للفرد (بدون تذكرة ${p.ticketType}) | بعد الخصم: ${formatPrice(p.discountedPrice)} جنيه (خصم ${formatPrice(p.discountAmount ?? 0)} جنيه، ${p.discountNote ?? ''})`
+        : `${formatPrice(p.pricePerPerson)} جنيه للفرد (بدون تذكرة ${p.ticketType})`
 
     const lines: string[] = [`[${p.name}] — ${priceLabel}`]
 
