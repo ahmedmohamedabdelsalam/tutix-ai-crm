@@ -599,7 +599,7 @@ export class WhatsAppService {
     const BOOKING_SIGNALS = ['عايز احجز', 'عايزة احجز', 'هحجز', 'احجزلي', 'موافق نحجز', 'خد الحجز'];
     const msgCount = totalMsgCount; // total msgs in DB (not history.length, which is capped at 10)
     const hasBookingSignal = BOOKING_SIGNALS.some(kw => text.includes(kw));
-    const runExtract = msgCount <= 2 || msgCount % 5 === 0 || hasBookingSignal;
+    const runExtract = msgCount <= 2 || msgCount % 8 === 0 || hasBookingSignal;
     console.log(`EXTRACT: msg=${msgCount} run=${runExtract} (booking=${hasBookingSignal} mod5=${msgCount % 5 === 0})`);
 
     let extracted: Partial<LeadData> = {}
