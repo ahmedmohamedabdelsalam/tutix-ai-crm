@@ -384,15 +384,16 @@ export class WhatsAppService {
     if (conv.leadId) {
       const lead = await this.prisma.lead.findUnique({
         where: { id: conv.leadId },
-        select: { name: true, packageType: true, groupSize: true, travelDate: true, budget: true },
+        select: { name: true, packageType: true, groupSize: true, travelDate: true, budget: true, companionNote: true },
       })
       if (!knownCustomerName && lead?.name) knownCustomerName = lead.name
-      if (lead && (lead.packageType || lead.groupSize != null || lead.travelDate || lead.budget)) {
+      if (lead && (lead.packageType || lead.groupSize != null || lead.travelDate || lead.budget || lead.companionNote)) {
         knownLeadFacts = {
           packageType: lead.packageType,
           groupSize: lead.groupSize,
           travelDate: lead.travelDate,
           budget: lead.budget,
+          companionNote: lead.companionNote,
         }
       }
     }
@@ -522,6 +523,18 @@ export class WhatsAppService {
       content: m.content,
     }))
 
+    // Supplement knownLeadFacts with service type detected directly from user messages.
+    // The AI extract sometimes returns null for packageType on the first message exchange,
+    // so we detect it here from history to prevent the AI from re-asking.
+    if (!knownLeadFacts?.packageType && history.length > 1) {
+      const userText = history.filter(m => m.role === 'user').map(m => m.content).join(' ')
+      if (/عمرة|عمره/.test(userText)) {
+        knownLeadFacts = { ...knownLeadFacts, packageType: 'عمرة' }
+      } else if (/\bحج\b/.test(userText)) {
+        knownLeadFacts = { ...knownLeadFacts, packageType: 'حج' }
+      }
+    }
+
     // Check for a pipeline-sourced returning customer (source != legacy so phone always exists)
     const permCustomer = await this.prisma.permanentCustomer.findFirst({
       where: { companyId, phone, source: { not: 'legacy' } },
@@ -620,6 +633,7 @@ export class WhatsAppService {
           ...(extracted.groupSize && { groupSize: extracted.groupSize }),
           ...(extracted.budget && { budget: extracted.budget }),
           ...(extracted.travelDate && { travelDate: extracted.travelDate }),
+          ...(extracted.companionNote && { companionNote: extracted.companionNote }),
           score,
           isHot: score >= 70,
           status: score >= 70 ? LeadStatus.HOT : LeadStatus.CONTACTED,
@@ -762,15 +776,16 @@ export class WhatsAppService {
     if (conv.leadId) {
       const lead = await this.prisma.lead.findUnique({
         where: { id: conv.leadId },
-        select: { name: true, packageType: true, groupSize: true, travelDate: true, budget: true },
+        select: { name: true, packageType: true, groupSize: true, travelDate: true, budget: true, companionNote: true },
       })
       if (lead?.name) knownCustomerName = lead.name
-      if (lead && (lead.packageType || lead.groupSize != null || lead.travelDate || lead.budget)) {
+      if (lead && (lead.packageType || lead.groupSize != null || lead.travelDate || lead.budget || lead.companionNote)) {
         knownLeadFacts = {
           packageType: lead.packageType,
           groupSize: lead.groupSize,
           travelDate: lead.travelDate,
           budget: lead.budget,
+          companionNote: lead.companionNote,
         }
       }
     }

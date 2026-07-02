@@ -153,6 +153,7 @@ export interface LeadFacts {
   groupSize?: number | null
   travelDate?: string | null
   budget?: string | null
+  companionNote?: string | null
 }
 
 function buildKnownFactsBlock(facts?: LeadFacts): string {
@@ -162,11 +163,13 @@ function buildKnownFactsBlock(facts?: LeadFacts): string {
   if (facts.groupSize) lines.push(`عدد الأفراد: ${facts.groupSize}`)
   if (facts.travelDate) lines.push(`موعد السفر المفضل: ${facts.travelDate}`)
   if (facts.budget) lines.push(`الميزانية: ${facts.budget}`)
+  if (facts.companionNote) lines.push(`صلة المرافق: ${facts.companionNote}`)
   if (lines.length === 0) return ''
   return `## معلومات مؤكدة عن هذا العميل في هذه المحادثة
 المعلومات التالية أكدها العميل في هذه المحادثة وسُجّلت تلقائياً:
 ${lines.map(l => `• ${l} ✅`).join('\n')}
-⛔ ممنوع تماماً إعادة سؤال العميل عن أي معلومة مذكورة أعلاه — استخدمها مباشرةً في ردّك بدون تكرار السؤال`
+⛔ ممنوع تماماً إعادة سؤال العميل عن أي معلومة مذكورة أعلاه — استخدمها مباشرةً في ردّك بدون تكرار السؤال
+⛔ صلة المرافق ثابتة: استخدم "صلة المرافق" الموثقة أعلاه ولا تخترع علاقات أخرى أو تحوّل "والدته" إلى "صاحبه" أو أي تحويل آخر`
 }
 
 export async function getAgentReply(
@@ -266,7 +269,7 @@ export async function extractLeadData(
   history: { role: string; content: string }[],
 ): Promise<{ data: Partial<LeadData>; costUSD: number }> {
   const prompt = `من المحادثة التالية استخرج بيانات العميل. أجب بـ JSON فقط:
-{"name":"الاسم أو null","packageType":"حج أو عمرة أو null","groupSize":عدد صحيح أو null,"budget":"الميزانية أو null","travelDate":"الموعد أو null","isReadyToBook":true أو false}
+{"name":"الاسم أو null","packageType":"حج أو عمرة أو null","groupSize":عدد صحيح أو null,"budget":"الميزانية أو null","travelDate":"الموعد أو null","isReadyToBook":true أو false,"companionNote":"وصف مختصر لصلة المرافق مثل: مسافر مع والدته، مسافر مع زوجته، مسافر مع ابنه — أو null لو ما ذُكرت صلة المرافق"}
 
 قواعد مهمة:
 1. isReadyToBook يكون true فقط إذا قال العميل صراحةً إنه يريد الحجز الآن بعبارات مثل "عايز احجز" أو "هحجز" أو "موافق نحجز". مجرد السؤال عن العمرة أو الأسعار لا يعني الاستعداد للحجز.
@@ -374,4 +377,5 @@ export interface LeadData {
   budget: string;
   travelDate: string;
   isReadyToBook: boolean;
+  companionNote: string;
 }

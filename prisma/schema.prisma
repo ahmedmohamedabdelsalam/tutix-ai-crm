@@ -108,6 +108,7 @@ model Lead {
   assignedAgent String?
   executionNotes String?
   extraNotes    String?
+  companionNote String?
   referralData  Json?
   assignedTo    String?
   assignedAt    DateTime?
