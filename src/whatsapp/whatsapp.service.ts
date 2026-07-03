@@ -103,7 +103,7 @@ function detectVisitConfirm(text: string): boolean {
 // so the AI can send an immediate answer after the welcome instead of waiting for a name.
 // "هل" uses a lookbehind to avoid matching inside greetings like "أهلاً".
 function containsFirstMessageQuestion(text: string): boolean {
-  const QUESTION_SIGNALS = /عايز|أريد|اريد|كام|بكام|عندكم|فيه|ينفع|إيه|ايه|ما هو|(?<![ء-ي])هل|متى|فين|أسعار|اسعار|برامج|رحلة/
+  const QUESTION_SIGNALS = /عايز|محتاج|قولي|ممكن|أريد|اريد|كام|بكام|عندكم|فيه|ينفع|إيه|ايه|ما هو|(?<![ء-ي])هل|متى|فين|أسعار|اسعار|برامج|رحلة|رحلات/
   const SERVICE_SIGNALS  = /عمرة|حج|يوليو|أغسطس|سبتمبر|سعر|فندق|برنامج/
   return QUESTION_SIGNALS.test(text) || SERVICE_SIGNALS.test(text)
 }
@@ -675,11 +675,11 @@ export class WhatsAppService {
         const secondHistory = [
           { role: 'user' as const, content: text },
           { role: 'assistant' as const, content: reply },
-          { role: 'user' as const, content: `اعرضلي البرامج والأسعار المتاحة للفرد الواحد من فضلك` },
+          { role: 'user' as const, content: `اعرضلي نظرة عامة مختصرة على كل البرامج المتاحة — اسم البرنامج والسعر للفرد في سطر واحد لكل برنامج — بدون تفاصيل زيادة` },
         ]
         const secondAiPrompt = aiPrompt
-          ? `${aiPrompt}\n\n[تعليمات: اعرض البرامج والأسعار الآن مباشرة — العميل أعطى عدد الأشخاص ١ شخص، لا تطلب أي معلومات إضافية]`
-          : '[تعليمات: اعرض البرامج والأسعار الآن مباشرة — العميل أعطى عدد الأشخاص ١ شخص، لا تطلب أي معلومات إضافية]'
+          ? `${aiPrompt}\n\n[تعليمات إلزامية: اعرض الآن نظرة عامة مختصرة على كل البرامج المتاحة — اسم البرنامج + السعر للفرد في سطر واحد — ممنوع تأجيل العرض أو طلب اسم أو عدد — اجمعهم بشكل طبيعي بعد العرض]`
+          : '[تعليمات إلزامية: اعرض الآن نظرة عامة مختصرة على كل البرامج المتاحة — اسم البرنامج + السعر للفرد في سطر واحد — ممنوع تأجيل العرض أو طلب اسم أو عدد — اجمعهم بشكل طبيعي بعد العرض]'
         let secondReply = ''
         let secondCost = 0
         try {
