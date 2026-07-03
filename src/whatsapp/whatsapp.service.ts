@@ -108,6 +108,27 @@ function containsFirstMessageQuestion(text: string): boolean {
   return QUESTION_SIGNALS.test(text) || SERVICE_SIGNALS.test(text)
 }
 
+// Detects a specific umrah month in the customer message.
+// Returns the Arabic month name as used in the month overview blocks (e.g. 'أغسطس').
+function detectUmrahMonth(text: string): string | null {
+  if (/يولي[وو]|يوليو/.test(text)) return 'يوليو'
+  if (/اغسطس|أغسطس/.test(text)) return 'أغسطس'
+  if (/سبتمبر/.test(text)) return 'سبتمبر'
+  if (/اكتوبر|أكتوبر/.test(text)) return 'أكتوبر'
+  if (/نوفمبر/.test(text)) return 'نوفمبر'
+  return null
+}
+
+// Extracts just the trip lines for a specific month from the monthOverviews block.
+function extractMonthLines(monthOverviews: string, monName: string): string {
+  const open = `[ملخص رحلات ${monName} ٢٠٢٦ — انقله حرفياً]`
+  const close = `[/ملخص رحلات ${monName} ٢٠٢٦]`
+  const s = monthOverviews.indexOf(open)
+  const e = monthOverviews.indexOf(close)
+  if (s < 0 || e < 0) return ''
+  return monthOverviews.slice(s + open.length, e).trim()
+}
+
 // ── Follow-up scheduling utilities ──────────────────────────────────────────
 
 const ARABIC_INDIC = '٠١٢٣٤٥٦٧٨٩'
@@ -677,9 +698,22 @@ export class WhatsAppService {
           { role: 'assistant' as const, content: reply },
           { role: 'user' as const, content: `اعرضلي نظرة عامة مختصرة على كل البرامج المتاحة — اسم البرنامج والسعر للفرد في سطر واحد لكل برنامج — بدون تفاصيل زيادة` },
         ]
-        const secondAiPrompt = aiPrompt
-          ? `${aiPrompt}\n\n[تعليمات إلزامية: اعرض الآن نظرة عامة مختصرة على كل البرامج المتاحة — اسم البرنامج + السعر للفرد في سطر واحد — ممنوع تأجيل العرض أو طلب اسم أو عدد — اجمعهم بشكل طبيعي بعد العرض]`
-          : '[تعليمات إلزامية: اعرض الآن نظرة عامة مختصرة على كل البرامج المتاحة — اسم البرنامج + السعر للفرد في سطر واحد — ممنوع تأجيل العرض أو طلب اسم أو عدد — اجمعهم بشكل طبيعي بعد العرض]'
+
+        // If the customer mentioned a specific umrah month, inject pre-built exact trip lines
+        // into the aiPrompt so the AI copies verified numbers instead of hallucinating them.
+        const umrahMonth = detectUmrahMonth(text)
+        const monthLines = umrahMonth && prebuiltCatalog?.monthOverviews
+          ? extractMonthLines(prebuiltCatalog.monthOverviews, umrahMonth)
+          : ''
+
+        let secondAiPrompt: string
+        if (monthLines) {
+          secondAiPrompt = `[تعليمات إلزامية للعمرة: اعرض هذه الرحلات للعميل حرفياً بدون تعديل أي سعر أو تاريخ أو مدة — هذه الأرقام مؤكدة من النظام ولا تقبل التعديل:\n${monthLines}\nثم اسأل: "أنهي رحلة أو معاد يناسب حضرتك؟"]`
+        } else {
+          secondAiPrompt = aiPrompt
+            ? `${aiPrompt}\n\n[تعليمات إلزامية: اعرض الآن نظرة عامة مختصرة على كل البرامج المتاحة — اسم البرنامج + السعر للفرد في سطر واحد — ممنوع تأجيل العرض أو طلب اسم أو عدد — اجمعهم بشكل طبيعي بعد العرض]`
+            : '[تعليمات إلزامية: اعرض الآن نظرة عامة مختصرة على كل البرامج المتاحة — اسم البرنامج + السعر للفرد في سطر واحد — ممنوع تأجيل العرض أو طلب اسم أو عدد — اجمعهم بشكل طبيعي بعد العرض]'
+        }
         let secondReply = ''
         let secondCost = 0
         try {

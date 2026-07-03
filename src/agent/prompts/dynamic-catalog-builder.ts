@@ -244,6 +244,76 @@ ${programBlocks}
 • لو سأل "هل يشمل الطيران؟" — جاوب بوضوح: "لا يافندم السعر ده بدون تذكرة الطيران/العبّارة، التذكرة بتُحسب بشكل منفصل حسب توفرها وقت الحجز"`
 }
 
+// ── Umrah month overview — code-built for verbatim copy (no AI price hallucination) ──
+
+const OV_AR = '٠١٢٣٤٥٦٧٨٩'
+const OV_MONTHS: Record<number, string> = { 7: 'يوليو', 8: 'أغسطس', 9: 'سبتمبر', 10: 'أكتوبر', 11: 'نوفمبر' }
+
+function ovToAr(n: number): string {
+  return String(Math.round(n)).split('').map(c => { const i = '0123456789'.indexOf(c); return i >= 0 ? OV_AR[i] : c }).join('')
+}
+
+function ovFmtPrice(n: number): string {
+  return String(Math.round(n))
+    .replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+    .split('').map(c => {
+      if (c === ',') return '٬'
+      const i = '0123456789'.indexOf(c)
+      return i >= 0 ? OV_AR[i] : c
+    }).join('')
+}
+
+function ovFmtDay(iso: string): string {
+  const day = parseInt(iso.slice(8), 10)
+  const mon = parseInt(iso.slice(5, 7), 10)
+  return `${ovToAr(day)} ${OV_MONTHS[mon] ?? iso.slice(5, 7)}`
+}
+
+function ovDurWord(n: number): string { return n >= 3 && n <= 10 ? 'أيام' : 'يوم' }
+
+export function buildUmrahMonthOverview(rawPrograms: any[]): string {
+  const groups = new Map<string, any[]>()
+  for (const p of rawPrograms) {
+    const dep = p.departureDate ?? ''
+    const ret = p.returnDate ?? ''
+    if (!dep || !ret || !/^\d{4}-\d{2}-\d{2}$/.test(dep)) continue
+    const key = `${dep}|${ret}`
+    if (!groups.has(key)) groups.set(key, [])
+    groups.get(key)!.push(p)
+  }
+
+  type Trip = { depISO: string; retISO: string; depMonth: number; duration: number; minPrice: number }
+  const trips: Trip[] = []
+
+  for (const [key, progs] of groups) {
+    const [depISO, retISO] = key.split('|')
+    const depMs = new Date(depISO + 'T00:00:00Z').getTime()
+    const retMs = new Date(retISO + 'T00:00:00Z').getTime()
+    const duration = Math.round((retMs - depMs) / 86400000) + 1
+    const depMonth = parseInt(depISO.slice(5, 7), 10)
+    const prices = progs.map((p: any) => p.quadPrice ?? p.priceQuad ?? 0).filter((x: number) => x > 0)
+    if (prices.length === 0) continue
+    trips.push({ depISO, retISO, depMonth, duration, minPrice: Math.min(...prices) })
+  }
+
+  trips.sort((a, b) => a.depISO.localeCompare(b.depISO))
+
+  const months = [7, 8, 9, 10, 11]
+  const blocks: string[] = []
+  for (const mon of months) {
+    const mt = trips.filter(t => t.depMonth === mon)
+    if (mt.length === 0) continue
+    const monName = OV_MONTHS[mon] ?? String(mon)
+    const lines = mt.map(t =>
+      `${ovFmtDay(t.depISO)} — ${ovFmtDay(t.retISO)} (${ovToAr(t.duration)} ${ovDurWord(t.duration)}) — يبدأ من ${ovFmtPrice(t.minPrice)} جنيه للفرد`
+    )
+    blocks.push(`[ملخص رحلات ${monName} ٢٠٢٦ — انقله حرفياً]\n${lines.join('\n')}\n[/ملخص رحلات ${monName} ٢٠٢٦]`)
+  }
+
+  if (blocks.length === 0) return ''
+  return `## ملخص رحلات العمرة بالشهر (جاهز — انقل سطور كل شهر حرفياً بدون تعديل)\n${blocks.join('\n\n')}`
+}
+
 // ── General knowledge + FAQ — pre-stored in industryData or fallback static ──
 
 const HAJJ_GENERAL_KNOWLEDGE_STATIC = `## القسم ٣ج — معلومات عامة عن رحلة الحج (للإجابة على أسئلة العملاء)
@@ -311,6 +381,7 @@ export interface IndustryPromptParts {
   catalog: string
   hotels: string
   hotelList: HotelEntry[]
+  monthOverviews: string
 }
 
 export function buildIndustryPromptFromDB(
@@ -342,13 +413,14 @@ export function buildIndustryPromptFromDB(
   const generalKnowledge = HAJJ_GENERAL_KNOWLEDGE_STATIC
   const faq              = HAJJ_FAQ_STATIC
 
-  const catalog = [umrahCatalog, hajjCatalog, generalKnowledge, faq].join('\n\n')
+  const monthOverview = buildUmrahMonthOverview(cat.umrahPrograms as any[])
+  const catalog = [umrahCatalog, monthOverview, hajjCatalog, generalKnowledge, faq].filter(Boolean).join('\n\n')
 
   // Hotels section
   const hotelList = ind?.hotels ?? []
   const hotels    = buildHotelKnowledgeFromData(hotelList)
 
-  return { identity, catalog, hotels, hotelList }
+  return { identity, catalog, hotels, hotelList, monthOverviews: monthOverview }
 }
 
 /** Convenience wrapper: find a hotel in a customer message using DB hotel list */
