@@ -287,7 +287,7 @@ export function buildHajjOverviewMessage(hajjPrograms: HajjProgram[]): HajjOverv
     const price = formatPrice(p.pricePerPerson)
     // Show ticket note only when it's not the standard airplane ticket
     const ticketNote = p.ticketType && p.ticketType !== 'طيران'
-      ? ` (بدون تذكرة ال${p.ticketType})` : ''
+      ? ` (بدون تذكرة ال${p.ticketType.replace(/^ال/, '')})` : ''
     if (p.discountedPrice) {
       return `${num}• ${p.name} — ${price} ج وبعد الخصم ${formatPrice(p.discountedPrice)} ج`
     }

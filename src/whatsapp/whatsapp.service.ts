@@ -283,6 +283,11 @@ interface OverviewState {
 const HAJJ_OV_DISCLAIMER =
   'ملاحظة: التواريخ الهجرية لبرامج الحج ١٤٤٨هـ تقديرية بناءً على الحساب الفلكي وسيُعلن الرسمي منها بعد رؤية الهلال قبل الموسم بأسابيع'
 
+// When overview bypass fires, strip the full catalog from the AI so it physically cannot
+// compose program details — only a one-line greeting is possible.
+const OVERVIEW_BYPASS_CATALOG_STRIP =
+  '[سيتم إرسال قائمة البرامج تلقائياً بعد ردك - اكتب جملة ترحيب قصيرة واحدة فقط ولا تذكر أي برنامج أو سعر]'
+
 @Injectable()
 export class WhatsAppService {
   private faqCache = new Map<string, { data: { question: string; answer: string }[]; expiresAt: number }>()
@@ -719,13 +724,14 @@ export class WhatsAppService {
         // Clear any stale full-details state
         this.fullDetailsMap.delete(conv.id)
 
-        // Ask AI for a one-line natural intro only — no list allowed
-        const introInstruction = '[تعليمة قاطعة: اكتب سطراً واحداً فقط بالعامية المصرية كمدخل ترحيبي طبيعي مثل "اتفضل يافندم" أو "بكل سرور يافندم" — لا تكتب أي قائمة أو أرقام أو تفاصيل برامج — الرسالة ستتبعها قائمة كاملة تلقائياً]'
-        const introAiPrompt = aiPrompt ? `${aiPrompt}\n\n${introInstruction}` : introInstruction
+        // Ask AI for a one-line natural intro only — strip catalog so it cannot compose program details
+        const prebuiltCatalogStripped = prebuiltCatalog
+          ? { ...prebuiltCatalog, catalog: OVERVIEW_BYPASS_CATALOG_STRIP }
+          : prebuiltCatalog
         let introReply = ''
         let introCost = 0
         try {
-          const r = await getAgentReply(history, company.name, packages, introAiPrompt, waPhone, company.industry, returningCustomer, knownCustomerName, companyFAQs, knownLeadFacts, prebuiltCatalog)
+          const r = await getAgentReply(history, company.name, packages, aiPrompt, waPhone, company.industry, returningCustomer, knownCustomerName, companyFAQs, knownLeadFacts, prebuiltCatalogStripped)
           introReply = r.reply
           introCost = r.costUSD
         } catch (err) {
@@ -756,10 +762,25 @@ export class WhatsAppService {
       }
     }
 
+    // If a first-message overview bypass is about to fire, strip the catalog so the
+    // welcome reply (reply) cannot contain program details — only a greeting is possible.
+    const firstMsgUmrahMonthForBypass = (totalMsgCount === 1 && containsFirstMessageQuestion(text))
+      ? detectUmrahMonth(text) : null
+    const isFirstMsgOverviewBypass = totalMsgCount === 1
+      && containsFirstMessageQuestion(text)
+      && prebuiltCatalog != null
+      && (
+        (detectHajjOverviewIntent(text) && !detectFullDetailsIntent(text) && !!prebuiltCatalog.hajjOverviewMessage)
+        || (!!firstMsgUmrahMonthForBypass && !!prebuiltCatalog.umrahMonthMessages?.[firstMsgUmrahMonthForBypass])
+      )
+    const prebuiltCatalogForWelcome = isFirstMsgOverviewBypass
+      ? { ...prebuiltCatalog!, catalog: OVERVIEW_BYPASS_CATALOG_STRIP }
+      : prebuiltCatalog
+
     let rawAIReply = AI_ERROR_REPLY
     let aiCostUSD = 0
     try {
-      const r = await getAgentReply(history, company.name, packages, aiPrompt, waPhone, company.industry, returningCustomer, knownCustomerName, companyFAQs, knownLeadFacts, prebuiltCatalog)
+      const r = await getAgentReply(history, company.name, packages, aiPrompt, waPhone, company.industry, returningCustomer, knownCustomerName, companyFAQs, knownLeadFacts, prebuiltCatalogForWelcome)
       rawAIReply = r.reply
       aiCostUSD = r.costUSD
     } catch (err) {
