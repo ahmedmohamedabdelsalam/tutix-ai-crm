@@ -294,7 +294,7 @@ export function buildHajjOverviewMessage(hajjPrograms: HajjProgram[]): HajjOverv
     return `${num}• ${p.name} — ${price} ج${ticketNote}`
   }
 
-  const lines: string[] = [`🕋 *برامج الحج ١٤٤٨هـ — مايو ٢٠٢٧م*`]
+  const lines: string[] = [`*برامج الحج ١٤٤٨هـ — مايو ٢٠٢٧م*`]
 
   if (economic.length > 0) {
     lines.push('')
@@ -318,7 +318,7 @@ export function buildHajjOverviewMessage(hajjPrograms: HajjProgram[]): HajjOverv
   }
 
   lines.push('')
-  lines.push('💬 ابعت رقم البرنامج وهبعتلك تفاصيله كاملة')
+  lines.push('ابعت رقم البرنامج وهبعتلك تفاصيله كاملة')
 
   return { message: lines.join('\n'), orderedDetails }
 }
@@ -366,14 +366,14 @@ export function buildUmrahMonthMessage(month: string, rawPrograms: any[]): strin
 
   if (trips.length === 0) return ''
 
-  const lines = [`🌙 *رحلات عمرة ${month} ٢٠٢٦*`]
+  const lines = [`*رحلات عمرة ${month} ٢٠٢٦*`]
   trips.forEach((t, i) => {
     const dur = `${ovToAr(t.duration)} ${ovDurWord(t.duration)}`
     const hotels = [t.meccaHotel, t.medinaHotel].filter(Boolean).join(' + ')
     lines.push(`${ovToAr(i + 1)}• ${ovFmtDay(t.depISO)} — ${ovFmtDay(t.retISO)} (${dur}) — ${hotels} — يبدأ من ${ovFmtPrice(t.minQuad)} ج`)
   })
   lines.push('')
-  lines.push('💬 ابعت رقم الرحلة وهبعتلك برامجها وأسعارها كاملة')
+  lines.push('ابعت رقم الرحلة وهبعتلك برامجها وأسعارها كاملة')
 
   return lines.join('\n')
 }

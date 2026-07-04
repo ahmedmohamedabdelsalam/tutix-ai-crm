@@ -719,7 +719,7 @@ export class WhatsAppService {
       if (isHajjOv || isUmrahOv) {
         this.fullDetailsMap.delete(conv.id)
         const firstName = knownCustomerName?.split(/\s+/)[0]
-        const intro = firstName ? `تمام يا أستاذ ${firstName} اتفضل 👇` : `اتفضل يافندم 👇`
+        const intro = firstName ? `تمام يا أستاذ ${firstName} اتفضل` : `اتفضل يافندم`
         await this.saveAssistantMessage(conv.id, intro)
         const parts: string[] = [intro]
 
@@ -750,7 +750,7 @@ export class WhatsAppService {
       if (isHajjOvFirst || isUmrahOvFirst) {
         this.fullDetailsMap.delete(conv.id)
         const firstName = knownCustomerName?.split(/\s+/)[0]
-        const intro = firstName ? `تمام يا أستاذ ${firstName} اتفضل 👇` : `اتفضل يافندم 👇`
+        const intro = firstName ? `تمام يا أستاذ ${firstName} اتفضل` : `اتفضل يافندم`
         await this.saveAssistantMessage(conv.id, intro)
         const parts: string[] = [intro]
 
