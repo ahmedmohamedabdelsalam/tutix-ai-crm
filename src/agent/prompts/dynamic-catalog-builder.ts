@@ -251,6 +251,133 @@ export function buildHajjProgramDetailsArray(hajjPrograms: HajjProgram[]): strin
   return hajjPrograms.map((p, i) => renderHajjProgram(p, i))
 }
 
+// ── Deterministic Hajj overview message — AI never touches this ───────────────
+
+export interface HajjOverviewResult {
+  message: string
+  orderedDetails: string[]  // renderHajjProgram output in overview order (index 0 = program ١)
+}
+
+export function buildHajjOverviewMessage(hajjPrograms: HajjProgram[]): HajjOverviewResult {
+  const is5Star = (p: HajjProgram) =>
+    p.name.startsWith('برنامج ٥ نجوم') || p.name.startsWith('٥ نجوم') || p.name.includes('خمس نجوم')
+  const isKadan = (p: HajjProgram) => p.name.includes('كدانة')
+  const hasPrice = (p: HajjProgram) => !!p.pricePerPerson   // 0 and null both falsy
+
+  const sortByPrice = (a: HajjProgram, b: HajjProgram) =>
+    (a.pricePerPerson ?? 0) - (b.pricePerPerson ?? 0)
+
+  const economic = hajjPrograms.filter(p => hasPrice(p) && !is5Star(p) && !isKadan(p)).sort(sortByPrice)
+  const fiveStar = hajjPrograms.filter(p => hasPrice(p) && is5Star(p)).sort(sortByPrice)
+  const kadan    = hajjPrograms.filter(p => hasPrice(p) && isKadan(p)).sort(sortByPrice)
+  const special  = hajjPrograms.filter(p => !hasPrice(p))
+
+  if (economic.length + fiveStar.length + kadan.length + special.length === 0) {
+    return { message: '', orderedDetails: [] }
+  }
+
+  const ordered = [...economic, ...fiveStar, ...kadan, ...special]
+  const orderedDetails = ordered.map((p, i) => renderHajjProgram(p, i))
+
+  let n = 0
+  const ovLine = (p: HajjProgram): string => {
+    n++
+    const num = ovToAr(n)
+    if (!p.pricePerPerson) return `${num}• ${p.name}`
+    const price = formatPrice(p.pricePerPerson)
+    // Show ticket note only when it's not the standard airplane ticket
+    const ticketNote = p.ticketType && p.ticketType !== 'طيران'
+      ? ` (بدون تذكرة ال${p.ticketType})` : ''
+    if (p.discountedPrice) {
+      return `${num}• ${p.name} — ${price} ج وبعد الخصم ${formatPrice(p.discountedPrice)} ج`
+    }
+    return `${num}• ${p.name} — ${price} ج${ticketNote}`
+  }
+
+  const lines: string[] = [`🕋 *برامج الحج ١٤٤٨هـ — مايو ٢٠٢٧م*`]
+
+  if (economic.length > 0) {
+    lines.push('')
+    lines.push('*البرامج الاقتصادية:*')
+    economic.forEach(p => lines.push(ovLine(p)))
+  }
+  if (fiveStar.length > 0) {
+    lines.push('')
+    lines.push('*الخمس نجوم:*')
+    fiveStar.forEach(p => lines.push(ovLine(p)))
+  }
+  if (kadan.length > 0) {
+    lines.push('')
+    lines.push('*أبراج كدانة (أبراج فندقية في منى):*')
+    kadan.forEach(p => lines.push(ovLine(p)))
+  }
+  if (special.length > 0) {
+    lines.push('')
+    lines.push('*سعر خاص — للتواصل مع المبيعات:*')
+    special.forEach(p => lines.push(ovLine(p)))
+  }
+
+  lines.push('')
+  lines.push('💬 ابعت رقم البرنامج وهبعتلك تفاصيله كاملة')
+
+  return { message: lines.join('\n'), orderedDetails }
+}
+
+// ── Deterministic Umrah month overview — one WhatsApp message with hotel info ─
+
+const MONTH_NAME_TO_NUM: Record<string, number> = {
+  'يوليو': 7, 'أغسطس': 8, 'سبتمبر': 9, 'أكتوبر': 10, 'نوفمبر': 11,
+}
+
+export function buildUmrahMonthMessage(month: string, rawPrograms: any[]): string {
+  const targetMon = MONTH_NAME_TO_NUM[month]
+  if (!targetMon) return ''
+
+  const groups = new Map<string, any[]>()
+  for (const p of rawPrograms) {
+    const dep = p.departureDate ?? ''
+    const ret = p.returnDate ?? ''
+    if (!dep || !ret || !/^\d{4}-\d{2}-\d{2}$/.test(dep)) continue
+    if (parseInt(dep.slice(5, 7), 10) !== targetMon) continue
+    const key = `${dep}|${ret}`
+    if (!groups.has(key)) groups.set(key, [])
+    groups.get(key)!.push(p)
+  }
+
+  type TripRow = {
+    depISO: string; retISO: string; duration: number
+    meccaHotel: string; medinaHotel: string; minQuad: number
+  }
+  const trips: TripRow[] = []
+  for (const [key, progs] of groups) {
+    const [depISO, retISO] = key.split('|')
+    const depMs = new Date(depISO + 'T00:00:00Z').getTime()
+    const retMs = new Date(retISO + 'T00:00:00Z').getTime()
+    const duration = Math.round((retMs - depMs) / 86400000) + 1
+    const quadPrices = progs.map((p: any) => p.quadPrice ?? p.priceQuad ?? 0).filter((x: number) => x > 0)
+    if (quadPrices.length === 0) continue
+    const minQuad = Math.min(...quadPrices)
+    const minProg = progs.find((p: any) => (p.quadPrice ?? p.priceQuad ?? 0) === minQuad) ?? progs[0]
+    const meccaHotel  = minProg.makkahHotel  ?? minProg.meccaHotel  ?? ''
+    const medinaHotel = minProg.madinahHotel ?? minProg.medinaHotel ?? ''
+    trips.push({ depISO, retISO, duration, meccaHotel, medinaHotel, minQuad })
+  }
+  trips.sort((a, b) => a.depISO.localeCompare(b.depISO))
+
+  if (trips.length === 0) return ''
+
+  const lines = [`🌙 *رحلات عمرة ${month} ٢٠٢٦*`]
+  trips.forEach((t, i) => {
+    const dur = `${ovToAr(t.duration)} ${ovDurWord(t.duration)}`
+    const hotels = [t.meccaHotel, t.medinaHotel].filter(Boolean).join(' + ')
+    lines.push(`${ovToAr(i + 1)}• ${ovFmtDay(t.depISO)} — ${ovFmtDay(t.retISO)} (${dur}) — ${hotels} — يبدأ من ${ovFmtPrice(t.minQuad)} ج`)
+  })
+  lines.push('')
+  lines.push('💬 ابعت رقم الرحلة وهبعتلك برامجها وأسعارها كاملة')
+
+  return lines.join('\n')
+}
+
 // ── Umrah month overview — code-built for verbatim copy (no AI price hallucination) ──
 
 const OV_AR = '٠١٢٣٤٥٦٧٨٩'
@@ -390,6 +517,9 @@ export interface IndustryPromptParts {
   hotelList: HotelEntry[]
   monthOverviews: string
   hajjProgramDetails: string[]
+  hajjOverviewMessage: string
+  hajjOverviewDetails: string[]
+  umrahMonthMessages: Record<string, string>
 }
 
 export function buildIndustryPromptFromDB(
@@ -430,7 +560,19 @@ export function buildIndustryPromptFromDB(
 
   const hajjProgramDetails = buildHajjProgramDetailsArray(cat.hajjPrograms)
 
-  return { identity, catalog, hotels, hotelList, monthOverviews: monthOverview, hajjProgramDetails }
+  const { message: hajjOverviewMessage, orderedDetails: hajjOverviewDetails } =
+    buildHajjOverviewMessage(cat.hajjPrograms)
+
+  const umrahMonthMessages: Record<string, string> = {}
+  for (const mon of ['يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر']) {
+    const msg = buildUmrahMonthMessage(mon, cat.umrahPrograms as any[])
+    if (msg) umrahMonthMessages[mon] = msg
+  }
+
+  return {
+    identity, catalog, hotels, hotelList, monthOverviews: monthOverview,
+    hajjProgramDetails, hajjOverviewMessage, hajjOverviewDetails, umrahMonthMessages,
+  }
 }
 
 /** Convenience wrapper: find a hotel in a customer message using DB hotel list */

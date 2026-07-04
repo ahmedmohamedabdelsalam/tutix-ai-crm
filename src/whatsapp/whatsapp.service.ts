@@ -147,6 +147,36 @@ function detectContinueResponse(text: string): boolean {
   return /^(كمل|اكمل|كمّل|ايوه|أيوه|اه|أه|آه|نعم|تمام|ماشي)(\s.*)?$/.test(text.trim())
 }
 
+function detectHajjOverviewIntent(text: string): boolean {
+  return /برامج\s*الحج|أسعار\s*الحج|اسعار\s*الحج|برامج\s*حج|عن\s*برامج\s*الحج/.test(text) ||
+    (/حج/.test(text) && /برامج|اسعار|أسعار|قولي|اعرض|عايز\s*اعرف/.test(text))
+}
+
+function detectNumberReply(text: string): number | null {
+  const t = text.trim()
+  // Arabic-Indic single digit ١-٩
+  const arMatch = t.match(/^([١٢٣٤٥٦٧٨٩])$/)
+  if (arMatch) return '١٢٣٤٥٦٧٨٩'.indexOf(arMatch[1]) + 1
+  // Western single digit 1-9
+  const numMatch = t.match(/^([1-9])$/)
+  if (numMatch) return parseInt(numMatch[1])
+  // "رقم ٦" or "رقم 6"
+  const raqmMatch = t.match(/رقم\s*([١٢٣٤٥٦٧٨٩]|[1-9])/)
+  if (raqmMatch) {
+    const c = raqmMatch[1]
+    return '١٢٣٤٥٦٧٨٩'.includes(c) ? '١٢٣٤٥٦٧٨٩'.indexOf(c) + 1 : parseInt(c)
+  }
+  // Ordinals
+  const ordinals: Record<string, number> = {
+    'الأول': 1, 'الثاني': 2, 'الثالث': 3, 'الرابع': 4,
+    'الخامس': 5, 'السادس': 6, 'السابع': 7, 'الثامن': 8, 'التاسع': 9,
+  }
+  for (const [word, n] of Object.entries(ordinals)) {
+    if (t.includes(word)) return n
+  }
+  return null
+}
+
 // ── Follow-up scheduling utilities ──────────────────────────────────────────
 
 const ARABIC_INDIC = '٠١٢٣٤٥٦٧٨٩'
@@ -246,11 +276,19 @@ interface FullDetailsState {
   total: number
 }
 
+interface OverviewState {
+  orderedDetails: string[]  // pre-rendered detail strings, index 0 = item ١ in the overview
+}
+
+const HAJJ_OV_DISCLAIMER =
+  'ملاحظة: التواريخ الهجرية لبرامج الحج ١٤٤٨هـ تقديرية بناءً على الحساب الفلكي وسيُعلن الرسمي منها بعد رؤية الهلال قبل الموسم بأسابيع'
+
 @Injectable()
 export class WhatsAppService {
   private faqCache = new Map<string, { data: { question: string; answer: string }[]; expiresAt: number }>()
   private readonly aiFailureCount = new Map<string, number>()
   private readonly fullDetailsMap = new Map<string, FullDetailsState>()
+  private readonly overviewMap    = new Map<string, OverviewState>()
 
   constructor(private prisma: PrismaService) {}
 
@@ -647,6 +685,77 @@ export class WhatsAppService {
       }
     }
 
+    // ── Overview state: number-reply handler (all message counts) ────────────────
+    // When a customer replies with a number after seeing the Hajj overview, deliver
+    // that program's full details directly from the pre-rendered array — no AI involved.
+    if (prebuiltCatalog) {
+      const ovState = this.overviewMap.get(conv.id)
+      if (ovState) {
+        const n = detectNumberReply(text)
+        if (n !== null && n >= 1 && n <= ovState.orderedDetails.length) {
+          const detail = applyHajjDateDisclaimer(ovState.orderedDetails[n - 1])
+          this.overviewMap.delete(conv.id)
+          await this.saveAssistantMessage(conv.id, detail)
+          console.log(`OV_NUMBER → ${phone} n=${n} → program detail sent`)
+          return detail
+        }
+        // Topic changed — clear overview state and let normal AI handle it
+        this.overviewMap.delete(conv.id)
+      }
+    }
+
+    // ── Overview bypass: non-first-message hajj/umrah overview request ───────────
+    // For first messages, the bypass runs inside the firstMessageQuestion block below.
+    // Here we handle subsequent messages asking for an overview, so the AI never
+    // composes the list — it only provides a one-line intro, then code appends the
+    // pre-built overview message.
+    if (totalMsgCount > 1 && prebuiltCatalog) {
+      const ovMonth = detectUmrahMonth(text)
+      const isHajjOv  = detectHajjOverviewIntent(text) && !detectFullDetailsIntent(text) &&
+                        !!prebuiltCatalog.hajjOverviewMessage
+      const isUmrahOv = !!ovMonth && !!prebuiltCatalog.umrahMonthMessages?.[ovMonth]
+
+      if (isHajjOv || isUmrahOv) {
+        // Clear any stale full-details state
+        this.fullDetailsMap.delete(conv.id)
+
+        // Ask AI for a one-line natural intro only — no list allowed
+        const introInstruction = '[تعليمة قاطعة: اكتب سطراً واحداً فقط بالعامية المصرية كمدخل ترحيبي طبيعي مثل "اتفضل يافندم" أو "بكل سرور يافندم" — لا تكتب أي قائمة أو أرقام أو تفاصيل برامج — الرسالة ستتبعها قائمة كاملة تلقائياً]'
+        const introAiPrompt = aiPrompt ? `${aiPrompt}\n\n${introInstruction}` : introInstruction
+        let introReply = ''
+        let introCost = 0
+        try {
+          const r = await getAgentReply(history, company.name, packages, introAiPrompt, waPhone, company.industry, returningCustomer, knownCustomerName, companyFAQs, knownLeadFacts, prebuiltCatalog)
+          introReply = r.reply
+          introCost = r.costUSD
+        } catch (err) {
+          if (err instanceof ApiCreditsExhaustedError) await this.handleAICreditsExhausted(companyId)
+        }
+        this.writeCostRecord(companyId, conv.id, introCost)
+
+        const parts: string[] = []
+        if (introReply && introReply !== AI_ERROR_REPLY) {
+          await this.saveAssistantMessage(conv.id, introReply)
+          parts.push(introReply)
+        }
+
+        if (isHajjOv) {
+          const ovMsg = prebuiltCatalog.hajjOverviewMessage + '\n\n' + HAJJ_OV_DISCLAIMER
+          this.overviewMap.set(conv.id, { orderedDetails: prebuiltCatalog.hajjOverviewDetails })
+          await this.saveAssistantMessage(conv.id, ovMsg)
+          parts.push(ovMsg)
+          console.log(`HAJJ_OV_BYPASS → ${phone} programs=${prebuiltCatalog.hajjOverviewDetails.length}`)
+        } else if (isUmrahOv && ovMonth) {
+          const ovMsg = prebuiltCatalog.umrahMonthMessages[ovMonth]
+          await this.saveAssistantMessage(conv.id, ovMsg)
+          parts.push(ovMsg)
+          console.log(`UMRAH_OV_BYPASS → ${phone} month=${ovMonth}`)
+        }
+
+        return parts.length === 1 ? parts[0] : parts
+      }
+    }
+
     let rawAIReply = AI_ERROR_REPLY
     let aiCostUSD = 0
     try {
@@ -750,28 +859,35 @@ export class WhatsAppService {
 
       // First-message question: send an immediate answer after the welcome without waiting for name
       if (totalMsgCount === 1 && containsFirstMessageQuestion(text)) {
-        // Synthetic third turn: customer asks for programs/prices for one person so the AI
-        // can display the catalog directly without asking for group size or name.
+        const umrahMonth = detectUmrahMonth(text)
+
+        // ── Hajj overview bypass: send pre-built overview, no second AI call ──────
+        if (detectHajjOverviewIntent(text) && !detectFullDetailsIntent(text) &&
+            prebuiltCatalog?.hajjOverviewMessage) {
+          this.fullDetailsMap.delete(conv.id)
+          const ovMsg = prebuiltCatalog.hajjOverviewMessage + '\n\n' + HAJJ_OV_DISCLAIMER
+          this.overviewMap.set(conv.id, { orderedDetails: prebuiltCatalog.hajjOverviewDetails })
+          await this.saveAssistantMessage(conv.id, ovMsg)
+          console.log(`HAJJ_OV_FIRST → ${phone} programs=${prebuiltCatalog.hajjOverviewDetails.length}`)
+          return [reply, ovMsg]
+        }
+
+        // ── Umrah month bypass: send pre-built month message, no second AI call ──
+        if (umrahMonth && prebuiltCatalog?.umrahMonthMessages?.[umrahMonth]) {
+          const ovMsg = prebuiltCatalog.umrahMonthMessages[umrahMonth]
+          await this.saveAssistantMessage(conv.id, ovMsg)
+          console.log(`UMRAH_OV_FIRST → ${phone} month=${umrahMonth}`)
+          return [reply, ovMsg]
+        }
+
+        // ── Generic overview: second AI call for other service/price questions ────
         const secondHistory = [
           { role: 'user' as const, content: text },
           { role: 'assistant' as const, content: reply },
           { role: 'user' as const, content: `اعرضلي نظرة عامة مختصرة على كل البرامج المتاحة — اسم البرنامج والسعر للفرد في سطر واحد لكل برنامج — بدون تفاصيل زيادة` },
         ]
-
-        // If the customer mentioned a specific umrah month, inject pre-built exact trip lines
-        // into the aiPrompt so the AI copies verified numbers instead of hallucinating them.
-        const umrahMonth = detectUmrahMonth(text)
-        const monthLines = umrahMonth && prebuiltCatalog?.monthOverviews
-          ? extractMonthLines(prebuiltCatalog.monthOverviews, umrahMonth)
-          : ''
-
-        let secondAiPrompt: string
-        if (monthLines) {
-          secondAiPrompt = `[تعليمات إلزامية للعمرة: اعرض هذه الرحلات للعميل حرفياً بدون تعديل أي سعر أو تاريخ أو مدة — هذه الأرقام مؤكدة من النظام ولا تقبل التعديل:\n${monthLines}\nثم اسأل: "أنهي رحلة أو معاد يناسب حضرتك؟"]`
-        } else {
-          const overviewInstr = '[تعليمات إلزامية: اعرض الآن نظرة عامة مختصرة على كل البرامج المتاحة — اسم البرنامج + السعر للفرد في سطر واحد — ممنوع تأجيل العرض أو طلب اسم أو عدد — البرامج ذات السعر الخاص تُدرج حرفاً بـ"سعر خاص — للتواصل مع المبيعات" ولا تُحذف — اجمعهم بشكل طبيعي بعد العرض — اختم بـ: "تحب تفاصيل برنامج معين ولا أعرضلك تفاصيل كل البرامج؟"]'
-          secondAiPrompt = aiPrompt ? `${aiPrompt}\n\n${overviewInstr}` : overviewInstr
-        }
+        const overviewInstr = '[تعليمات إلزامية: اعرض الآن نظرة عامة مختصرة على كل البرامج المتاحة — اسم البرنامج + السعر للفرد في سطر واحد — ممنوع تأجيل العرض أو طلب اسم أو عدد — البرامج ذات السعر الخاص تُدرج حرفاً بـ"سعر خاص — للتواصل مع المبيعات" ولا تُحذف — اجمعهم بشكل طبيعي بعد العرض — اختم بـ: "تحب تفاصيل برنامج معين ولا أعرضلك تفاصيل كل البرامج؟"]'
+        const secondAiPrompt = aiPrompt ? `${aiPrompt}\n\n${overviewInstr}` : overviewInstr
         let secondReply = ''
         let secondCost = 0
         try {
