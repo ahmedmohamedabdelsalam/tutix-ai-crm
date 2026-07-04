@@ -283,10 +283,6 @@ interface OverviewState {
 const HAJJ_OV_DISCLAIMER =
   'ملاحظة: التواريخ الهجرية لبرامج الحج ١٤٤٨هـ تقديرية بناءً على الحساب الفلكي وسيُعلن الرسمي منها بعد رؤية الهلال قبل الموسم بأسابيع'
 
-// When overview bypass fires, strip the full catalog from the AI so it physically cannot
-// compose program details — only a one-line greeting is possible.
-const OVERVIEW_BYPASS_CATALOG_STRIP =
-  '[سيتم إرسال قائمة البرامج تلقائياً بعد ردك - اكتب جملة ترحيب قصيرة واحدة فقط ولا تذكر أي برنامج أو سعر]'
 
 @Injectable()
 export class WhatsAppService {
@@ -721,29 +717,11 @@ export class WhatsAppService {
       const isUmrahOv = !!ovMonth && !!prebuiltCatalog.umrahMonthMessages?.[ovMonth]
 
       if (isHajjOv || isUmrahOv) {
-        // Clear any stale full-details state
         this.fullDetailsMap.delete(conv.id)
-
-        // Ask AI for a one-line natural intro only — strip catalog so it cannot compose program details
-        const prebuiltCatalogStripped = prebuiltCatalog
-          ? { ...prebuiltCatalog, catalog: OVERVIEW_BYPASS_CATALOG_STRIP }
-          : prebuiltCatalog
-        let introReply = ''
-        let introCost = 0
-        try {
-          const r = await getAgentReply(history, company.name, packages, aiPrompt, waPhone, company.industry, returningCustomer, knownCustomerName, companyFAQs, knownLeadFacts, prebuiltCatalogStripped)
-          introReply = r.reply
-          introCost = r.costUSD
-        } catch (err) {
-          if (err instanceof ApiCreditsExhaustedError) await this.handleAICreditsExhausted(companyId)
-        }
-        this.writeCostRecord(companyId, conv.id, introCost)
-
-        const parts: string[] = []
-        if (introReply && introReply !== AI_ERROR_REPLY) {
-          await this.saveAssistantMessage(conv.id, introReply)
-          parts.push(introReply)
-        }
+        const firstName = knownCustomerName?.split(/\s+/)[0]
+        const intro = firstName ? `تمام يا أستاذ ${firstName} اتفضل 👇` : `اتفضل يافندم 👇`
+        await this.saveAssistantMessage(conv.id, intro)
+        const parts: string[] = [intro]
 
         if (isHajjOv) {
           const ovMsg = prebuiltCatalog.hajjOverviewMessage + '\n\n' + HAJJ_OV_DISCLAIMER
@@ -762,25 +740,41 @@ export class WhatsAppService {
       }
     }
 
-    // If a first-message overview bypass is about to fire, strip the catalog so the
-    // welcome reply (reply) cannot contain program details — only a greeting is possible.
-    const firstMsgUmrahMonthForBypass = (totalMsgCount === 1 && containsFirstMessageQuestion(text))
-      ? detectUmrahMonth(text) : null
-    const isFirstMsgOverviewBypass = totalMsgCount === 1
-      && containsFirstMessageQuestion(text)
-      && prebuiltCatalog != null
-      && (
-        (detectHajjOverviewIntent(text) && !detectFullDetailsIntent(text) && !!prebuiltCatalog.hajjOverviewMessage)
-        || (!!firstMsgUmrahMonthForBypass && !!prebuiltCatalog.umrahMonthMessages?.[firstMsgUmrahMonthForBypass])
-      )
-    const prebuiltCatalogForWelcome = isFirstMsgOverviewBypass
-      ? { ...prebuiltCatalog!, catalog: OVERVIEW_BYPASS_CATALOG_STRIP }
-      : prebuiltCatalog
+    // First-message overview bypass: zero AI calls — intro from code, prebuilt message appended
+    if (totalMsgCount === 1 && containsFirstMessageQuestion(text) && prebuiltCatalog) {
+      const firstMsgUmrahMonth = detectUmrahMonth(text)
+      const isHajjOvFirst = detectHajjOverviewIntent(text) && !detectFullDetailsIntent(text)
+        && !!prebuiltCatalog.hajjOverviewMessage
+      const isUmrahOvFirst = !!firstMsgUmrahMonth && !!prebuiltCatalog.umrahMonthMessages?.[firstMsgUmrahMonth]
+
+      if (isHajjOvFirst || isUmrahOvFirst) {
+        this.fullDetailsMap.delete(conv.id)
+        const firstName = knownCustomerName?.split(/\s+/)[0]
+        const intro = firstName ? `تمام يا أستاذ ${firstName} اتفضل 👇` : `اتفضل يافندم 👇`
+        await this.saveAssistantMessage(conv.id, intro)
+        const parts: string[] = [intro]
+
+        if (isHajjOvFirst) {
+          const ovMsg = prebuiltCatalog.hajjOverviewMessage + '\n\n' + HAJJ_OV_DISCLAIMER
+          this.overviewMap.set(conv.id, { orderedDetails: prebuiltCatalog.hajjOverviewDetails })
+          await this.saveAssistantMessage(conv.id, ovMsg)
+          parts.push(ovMsg)
+          console.log(`HAJJ_OV_ZERO_AI → ${phone} programs=${prebuiltCatalog.hajjOverviewDetails.length}`)
+        } else if (firstMsgUmrahMonth) {
+          const ovMsg = prebuiltCatalog.umrahMonthMessages[firstMsgUmrahMonth]
+          await this.saveAssistantMessage(conv.id, ovMsg)
+          parts.push(ovMsg)
+          console.log(`UMRAH_OV_ZERO_AI_FIRST → ${phone} month=${firstMsgUmrahMonth}`)
+        }
+
+        return parts.length === 1 ? parts[0] : parts
+      }
+    }
 
     let rawAIReply = AI_ERROR_REPLY
     let aiCostUSD = 0
     try {
-      const r = await getAgentReply(history, company.name, packages, aiPrompt, waPhone, company.industry, returningCustomer, knownCustomerName, companyFAQs, knownLeadFacts, prebuiltCatalogForWelcome)
+      const r = await getAgentReply(history, company.name, packages, aiPrompt, waPhone, company.industry, returningCustomer, knownCustomerName, companyFAQs, knownLeadFacts, prebuiltCatalog)
       rawAIReply = r.reply
       aiCostUSD = r.costUSD
     } catch (err) {
