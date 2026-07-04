@@ -129,6 +129,24 @@ function extractMonthLines(monthOverviews: string, monName: string): string {
   return monthOverviews.slice(s + open.length, e).trim()
 }
 
+function toArabicIndic(n: number): string {
+  return String(n).split('').map(c => { const i = '0123456789'.indexOf(c); return i >= 0 ? ARABIC_INDIC[i] : c }).join('')
+}
+
+function detectFullDetailsIntent(text: string): boolean {
+  // Match requests for full program details even when modifier words are between keywords
+  const hasAll = /كل/.test(text)
+  const hasPrograms = /برامج|رحلات/.test(text)
+  const hasDetails = /تفاصيل/.test(text)
+  if (hasAll && hasPrograms && hasDetails) return true
+  return /اعرضهم\s*كلهم|كله\s*بالتفص|تفاصيل\s*كل/.test(text)
+}
+
+function detectContinueResponse(text: string): boolean {
+  // \b doesn't work with Arabic (non-ASCII = \W). Use optional trailing content instead.
+  return /^(كمل|اكمل|كمّل|ايوه|أيوه|اه|أه|آه|نعم|تمام|ماشي)(\s.*)?$/.test(text.trim())
+}
+
 // ── Follow-up scheduling utilities ──────────────────────────────────────────
 
 const ARABIC_INDIC = '٠١٢٣٤٥٦٧٨٩'
@@ -223,10 +241,16 @@ export function clampToWindow(date: Date): Date {
   return new Date(c.getTime() - CAIRO_OFFSET_MS)
 }
 
+interface FullDetailsState {
+  offset: number
+  total: number
+}
+
 @Injectable()
 export class WhatsAppService {
   private faqCache = new Map<string, { data: { question: string; answer: string }[]; expiresAt: number }>()
   private readonly aiFailureCount = new Map<string, number>()
+  private readonly fullDetailsMap = new Map<string, FullDetailsState>()
 
   constructor(private prisma: PrismaService) {}
 
@@ -586,6 +610,41 @@ export class WhatsAppService {
       await this.saveAssistantMessage(conv.id, clarify)
       console.log(`SHORT-MSG GUARD → ${phone} sent "${trimmedText}"`)
       return clarify
+    }
+
+    // ── Code-driven full-details mode: chunked hajj program delivery ────────────
+    // The AI truncates when asked to show all 9 programs at once. This path bypasses
+    // the AI entirely and delivers exactly 3 programs per message, code-built.
+    if (prebuiltCatalog?.hajjProgramDetails?.length) {
+      const fdState = this.fullDetailsMap.get(conv.id)
+      const isContinue = !!fdState && detectContinueResponse(text)
+      const isNewRequest = !fdState && detectFullDetailsIntent(text)
+
+      if (isContinue || isNewRequest) {
+        const details = prebuiltCatalog.hajjProgramDetails
+        const total = details.length
+        const offset = isContinue ? fdState!.offset : 0
+        const chunkItems = details.slice(offset, offset + 3)
+        const nextOffset = offset + chunkItems.length
+        const isLast = nextOffset >= total
+
+        const chunkText = chunkItems.join('\n\n')
+        const closingLine = isLast
+          ? `كده عرضتلك كل البرامج يافندم — أنهي واحد قرب لقلبك؟`
+          : `دول ${toArabicIndic(nextOffset)} من ${toArabicIndic(total)} يافندم — أكملك الباقي؟`
+        const fdReply = `${chunkText}\n\n${closingLine}`
+
+        if (isLast) this.fullDetailsMap.delete(conv.id)
+        else this.fullDetailsMap.set(conv.id, { offset: nextOffset, total })
+
+        await this.saveAssistantMessage(conv.id, fdReply)
+        console.log(`FD_CHUNK → ${phone} offset=${offset}..${nextOffset - 1}/${total} isLast=${isLast}`)
+        return fdReply
+      }
+
+      if (fdState && !isContinue) {
+        this.fullDetailsMap.delete(conv.id)
+      }
     }
 
     let rawAIReply = AI_ERROR_REPLY

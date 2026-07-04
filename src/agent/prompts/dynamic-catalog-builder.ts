@@ -170,6 +170,52 @@ function formatPrice(n: number): string {
     .split('').map(c => { const i = '0123456789'.indexOf(c); return i >= 0 ? '٠١٢٣٤٥٦٧٨٩'[i] : '٬' }).join('')
 }
 
+function renderHajjProgram(p: HajjProgram, globalIndex?: number): string {
+  const priceLabel = !p.pricePerPerson
+    ? `سعر خاص — للتواصل مع المبيعات`
+    : p.discountedPrice
+      ? `${formatPrice(p.pricePerPerson)} جنيه للفرد (بدون تذكرة ${p.ticketType}) | بعد الخصم: ${formatPrice(p.discountedPrice)} جنيه (خصم ${formatPrice(p.discountAmount ?? 0)} جنيه، ${p.discountNote ?? ''})`
+      : `${formatPrice(p.pricePerPerson)} جنيه للفرد (بدون تذكرة ${p.ticketType})`
+
+  const numPrefix = globalIndex != null ? `${ovToAr(globalIndex + 1)}. ` : ''
+  const lines: string[] = [`${numPrefix}[${p.name}] — ${priceLabel}`]
+
+  if (p.scholarNote) lines.push(p.scholarNote)
+  if (p.subLevels)   lines.push(`مدة البرنامج: ${p.subLevels}`)
+
+  if (p.medina) {
+    const rm = p.medina.roomType ? ` | ${p.medina.roomType}` : ''
+    lines.push(`المدينة: ${p.medina.dateHijri} (الموافق ${p.medina.dateGregorian}) | فندق ${p.medina.hotel}${rm} | ${p.medina.meals}`)
+  }
+
+  if (p.transitToMecca) lines.push(p.transitToMecca)
+
+  if (p.aziziyah) {
+    const noteStr = p.aziziyah.note ? ` (${p.aziziyah.note})` : ''
+    const rm = p.aziziyah.roomType ? ` | ${p.aziziyah.roomType}` : ''
+    lines.push(`العزيزية: ${p.aziziyah.dateHijri} (الموافق ${p.aziziyah.dateGregorian})${noteStr} | فندق ${p.aziziyah.hotel}${rm} | ${p.aziziyah.meals}`)
+  }
+
+  if (p.makkahPreSeason) {
+    lines.push(`مكة: ${p.makkahPreSeason.dateHijri} (الموافق ${p.makkahPreSeason.dateGregorian}) | فندق ${p.makkahPreSeason.hotel} | ${p.makkahPreSeason.meals}`)
+  }
+
+  if (p.arafat)         lines.push(`عرفات: ${p.arafat}`)
+  if (p.mina)           lines.push(`منى: ${p.mina}`)
+  if (p.manasikhMeals)  lines.push(p.manasikhMeals)
+
+  if (p.tahseen) {
+    const durStr = p.tahseen.durationDays ? ` (${p.tahseen.durationDays} أيام كاملة)` : ''
+    lines.push(`التحسين: ${p.tahseen.dateHijri} (الموافق ${p.tahseen.dateGregorian}) | فندق ${p.tahseen.hotel}${durStr} | ${p.tahseen.meals}`)
+  }
+
+  if (p.highlights.length > 0) {
+    p.highlights.forEach(h => lines.push(`← ${h}`))
+  }
+
+  return lines.join('\n')
+}
+
 function buildHajjCatalogFromDB(
   hajjPrograms: HajjProgram[],
   hijriDates: Array<{ hijri: string; gregorian: string }>,
@@ -178,50 +224,7 @@ function buildHajjCatalogFromDB(
     .map(d => `• ${d.hijri} تقريباً = ${d.gregorian}`)
     .join('\n')
 
-  const programBlocks = hajjPrograms.map(p => {
-    const priceLabel = !p.pricePerPerson
-      ? `سعر خاص — للتواصل مع المبيعات`
-      : p.discountedPrice
-        ? `${formatPrice(p.pricePerPerson)} جنيه للفرد (بدون تذكرة ${p.ticketType}) | بعد الخصم: ${formatPrice(p.discountedPrice)} جنيه (خصم ${formatPrice(p.discountAmount ?? 0)} جنيه، ${p.discountNote ?? ''})`
-        : `${formatPrice(p.pricePerPerson)} جنيه للفرد (بدون تذكرة ${p.ticketType})`
-
-    const lines: string[] = [`[${p.name}] — ${priceLabel}`]
-
-    if (p.scholarNote) lines.push(p.scholarNote)
-    if (p.subLevels)   lines.push(`مدة البرنامج: ${p.subLevels}`)
-
-    if (p.medina) {
-      const rm = p.medina.roomType ? ` | ${p.medina.roomType}` : ''
-      lines.push(`المدينة: ${p.medina.dateHijri} (الموافق ${p.medina.dateGregorian}) | فندق ${p.medina.hotel}${rm} | ${p.medina.meals}`)
-    }
-
-    if (p.transitToMecca) lines.push(p.transitToMecca)
-
-    if (p.aziziyah) {
-      const noteStr = p.aziziyah.note ? ` (${p.aziziyah.note})` : ''
-      const rm = p.aziziyah.roomType ? ` | ${p.aziziyah.roomType}` : ''
-      lines.push(`العزيزية: ${p.aziziyah.dateHijri} (الموافق ${p.aziziyah.dateGregorian})${noteStr} | فندق ${p.aziziyah.hotel}${rm} | ${p.aziziyah.meals}`)
-    }
-
-    if (p.makkahPreSeason) {
-      lines.push(`مكة: ${p.makkahPreSeason.dateHijri} (الموافق ${p.makkahPreSeason.dateGregorian}) | فندق ${p.makkahPreSeason.hotel} | ${p.makkahPreSeason.meals}`)
-    }
-
-    if (p.arafat)         lines.push(`عرفات: ${p.arafat}`)
-    if (p.mina)           lines.push(`منى: ${p.mina}`)
-    if (p.manasikhMeals)  lines.push(p.manasikhMeals)
-
-    if (p.tahseen) {
-      const durStr = p.tahseen.durationDays ? ` (${p.tahseen.durationDays} أيام كاملة)` : ''
-      lines.push(`التحسين: ${p.tahseen.dateHijri} (الموافق ${p.tahseen.dateGregorian}) | فندق ${p.tahseen.hotel}${durStr} | ${p.tahseen.meals}`)
-    }
-
-    if (p.highlights.length > 0) {
-      p.highlights.forEach(h => lines.push(`← ${h}`))
-    }
-
-    return lines.join('\n')
-  }).join('\n\n')
+  const programBlocks = hajjPrograms.map(p => renderHajjProgram(p)).join('\n\n')
 
   return `## القسم ٣ب — برامج الحج ١٤٤٨هـ (مايو ٢٠٢٧م) (الأسعار للفرد الواحد - بدون تذكرة الطيران أو العبّارة)
 ⚠️ تنبيه إلزامي: كل سعر حج مذكور هنا هو للفرد الواحد فقط وبدون تذكرة الطيران أو العبّارة — يجب ذكر هذا التوضيح دائماً عند عرض أي سعر.
@@ -229,9 +232,7 @@ function buildHajjCatalogFromDB(
 جدول تحويل تواريخ ذي الحجة ١٤٤٨هـ (تقديرية — يُعلن الرسمي بعد رؤية الهلال):
 ${hijriTable}
 
-─────────────────────────────────────
 ${programBlocks}
-─────────────────────────────────────
 
 ## تعليمات بيع برامج الحج
 • الأسعار أعلاه كلها للفرد الواحد وكلها بدون تذكرة الطيران أو العبّارة — هذا التوضيح إلزامي مع كل سعر تذكره
@@ -243,6 +244,11 @@ ${programBlocks}
 • ⛔ قاعدة التواريخ الهجرية للحج ١٤٤٨هـ — إلزامية بدون استثناء: كل مرة تذكر فيها أي تاريخ من جدول ذي الحجة أعلاه في ردّك يجب إضافة كلمة "تقريباً" بعد التاريخ الهجري مباشرة وجملة "وهذا التاريخ يُعلن رسمياً بعد رؤية الهلال قبل الموسم" في نفس الرد
   مثال ملزم حرفي: "يوم عرفة ٩ ذي الحجة ١٤٤٨هـ تقريباً الموافق ١٥ مايو ٢٠٢٧م والتاريخ الرسمي يُعلن بعد رؤية الهلال"
 • لو سأل "هل يشمل الطيران؟" — جاوب بوضوح: "لا يافندم السعر ده بدون تذكرة الطيران/العبّارة، التذكرة بتُحسب بشكل منفصل حسب توفرها وقت الحجز"`
+}
+
+// Returns one fully-rendered string per program (used for code-driven chunked delivery)
+export function buildHajjProgramDetailsArray(hajjPrograms: HajjProgram[]): string[] {
+  return hajjPrograms.map((p, i) => renderHajjProgram(p, i))
 }
 
 // ── Umrah month overview — code-built for verbatim copy (no AI price hallucination) ──
@@ -383,6 +389,7 @@ export interface IndustryPromptParts {
   hotels: string
   hotelList: HotelEntry[]
   monthOverviews: string
+  hajjProgramDetails: string[]
 }
 
 export function buildIndustryPromptFromDB(
@@ -421,7 +428,9 @@ export function buildIndustryPromptFromDB(
   const hotelList = ind?.hotels ?? []
   const hotels    = buildHotelKnowledgeFromData(hotelList)
 
-  return { identity, catalog, hotels, hotelList, monthOverviews: monthOverview }
+  const hajjProgramDetails = buildHajjProgramDetailsArray(cat.hajjPrograms)
+
+  return { identity, catalog, hotels, hotelList, monthOverviews: monthOverview, hajjProgramDetails }
 }
 
 /** Convenience wrapper: find a hotel in a customer message using DB hotel list */
