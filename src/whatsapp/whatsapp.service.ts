@@ -91,6 +91,14 @@ function applyHajjDateDisclaimer(reply: string): string {
   return `${reply}\n\n${disclaimer}`
 }
 
+// Returns true only when the conversation's own messages mention companion or group context.
+// Used to gate cross-session Lead facts (groupSize, companionNote) from being injected
+// as "confirmed" context when the customer has said nothing about companions in this session.
+export function companionConfirmedInHistory(messages: { content: string }[]): boolean {
+  const text = messages.map(m => m.content).join(' ')
+  return /والد|زوج|مراتي|مراته|أهل|معايا|أنا\s+و/.test(text)
+}
+
 function detectFarFromBranch(text: string): boolean {
   return /بعيد|مش قادر|ما\s*أقدر|مش هينفع|مش ممكن|ما\s*ينفعش|بعد عني|مش عارف أجي/.test(text)
 }
@@ -461,9 +469,15 @@ export class WhatsAppService {
       }
     }
 
-    // For existing conversations: resolve customer name and confirmed facts from the Lead record
-    // so the AI never re-asks for information already captured, even when early messages fall
-    // outside the 10-msg history window.
+    // Resolve customer name and confirmed facts from the Lead record so the AI never re-asks
+    // for info already captured — even when early messages fall outside the 10-msg history window.
+    //
+    // SECURITY: groupSize and companionNote are Cross-Session Leak risks.
+    // The Lead record is shared across ALL conversations for the same phone. If a customer said
+    // "أنا ووالدتي" in a past session, companionNote is stored on the Lead forever. Injecting it
+    // into a new session where they said NOTHING about companions causes the AI to fabricate
+    // "معاك والدتك يعني شخصين". Gate these two fields: only carry them forward when the CURRENT
+    // conversation's own messages already mention a companion or group.
     let knownLeadFacts: LeadFacts | undefined
     if (conv.leadId) {
       const lead = await this.prisma.lead.findUnique({
@@ -472,12 +486,15 @@ export class WhatsAppService {
       })
       if (!knownCustomerName && lead?.name) knownCustomerName = lead.name
       if (lead && (lead.packageType || lead.groupSize != null || lead.travelDate || lead.budget || lead.companionNote)) {
+        const companionInThisConv = companionConfirmedInHistory(conv.messages ?? [])
         knownLeadFacts = {
           packageType: lead.packageType,
-          groupSize: lead.groupSize,
           travelDate: lead.travelDate,
           budget: lead.budget,
-          companionNote: lead.companionNote,
+          // Only carry over companion facts if THIS conversation already mentions them —
+          // prevents stale data from a prior session being asserted as current confirmed context.
+          groupSize:     companionInThisConv ? lead.groupSize     : undefined,
+          companionNote: companionInThisConv ? lead.companionNote : undefined,
         }
       }
     }
