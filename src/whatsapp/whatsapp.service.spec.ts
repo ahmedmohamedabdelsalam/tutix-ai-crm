@@ -1,4 +1,4 @@
-import { companionConfirmedInHistory } from './whatsapp.service'
+import { companionConfirmedInHistory, travelDateConfirmedInHistory } from './whatsapp.service'
 
 // Tests for the cross-session companion-leak fix.
 //
@@ -42,6 +42,39 @@ describe('companionConfirmedInHistory — cross-session companion leak guard', (
     expect(companionConfirmedInHistory([{ content: 'أنا وزوجتي بس' }])).toBe(true)
     expect(companionConfirmedInHistory([{ content: 'معايا ٣ أشخاص' }])).toBe(true)
     expect(companionConfirmedInHistory([{ content: 'مراتي هتيجي معايا' }])).toBe(true)
+  })
+
+})
+
+describe('travelDateConfirmedInHistory — cross-session month leak guard', () => {
+
+  it('TEST 1: bare program request with no month → gate returns false, stale month not injected', () => {
+    // Exact bug scenario: customer sends "قولي برامج العمرة" with no month stated.
+    // Lead.travelDate may hold "أغسطس" from a prior session — the gate must block it.
+    expect(travelDateConfirmedInHistory([])).toBe(false)
+    expect(travelDateConfirmedInHistory([{ content: 'قولي برامج العمرة' }])).toBe(false)
+    expect(travelDateConfirmedInHistory([{ content: 'عايز أعرف عن الأسعار' }])).toBe(false)
+    // Multi-turn conv with no month in any message must still return false:
+    expect(travelDateConfirmedInHistory([
+      { content: 'قولي برامج العمرة' },
+      { content: 'تمام يافندم حضرتك بتسأل عن عمرة ولا حج؟' },
+      { content: 'عمرة طبعاً' },
+    ])).toBe(false)
+  })
+
+  it('TEST 2: month explicitly stated in this session → gate returns true, correct month used', () => {
+    // When the customer actually names a month in this conversation, the gate must allow
+    // Lead.travelDate through so the AI and bypass paths use the correct month.
+    expect(travelDateConfirmedInHistory([{ content: 'عايز عمرة أغسطس' }])).toBe(true)
+    expect(travelDateConfirmedInHistory([{ content: 'اغسطس' }])).toBe(true)
+    expect(travelDateConfirmedInHistory([{ content: 'حاجز في يوليو' }])).toBe(true)
+    expect(travelDateConfirmedInHistory([{ content: 'أي شهر أرخص؟' }])).toBe(true)
+    // Month appears later in the conversation — gate sees the full history:
+    expect(travelDateConfirmedInHistory([
+      { content: 'قولي برامج العمرة' },
+      { content: 'تمام حضرتك بتسأل عن عمرة أنهي شهر؟' },
+      { content: 'أغسطس' },
+    ])).toBe(true)
   })
 
 })
