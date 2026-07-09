@@ -84,19 +84,10 @@ export class WhatsAppController {
           })
         : null
 
-      // Fallback to DEFAULT_COMPANY_ID for legacy / test use
+      // Unknown waPhoneId — return 200 (Meta requires it) but do NOT process
       if (!company) {
-        const fallbackId = process.env.DEFAULT_COMPANY_ID
-        if (!fallbackId) {
-          console.warn(`No company found for phone_number_id: ${incomingPhoneId} and no DEFAULT_COMPANY_ID set`)
-          return
-        }
-        company = await this.prisma.company.findUnique({ where: { id: fallbackId } })
-        if (!company || !company.isActive) {
-          console.warn(`Fallback company ${fallbackId} not found or inactive`)
-          return
-        }
-        console.warn(`Using DEFAULT_COMPANY_ID fallback for phone_number_id: ${incomingPhoneId}`)
+        console.warn(`Unknown waPhoneId ${incomingPhoneId} — message ignored, no company matched`)
+        return
       }
 
       // Mark incoming message as read (shows blue ticks to customer)
