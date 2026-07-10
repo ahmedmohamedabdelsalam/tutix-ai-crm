@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common'
 import { Cron } from '@nestjs/schedule'
 import { PrismaService } from '../prisma/prisma.service'
 import { FollowUpStatus, ConvStatus, MessageRole } from '@prisma/client'
-import { clampToWindow } from './whatsapp.service'
+import { clampToWindow } from './follow-up-scheduler'
 import { CAIRO_OFFSET_MS } from '../utils/arabic-numerals'
 import { sendWhatsAppMessage } from './send-message'
 
