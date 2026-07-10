@@ -3,7 +3,6 @@ import { toArabicIndic } from '../utils/arabic-numerals'
 import { PrismaService } from '../prisma/prisma.service'
 import { ConvStatus, FollowUpStatus, LeadStatus } from '@prisma/client'
 import { getAgentReply, extractLeadData, calculateScore, shouldHandoff, LeadData, LeadFacts, PrebuiltCatalog, ApiCreditsExhaustedError, AI_ERROR_REPLY, BOOKING_KEYWORDS } from '../agent/agent.service'
-import { buildIndustryPromptFromDB } from '../agent/prompts/dynamic-catalog-builder'
 import { splitIntoMessages } from './message-splitter'
 import { applyHajjDateDisclaimer } from './hajj-date-disclaimer'
 import { companionConfirmedInHistory, travelDateConfirmedInHistory } from './lead-fact-guards'
@@ -16,6 +15,7 @@ import { handleAICreditsExhausted, writeCostRecord } from './ai-cost-helpers'
 import { saveAssistantMessage, completeBookingAlert } from './message-persistence'
 import { getCompanyFAQ } from './faq-cache'
 import { incrementAIFailure, resetAIFailure } from './ai-failure-tracker'
+import { getPrebuiltCatalog } from './catalog-loader'
 import { fullDetailsMap, overviewMap } from './conversation-state'
 
 const HAJJ_OV_DISCLAIMER =
@@ -28,14 +28,6 @@ export class WhatsAppService {
 
 
 
-
-  private async getPrebuiltCatalog(companyId: string, companyName: string): Promise<PrebuiltCatalog | undefined> {
-    if (process.env.USE_DB_CATALOG !== 'true') return undefined
-    const config = await this.prisma.companyAIConfig.findUnique({ where: { companyId } })
-    if (!config) { console.log(`DB_CATALOG: no config for companyId=${companyId}`); return undefined }
-    console.log(`DB_CATALOG: loaded config id=${config.id} company=${companyName}`)
-    return buildIndustryPromptFromDB(config as any, companyName)
-  }
 
 
   async handleMessage(companyId: string, phone: string, text: string, source = 'direct', referralData?: object | null): Promise<string | string[]> {
@@ -227,7 +219,7 @@ export class WhatsAppService {
         // Suppress phone in CTA once handoff message already sent — prevents repeat
         const waPhoneNH  = conv.handoffMessageSent ? '' : (company.phone ?? company.ownerPhone ?? '')
         const faqsNH = await getCompanyFAQ(this.prisma, companyId)
-        const prebuiltCatalogNH = await this.getPrebuiltCatalog(companyId, company.name)
+        const prebuiltCatalogNH = await getPrebuiltCatalog(this.prisma, companyId, company.name)
         let rawNHReply = AI_ERROR_REPLY
         try {
           const r = await getAgentReply(historyNH, company.name, packagesNH, aiPromptNH, waPhoneNH, company.industry, undefined, knownCustomerName, faqsNH, knownLeadFacts, prebuiltCatalogNH)
@@ -302,7 +294,7 @@ export class WhatsAppService {
     const waPhone  = company.phone ?? company.ownerPhone ?? ''
 
     const companyFAQs = await getCompanyFAQ(this.prisma, companyId)
-    const prebuiltCatalog = await this.getPrebuiltCatalog(companyId, company.name)
+    const prebuiltCatalog = await getPrebuiltCatalog(this.prisma, companyId, company.name)
 
     // Meaningless-short guard: 1–2 Arabic chars with no semantic content = accidental tap / typo.
     // Handled here in code so the LLM never sees these inputs and can't mis-apply clarification rules.
@@ -690,7 +682,7 @@ export class WhatsAppService {
     const aiPrompt = company.aiPrompt ?? ''
     const waPhone  = company.phone ?? company.ownerPhone ?? ''
     const faqs = await getCompanyFAQ(this.prisma, conv.companyId)
-    const prebuiltCatalogTrigger = await this.getPrebuiltCatalog(conv.companyId, company.name)
+    const prebuiltCatalogTrigger = await getPrebuiltCatalog(this.prisma, conv.companyId, company.name)
 
     let rawTriggerReply = AI_ERROR_REPLY
     try {
