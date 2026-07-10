@@ -15,6 +15,7 @@ import { detectFollowUpIntent, clampToWindow, DEFERRAL_PHRASES } from './follow-
 import { handleAICreditsExhausted, writeCostRecord } from './ai-cost-helpers'
 import { saveAssistantMessage, completeBookingAlert } from './message-persistence'
 import { getCompanyFAQ } from './faq-cache'
+import { incrementAIFailure, resetAIFailure } from './ai-failure-tracker'
 
 interface FullDetailsState {
   offset: number
@@ -31,7 +32,6 @@ const HAJJ_OV_DISCLAIMER =
 
 @Injectable()
 export class WhatsAppService {
-  private readonly aiFailureCount = new Map<string, number>()
   private readonly fullDetailsMap = new Map<string, FullDetailsState>()
   private readonly overviewMap    = new Map<string, OverviewState>()
 
@@ -462,14 +462,13 @@ export class WhatsAppService {
     }
 
     if (rawAIReply === AI_ERROR_REPLY) {
-      const fc = (this.aiFailureCount.get(conv.id) ?? 0) + 1
-      this.aiFailureCount.set(conv.id, fc)
+      const fc = incrementAIFailure(conv.id)
       if (fc >= 2) {
         await this.prisma.conversation.update({
           where: { id: conv.id },
           data: { needsSalesContact: true, salesAlertReason: 'تكرار أخطاء الذكاء الاصطناعي' },
         })
-        this.aiFailureCount.delete(conv.id)
+        resetAIFailure(conv.id)
         console.log(`AI_FAILURE_ESCALATED → ${phone} (${fc} consecutive failures)`)
         return ''
       }
@@ -478,7 +477,7 @@ export class WhatsAppService {
       return rawAIReply
     }
 
-    this.aiFailureCount.delete(conv.id)
+    resetAIFailure(conv.id)
     writeCostRecord(this.prisma, companyId, conv.id, aiCostUSD)
     const reply = applyHajjDateDisclaimer(rawAIReply)
 
