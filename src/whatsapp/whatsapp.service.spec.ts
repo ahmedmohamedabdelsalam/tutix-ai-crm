@@ -1,4 +1,4 @@
-import { companionConfirmedInHistory, travelDateConfirmedInHistory } from './whatsapp.service'
+import { companionConfirmedInHistory, travelDateConfirmedInHistory } from './lead-fact-guards'
 
 // triggerAIReply applies the same guards as handleMessage.
 // freshMessages (last 10 from DB) is what both guards scan.
