@@ -517,7 +517,7 @@ export class WhatsAppService {
         if (conv.bookingStage === 'AWAITING_GOVERNORATE') {
           const gov = getGovFromText(text)
           if (gov) {
-            await this.prisma.lead.updateMany({ where: { companyId, phone }, data: { governorate: gov } })
+            if (conv.leadId) await this.prisma.lead.update({ where: { id: conv.leadId }, data: { governorate: gov } })
             const bMsg = `شكراً يافندم! بناءً على موقعك في ${gov} — أقرب فرع ليك هو:\n${branchMessage(gov)}\n\nهتيجي للفرع لإتمام الحجز؟`
             await this.prisma.conversation.update({ where: { id: conv.id }, data: { bookingStage: 'AWAITING_BRANCH_CONFIRM' } })
             await this.saveAssistantMessage(conv.id, bMsg)
@@ -852,8 +852,8 @@ export class WhatsAppService {
       }
       score = calculateScore(extracted)
       try {
-        await this.prisma.lead.updateMany({
-          where: { companyId, phone },
+        if (conv.leadId) await this.prisma.lead.update({
+          where: { id: conv.leadId },
           data: {
             ...(extracted.name && !knownCustomerName && { name: extracted.name }),
             ...(extracted.packageType && { packageType: extracted.packageType }),
@@ -867,7 +867,7 @@ export class WhatsAppService {
           },
         })
       } catch (err) {
-        console.error(`DB_ERROR lead.updateMany phone=${phone} companyId=${companyId}`, err)
+        console.error(`DB_ERROR lead.update leadId=${conv.leadId} companyId=${companyId}`, err)
       }
     }
 
@@ -987,8 +987,8 @@ export class WhatsAppService {
     })
     await this.saveAssistantMessage(conv.id, bookingMsg)
     // First booking flow trigger → promote lead to PENDING_PAYMENT
-    await this.prisma.lead.updateMany({
-      where: { companyId, phone },
+    if (conv.leadId) await this.prisma.lead.update({
+      where: { id: conv.leadId },
       data: { status: LeadStatus.PENDING_PAYMENT, isHot: true },
     })
     console.log(`BOOKING_FLOW → ${phone} stage=${newStage} | Score: ${score} | ${reason}`)
