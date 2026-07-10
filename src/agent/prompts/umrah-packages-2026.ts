@@ -1,3 +1,5 @@
+import { toArabicIndic, formatPrice } from '../../utils/arabic-numerals'
+
 export type ProgramType = 'اقتصادي' | 'اقتصادي متميز' | 'خمس نجوم'
 
 export interface UmrahProgram {
@@ -104,13 +106,6 @@ const MONTH_HIJRI_RANGE: Record<string, string> = {
 
 // ── helpers ─────────────────────────────────────────────────────────────────
 
-function toAI(n: number): string {
-  return String(n).split('').map(c => {
-    const i = '0123456789'.indexOf(c)
-    return i >= 0 ? '٠١٢٣٤٥٦٧٨٩'[i] : c
-  }).join('')
-}
-
 function fmtHijriRange(dep: string | undefined | null, ret: string | undefined | null): string {
   if (!dep || !ret) return ''
   // Compress same-month ranges: "١ صفر ١٤٤٨هـ" / "١٠ صفر ١٤٤٨هـ" → "١-١٠ صفر ١٤٤٨هـ"
@@ -122,19 +117,8 @@ function fmtHijriRange(dep: string | undefined | null, ret: string | undefined |
   return `${dep} إلى ${ret}`
 }
 
-function fmtPrice(n: number): string {
-  return String(n)
-    .replace(/\B(?=(\d{3})+(?!\d))/g, ',')
-    .split('')
-    .map(c => {
-      const i = '0123456789'.indexOf(c)
-      return i >= 0 ? '٠١٢٣٤٥٦٧٨٩'[i] : '٬'
-    })
-    .join('')
-}
-
 function fmtDuration(d: number): string {
-  return toAI(d) + (d <= 10 ? ' أيام' : ' يوم')
+  return toArabicIndic(d) + (d <= 10 ? ' أيام' : ' يوم')
 }
 
 // ── main export (static path — unchanged) ────────────────────────────────────
@@ -213,9 +197,9 @@ ${linksBlock}`
         p.meccaBreakfast  ? 'نعم' : 'لا',
         p.medinaBreakfast ? 'نعم' : 'لا',
         p.haramainTrain   ? 'نعم' : 'لا',
-        fmtPrice(p.priceQuad),
-        fmtPrice(p.priceTriple),
-        fmtPrice(p.priceDouble),
+        formatPrice(p.priceQuad),
+        formatPrice(p.priceTriple),
+        formatPrice(p.priceDouble),
       ]
       sections.push('| ' + row.join(' | ') + ' |')
     }

@@ -3,6 +3,7 @@ import { Cron } from '@nestjs/schedule'
 import { PrismaService } from '../prisma/prisma.service'
 import { FollowUpStatus, ConvStatus, MessageRole } from '@prisma/client'
 import { clampToWindow } from './whatsapp.service'
+import { CAIRO_OFFSET_MS } from '../utils/arabic-numerals'
 
 function categorizeDropOff(lastMsg: string, totalMsgCount: number): string {
   if (/غالي|تخفيض|خصم|أرخص/.test(lastMsg)) return 'بعد التعامل مع اعتراض'
@@ -12,8 +13,6 @@ function categorizeDropOff(lastMsg: string, totalMsgCount: number): string {
   if (/تشرفنا باسم|نورتنا|إزاي أقدر أساعدك|إيه اللي تحب|تحب أعرفك/.test(lastMsg) && totalMsgCount <= 4) return 'بعد التحية / السؤال عن الاسم'
   return 'أخرى'
 }
-
-const CAIRO_OFFSET_MS = 2 * 60 * 60 * 1000
 
 function getCairoHour(): number {
   return new Date(Date.now() + CAIRO_OFFSET_MS).getUTCHours()

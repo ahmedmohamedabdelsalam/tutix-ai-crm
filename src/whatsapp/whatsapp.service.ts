@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common'
+import { ARABIC_INDIC, CAIRO_OFFSET_MS, toArabicIndic } from '../utils/arabic-numerals'
 import { PrismaService } from '../prisma/prisma.service'
 import { ConvStatus, FollowUpStatus, LeadStatus } from '@prisma/client'
 import { getAgentReply, extractLeadData, calculateScore, shouldHandoff, LeadData, LeadFacts, PrebuiltCatalog, ApiCreditsExhaustedError, AI_ERROR_REPLY } from '../agent/agent.service'
@@ -136,19 +137,6 @@ function detectUmrahMonth(text: string): string | null {
 }
 
 // Extracts just the trip lines for a specific month from the monthOverviews block.
-function extractMonthLines(monthOverviews: string, monName: string): string {
-  const open = `[ملخص رحلات ${monName} ٢٠٢٦ — انقله حرفياً]`
-  const close = `[/ملخص رحلات ${monName} ٢٠٢٦]`
-  const s = monthOverviews.indexOf(open)
-  const e = monthOverviews.indexOf(close)
-  if (s < 0 || e < 0) return ''
-  return monthOverviews.slice(s + open.length, e).trim()
-}
-
-function toArabicIndic(n: number): string {
-  return String(n).split('').map(c => { const i = '0123456789'.indexOf(c); return i >= 0 ? ARABIC_INDIC[i] : c }).join('')
-}
-
 function detectFullDetailsIntent(text: string): boolean {
   // Match requests for full program details even when modifier words are between keywords
   const hasAll = /كل/.test(text)
@@ -194,9 +182,6 @@ function detectNumberReply(text: string): number | null {
 }
 
 // ── Follow-up scheduling utilities ──────────────────────────────────────────
-
-const ARABIC_INDIC = '٠١٢٣٤٥٦٧٨٩'
-const CAIRO_OFFSET_MS = 2 * 60 * 60 * 1000
 
 function parseDaysFromText(text: string): number | null {
   if (/بكر[هة]|يوم واحد/.test(text)) return 1

@@ -10,6 +10,7 @@
  */
 
 import { CompanyAIConfig } from '@prisma/client'
+import { toArabicIndic, formatPrice } from '../../utils/arabic-numerals'
 import { UmrahProgram, ProgramType, buildUmrahCatalogTableFromData } from './umrah-packages-2026'
 import { HotelEntry, buildHotelKnowledgeFromData, findHotelInMessageFromData } from './hajj-umrah-hotels'
 
@@ -69,10 +70,6 @@ interface IndustryDataJson {
 // UmrahProgram interface.  This mapper bridges the gap so the renderer always
 // receives correctly-shaped objects regardless of which schema was used.
 function normDbUmrahProgram(p: any, idx: number): UmrahProgram {
-  const AR_DIGITS = '٠١٢٣٤٥٦٧٨٩'
-  const toAr = (n: number): string =>
-    String(n).split('').map(c => AR_DIGITS['0123456789'.indexOf(c) ?? -1] ?? c).join('')
-
   const MONTH_NAMES: Record<number, string> = { 7: 'يوليو', 8: 'أغسطس', 9: 'سبتمبر' }
 
   // Convert ISO date → Arabic display, e.g. '2026-07-26' → '٢٦ يوليو ٢٠٢٦'
@@ -80,7 +77,7 @@ function normDbUmrahProgram(p: any, idx: number): UmrahProgram {
     if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso ?? ''
     const day = parseInt(iso.slice(8), 10)
     const mon = parseInt(iso.slice(5, 7), 10)
-    return `${toAr(day)} ${MONTH_NAMES[mon] ?? iso.slice(5, 7)} ٢٠٢٦`
+    return `${toArabicIndic(day)} ${MONTH_NAMES[mon] ?? iso.slice(5, 7)} ٢٠٢٦`
   }
 
   const isoDepart: string = p.departureDate ?? ''
@@ -160,16 +157,6 @@ ${branchLines}
 
 // ── Hajj catalog renderer ─────────────────────────────────────────────────────
 
-function fmtHajjPrice(n: number): string {
-  return n.toLocaleString('ar-EG').replace(/,/g, '٬') + '٬٠٠٠'.slice(3 - String(n).length % 3 === 0 ? 3 : 0)
-    || String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '٬')
-}
-
-function formatPrice(n: number): string {
-  return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
-    .split('').map(c => { const i = '0123456789'.indexOf(c); return i >= 0 ? '٠١٢٣٤٥٦٧٨٩'[i] : '٬' }).join('')
-}
-
 function renderHajjProgram(p: HajjProgram, globalIndex?: number): string {
   const priceLabel = !p.pricePerPerson
     ? `سعر خاص — للتواصل مع المبيعات`
@@ -177,7 +164,7 @@ function renderHajjProgram(p: HajjProgram, globalIndex?: number): string {
       ? `${formatPrice(p.pricePerPerson)} جنيه للفرد (بدون تذكرة ${p.ticketType}) | بعد الخصم: ${formatPrice(p.discountedPrice)} جنيه (خصم ${formatPrice(p.discountAmount ?? 0)} جنيه، ${p.discountNote ?? ''})`
       : `${formatPrice(p.pricePerPerson)} جنيه للفرد (بدون تذكرة ${p.ticketType})`
 
-  const numPrefix = globalIndex != null ? `${ovToAr(globalIndex + 1)}. ` : ''
+  const numPrefix = globalIndex != null ? `${toArabicIndic(globalIndex + 1)}. ` : ''
   const lines: string[] = [`${numPrefix}[${p.name}] — ${priceLabel}`]
 
   if (p.scholarNote) lines.push(p.scholarNote)
@@ -278,7 +265,7 @@ export function buildHajjOverviewMessage(hajjPrograms: HajjProgram[]): HajjOverv
   let n = 0
   const ovLine = (p: HajjProgram): string => {
     n++
-    const num = ovToAr(n)
+    const num = toArabicIndic(n)
     if (!p.pricePerPerson) return `${num}• ${p.name}`
     const price = formatPrice(p.pricePerPerson)
     // Show ticket note only when it's not the standard airplane ticket
@@ -364,9 +351,9 @@ export function buildUmrahMonthMessage(month: string, rawPrograms: any[]): strin
 
   const lines = [`*رحلات عمرة ${month} ٢٠٢٦*`]
   trips.forEach((t, i) => {
-    const dur = `${ovToAr(t.duration)} ${ovDurWord(t.duration)}`
+    const dur = `${toArabicIndic(t.duration)} ${ovDurWord(t.duration)}`
     const hotels = [t.meccaHotel, t.medinaHotel].filter(Boolean).join(' + ')
-    lines.push(`${ovToAr(i + 1)}• ${ovFmtDay(t.depISO)} — ${ovFmtDay(t.retISO)} (${dur}) — ${hotels} — يبدأ من ${ovFmtPrice(t.minQuad)} ج`)
+    lines.push(`${toArabicIndic(i + 1)}• ${ovFmtDay(t.depISO)} — ${ovFmtDay(t.retISO)} (${dur}) — ${hotels} — يبدأ من ${formatPrice(t.minQuad)} ج`)
   })
   lines.push('')
   lines.push('ابعت رقم الرحلة وهبعتلك برامجها وأسعارها كاملة')
@@ -376,27 +363,12 @@ export function buildUmrahMonthMessage(month: string, rawPrograms: any[]): strin
 
 // ── Umrah month overview — code-built for verbatim copy (no AI price hallucination) ──
 
-const OV_AR = '٠١٢٣٤٥٦٧٨٩'
 const OV_MONTHS: Record<number, string> = { 7: 'يوليو', 8: 'أغسطس', 9: 'سبتمبر', 10: 'أكتوبر', 11: 'نوفمبر' }
-
-function ovToAr(n: number): string {
-  return String(Math.round(n)).split('').map(c => { const i = '0123456789'.indexOf(c); return i >= 0 ? OV_AR[i] : c }).join('')
-}
-
-function ovFmtPrice(n: number): string {
-  return String(Math.round(n))
-    .replace(/\B(?=(\d{3})+(?!\d))/g, ',')
-    .split('').map(c => {
-      if (c === ',') return '٬'
-      const i = '0123456789'.indexOf(c)
-      return i >= 0 ? OV_AR[i] : c
-    }).join('')
-}
 
 function ovFmtDay(iso: string): string {
   const day = parseInt(iso.slice(8), 10)
   const mon = parseInt(iso.slice(5, 7), 10)
-  return `${ovToAr(day)} ${OV_MONTHS[mon] ?? iso.slice(5, 7)}`
+  return `${toArabicIndic(day)} ${OV_MONTHS[mon] ?? iso.slice(5, 7)}`
 }
 
 function ovDurWord(n: number): string { return n >= 3 && n <= 10 ? 'أيام' : 'يوم' }
@@ -435,7 +407,7 @@ export function buildUmrahMonthOverview(rawPrograms: any[]): string {
     if (mt.length === 0) continue
     const monName = OV_MONTHS[mon] ?? String(mon)
     const lines = mt.map(t =>
-      `${ovFmtDay(t.depISO)} — ${ovFmtDay(t.retISO)} (${ovToAr(t.duration)} ${ovDurWord(t.duration)}) — يبدأ من ${ovFmtPrice(t.minPrice)} جنيه للفرد`
+      `${ovFmtDay(t.depISO)} — ${ovFmtDay(t.retISO)} (${toArabicIndic(t.duration)} ${ovDurWord(t.duration)}) — يبدأ من ${formatPrice(t.minPrice)} جنيه للفرد`
     )
     blocks.push(`[ملخص رحلات ${monName} ٢٠٢٦ — انقله حرفياً]\n${lines.join('\n')}\n[/ملخص رحلات ${monName} ٢٠٢٦]`)
   }
@@ -571,9 +543,3 @@ export function buildIndustryPromptFromDB(
   }
 }
 
-/** Convenience wrapper: find a hotel in a customer message using DB hotel list */
-export function findHotelInMessageDB(message: string, config: CompanyAIConfig): string | null {
-  const ind = config.industryData as unknown as IndustryDataJson | null
-  if (!ind?.hotels) return null
-  return findHotelInMessageFromData(message, ind.hotels)
-}
