@@ -165,7 +165,7 @@ function renderHajjProgram(p: HajjProgram, globalIndex?: number): string {
       : `${formatPrice(p.pricePerPerson)} جنيه للفرد (بدون تذكرة ${p.ticketType})`
 
   const numPrefix = globalIndex != null ? `${toArabicIndic(globalIndex + 1)}. ` : ''
-  const lines: string[] = [`${numPrefix}[${p.name}] — ${priceLabel}`]
+  const lines: string[] = [`${numPrefix}*${p.name}* — ${priceLabel}`]
 
   if (p.scholarNote) lines.push(p.scholarNote)
   if (p.subLevels)   lines.push(`مدة البرنامج: ${p.subLevels}`)
@@ -197,7 +197,7 @@ function renderHajjProgram(p: HajjProgram, globalIndex?: number): string {
   }
 
   if (p.highlights.length > 0) {
-    p.highlights.forEach(h => lines.push(`← ${h}`))
+    p.highlights.forEach(h => lines.push(`· ${h}`))
   }
 
   return lines.join('\n')
@@ -266,15 +266,16 @@ export function buildHajjOverviewMessage(hajjPrograms: HajjProgram[]): HajjOverv
   const ovLine = (p: HajjProgram): string => {
     n++
     const num = toArabicIndic(n)
-    if (!p.pricePerPerson) return `${num}• ${p.name}`
+    const name = p.name.trim()
+    if (!p.pricePerPerson) return `${num}• *${name}*`
     const price = formatPrice(p.pricePerPerson)
     // Show ticket note only when it's not the standard airplane ticket
     const ticketNote = p.ticketType && p.ticketType !== 'طيران'
       ? ` (بدون تذكرة ال${p.ticketType.replace(/^ال/, '')})` : ''
     if (p.discountedPrice) {
-      return `${num}• ${p.name} — ${price} ج وبعد الخصم ${formatPrice(p.discountedPrice)} ج`
+      return `${num}• *${name}* — ${price} ج وبعد الخصم ${formatPrice(p.discountedPrice)} ج`
     }
-    return `${num}• ${p.name} — ${price} ج${ticketNote}`
+    return `${num}• *${name}* — ${price} ج${ticketNote}`
   }
 
   const lines: string[] = [`*برامج الحج ١٤٤٨هـ — مايو ٢٠٢٧م*`]
