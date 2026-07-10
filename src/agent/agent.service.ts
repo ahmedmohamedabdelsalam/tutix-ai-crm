@@ -343,7 +343,7 @@ export function calculateScore(data: Partial<LeadData>): number {
   return score;
 }
 
-const BOOKING_KEYWORDS = [
+export const BOOKING_KEYWORDS = [
   'عايز احجز', 'عايزة احجز', 'هحجز', 'موافق نحجز', 'تمام هنحجز',
   'خد الحجز', 'احجزلي', 'احجزي لي', 'نحجز دلوقتي', 'كمل الحجز',
   'ابدأ الحجز', 'خليني احجز', 'اوك نحجز', 'اوكيه نحجز',

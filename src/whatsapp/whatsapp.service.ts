@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common'
 import { ARABIC_INDIC, CAIRO_OFFSET_MS, toArabicIndic } from '../utils/arabic-numerals'
 import { PrismaService } from '../prisma/prisma.service'
 import { ConvStatus, FollowUpStatus, LeadStatus } from '@prisma/client'
-import { getAgentReply, extractLeadData, calculateScore, shouldHandoff, LeadData, LeadFacts, PrebuiltCatalog, ApiCreditsExhaustedError, AI_ERROR_REPLY } from '../agent/agent.service'
+import { getAgentReply, extractLeadData, calculateScore, shouldHandoff, LeadData, LeadFacts, PrebuiltCatalog, ApiCreditsExhaustedError, AI_ERROR_REPLY, BOOKING_KEYWORDS } from '../agent/agent.service'
 import { buildIndustryPromptFromDB } from '../agent/prompts/dynamic-catalog-builder'
 import { splitIntoMessages } from './message-splitter'
 
@@ -558,8 +558,7 @@ export class WhatsAppService {
         }
 
         // Repeat booking keyword after handoff already sent → short ack, no AI call
-        const BOOKING_REPEAT = ['عايز احجز', 'عايزة احجز', 'هحجز', 'احجزلي', 'عايز أحجز', 'عايزة أحجز', 'موافق نحجز']
-        if (conv.handoffMessageSent && BOOKING_REPEAT.some(kw => text.includes(kw))) {
+        if (conv.handoffMessageSent && BOOKING_KEYWORDS.some(kw => text.includes(kw))) {
           const repeatAck = 'تمام يافندم زميلنا هيتواصل معك في أقرب وقت إن شاء الله'
           await this.saveAssistantMessage(conv.id, repeatAck)
           console.log(`REPEAT_BOOKING_ACK → ${phone}`)
@@ -835,9 +834,8 @@ export class WhatsAppService {
 
     // Run extractLeadData on msg 1-2 (capture name early), every 3rd message,
     // or whenever the customer's message contains a booking keyword.
-    const BOOKING_SIGNALS = ['عايز احجز', 'عايزة احجز', 'هحجز', 'احجزلي', 'موافق نحجز', 'خد الحجز'];
     const msgCount = totalMsgCount; // total msgs in DB (not history.length, which is capped at 10)
-    const hasBookingSignal = BOOKING_SIGNALS.some(kw => text.includes(kw));
+    const hasBookingSignal = BOOKING_KEYWORDS.some(kw => text.includes(kw));
     const runExtract = msgCount <= 2 || msgCount % 8 === 0 || hasBookingSignal;
     console.log(`EXTRACT: msg=${msgCount} run=${runExtract} (booking=${hasBookingSignal} mod5=${msgCount % 5 === 0})`);
 
