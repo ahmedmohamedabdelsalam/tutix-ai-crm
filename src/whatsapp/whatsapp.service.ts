@@ -8,76 +8,7 @@ import { splitIntoMessages } from './message-splitter'
 import { applyHajjDateDisclaimer } from './hajj-date-disclaimer'
 import { companionConfirmedInHistory, travelDateConfirmedInHistory } from './lead-fact-guards'
 import { detectOnlinePayment, detectFarFromBranch, detectVisitConfirm } from './booking-stage-detectors'
-
-// ── Branch mapping ───────────────────────────────────────────────────────────
-
-const BRANCH_MAP: Array<[string[], string]> = [
-  [
-    ['الإسكندرية', 'البحيرة', 'مطروح'],
-    'فرع الإسكندرية — شقة 2، الدور الأول، عمارة 4 البانسيون، عمارات أزهار السرايا، شارع فوزي معاذ، سموحة',
-  ],
-  [
-    ['القاهرة', 'الجيزة', 'القليوبية', 'الإسماعيلية', 'السويس'],
-    'فرع القاهرة — عمارة 18، شارع الطاقة، مشروع 27، مدينة نصر',
-  ],
-  [
-    ['بورسعيد'],
-    'وكيلنا في بورسعيد (أفيلابول) — مساكن الحزب الوطني ع33، بجوار استوديو محسن',
-  ],
-  [
-    ['دمياط', 'الدقهلية', 'المنوفية', 'الغربية', 'الشرقية', 'كفر الشيخ'],
-    'فرع دمياط الجديدة — المنطقة المركزية، شارع البنك الأهلي القديم',
-  ],
-]
-
-const CAIRO_GOVS = new Set(['القاهرة', 'الجيزة', 'القليوبية', 'الإسماعيلية', 'السويس'])
-
-const GOV_PATTERNS: Array<[RegExp, string]> = [
-  [/إسكندرية|اسكندرية|أسكندرية|سكندرية/, 'الإسكندرية'],
-  [/البحيرة|بحيرة/, 'البحيرة'],
-  [/مطروح/, 'مطروح'],
-  [/القاهرة|قاهرة/, 'القاهرة'],
-  [/الجيزة|جيزة/, 'الجيزة'],
-  [/القليوبية|قليوبية/, 'القليوبية'],
-  [/دمياط/, 'دمياط'],
-  [/بورسعيد/, 'بورسعيد'],
-  [/الدقهلية|دقهلية/, 'الدقهلية'],
-  [/المنوفية|منوفية/, 'المنوفية'],
-  [/الغربية|غربية/, 'الغربية'],
-  [/الشرقية|شرقية/, 'الشرقية'],
-  [/كفر الشيخ|كفرالشيخ/, 'كفر الشيخ'],
-  [/الإسماعيلية|اسماعيلية|إسماعيلية/, 'الإسماعيلية'],
-  [/السويس|سويس/, 'السويس'],
-  [/أسوان|اسوان/, 'أسوان'],
-  [/الأقصر|اقصر|أقصر/, 'الأقصر'],
-  [/سوهاج/, 'سوهاج'],
-  [/أسيوط|اسيوط/, 'أسيوط'],
-  [/قنا/, 'قنا'],
-  [/المنيا|منيا/, 'المنيا'],
-  [/بني سويف|بنى سويف/, 'بني سويف'],
-  [/الفيوم|فيوم/, 'الفيوم'],
-]
-
-function getGovFromText(text: string): string | null {
-  for (const [pat, gov] of GOV_PATTERNS) {
-    if (pat.test(text)) return gov
-  }
-  return null
-}
-
-function getBranch(gov: string): string {
-  for (const [govs, branch] of BRANCH_MAP) {
-    if (govs.includes(gov)) return branch
-  }
-  return 'فرع القاهرة — عمارة 18، شارع الطاقة، مشروع 27، مدينة نصر'
-}
-
-function branchMessage(gov: string): string {
-  const branch = getBranch(gov)
-  const remoteSuffix = !CAIRO_GOVS.has(gov) && branch.startsWith('فرع القاهرة')
-    ? '\n(أو تواصل مع زميلنا المختص لترتيب أنسب طريقة ليك)' : ''
-  return `📍 ${branch}${remoteSuffix}`
-}
+import { getGovFromText, branchMessage } from './branch-lookup'
 
 
 // Returns true when the customer's first message contains a real question or service intent,
