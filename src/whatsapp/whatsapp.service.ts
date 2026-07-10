@@ -7,6 +7,7 @@ import { buildIndustryPromptFromDB } from '../agent/prompts/dynamic-catalog-buil
 import { splitIntoMessages } from './message-splitter'
 import { applyHajjDateDisclaimer } from './hajj-date-disclaimer'
 import { companionConfirmedInHistory, travelDateConfirmedInHistory } from './lead-fact-guards'
+import { detectOnlinePayment, detectFarFromBranch, detectVisitConfirm } from './booking-stage-detectors'
 
 // ── Branch mapping ───────────────────────────────────────────────────────────
 
@@ -78,19 +79,6 @@ function branchMessage(gov: string): string {
   return `📍 ${branch}${remoteSuffix}`
 }
 
-function detectOnlinePayment(text: string): boolean {
-  return /فودافون\s*كاش|إنستاباي|انستاباي|تحويل\s*بنكي|أونلاين|اونلاين|فيزا|محفظة/.test(text)
-}
-
-
-
-function detectFarFromBranch(text: string): boolean {
-  return /بعيد|مش قادر|ما\s*أقدر|مش هينفع|مش ممكن|ما\s*ينفعش|بعد عني|مش عارف أجي/.test(text)
-}
-
-function detectVisitConfirm(text: string): boolean {
-  return /تمام|هيجي|هجي|هنيجي|هنجي|موافق|طيب|أيوه|ايوه|اوكي|حاضر|هروح|هحضر|ماشي/.test(text)
-}
 
 // Returns true when the customer's first message contains a real question or service intent,
 // so the AI can send an immediate answer after the welcome instead of waiting for a name.
