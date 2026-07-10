@@ -86,13 +86,17 @@ export class FollowUpService {
       }
 
       // Mark as sent + save to message history regardless of send result
-      await this.prisma.conversation.update({
-        where: { id: conv.id },
-        data: { followUpStatus: FollowUpStatus.SENT, followUpScheduledAt: null },
-      })
-      await this.prisma.message.create({
-        data: { conversationId: conv.id, role: 'ASSISTANT', content: msg },
-      })
+      try {
+        await this.prisma.conversation.update({
+          where: { id: conv.id },
+          data: { followUpStatus: FollowUpStatus.SENT, followUpScheduledAt: null },
+        })
+        await this.prisma.message.create({
+          data: { conversationId: conv.id, role: 'ASSISTANT', content: msg },
+        })
+      } catch (err) {
+        this.logger.error(`DB_ERROR follow-up mark-sent conv=${conv.id}`, err)
+      }
       sent++
     }
 

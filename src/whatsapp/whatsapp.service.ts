@@ -397,11 +397,17 @@ export class WhatsAppService {
     const msgInclude = { messages: { orderBy: { createdAt: 'asc' as const } } }
 
     // Find any open (non-closed) conversation for this phone
-    let conv = await this.prisma.conversation.findFirst({
-      where: { companyId, phone, status: { not: ConvStatus.CLOSED } },
-      include: msgInclude,
-      orderBy: { updatedAt: 'desc' },
-    })
+    let conv
+    try {
+      conv = await this.prisma.conversation.findFirst({
+        where: { companyId, phone, status: { not: ConvStatus.CLOSED } },
+        include: msgInclude,
+        orderBy: { updatedAt: 'desc' },
+      })
+    } catch (err) {
+      console.error(`DB_ERROR conversation.findFirst phone=${phone} companyId=${companyId}`, err)
+      return ''
+    }
 
     // Cancel any pending follow-up — customer replied before the deadline
     if (conv?.followUpStatus === FollowUpStatus.SCHEDULED) {
@@ -418,47 +424,52 @@ export class WhatsAppService {
 
     // ── New conversation ─────────────────────────────────────
     if (!conv) {
-      // ONE canonical Lead per phone+companyId — reuse if exists, never duplicate
-      const existingLead = await this.prisma.lead.findFirst({
-        where: { companyId, phone },
-        orderBy: { createdAt: 'asc' },
-      })
-      const hasWonLead = existingLead?.status === LeadStatus.WON
-      knownCustomerName = existingLead?.name ?? undefined
-      console.log(`NEW_CONV → phone=${phone} existingLead=${existingLead?.id ?? 'null'} knownName=${knownCustomerName ?? 'undefined'}`)
-      const lead = existingLead ?? await this.prisma.lead.create({
-        data: {
-          companyId, phone, source,
-          ...(referralData && { referralData }),
-        },
-      })
-
-      conv = await this.prisma.conversation.create({
-        data: {
-          companyId,
-          phone,
-          leadId: lead.id,
-          status: ConvStatus.AI_HANDLING,
-          agentMode: hasWonLead ? 'HUMAN' : 'AI',
-        },
-        include: msgInclude,
-      })
-
-      if (hasWonLead) {
-        await this.prisma.message.create({
-          data: { conversationId: conv.id, role: 'USER', content: text },
+      try {
+        // ONE canonical Lead per phone+companyId — reuse if exists, never duplicate
+        const existingLead = await this.prisma.lead.findFirst({
+          where: { companyId, phone },
+          orderBy: { createdAt: 'asc' },
         })
-        const welcomeBack = 'أهلاً بعودتك يافندم نورتنا تاني سيتواصل معك أحد متخصصينا قريباً إن شاء الله'
-        await this.saveAssistantMessage(conv.id, welcomeBack)
-        await this.prisma.conversation.update({
-          where: { id: conv.id },
+        const hasWonLead = existingLead?.status === LeadStatus.WON
+        knownCustomerName = existingLead?.name ?? undefined
+        console.log(`NEW_CONV → phone=${phone} existingLead=${existingLead?.id ?? 'null'} knownName=${knownCustomerName ?? 'undefined'}`)
+        const lead = existingLead ?? await this.prisma.lead.create({
           data: {
-            status: ConvStatus.NEEDS_HUMAN,
-            agentNotes: 'عميل عائد - تسليم فوري للمبيعات',
+            companyId, phone, source,
+            ...(referralData && { referralData }),
           },
         })
-        console.log(`RETURNING CUSTOMER → ${phone}`)
-        return welcomeBack
+
+        conv = await this.prisma.conversation.create({
+          data: {
+            companyId,
+            phone,
+            leadId: lead.id,
+            status: ConvStatus.AI_HANDLING,
+            agentMode: hasWonLead ? 'HUMAN' : 'AI',
+          },
+          include: msgInclude,
+        })
+
+        if (hasWonLead) {
+          await this.prisma.message.create({
+            data: { conversationId: conv.id, role: 'USER', content: text },
+          })
+          const welcomeBack = 'أهلاً بعودتك يافندم نورتنا تاني سيتواصل معك أحد متخصصينا قريباً إن شاء الله'
+          await this.saveAssistantMessage(conv.id, welcomeBack)
+          await this.prisma.conversation.update({
+            where: { id: conv.id },
+            data: {
+              status: ConvStatus.NEEDS_HUMAN,
+              agentNotes: 'عميل عائد - تسليم فوري للمبيعات',
+            },
+          })
+          console.log(`RETURNING CUSTOMER → ${phone}`)
+          return welcomeBack
+        }
+      } catch (err) {
+        console.error(`DB_ERROR lead/conversation create phone=${phone} companyId=${companyId}`, err)
+        return ''
       }
     }
 
@@ -840,20 +851,24 @@ export class WhatsAppService {
         if (err instanceof ApiCreditsExhaustedError) await this.handleAICreditsExhausted(companyId)
       }
       score = calculateScore(extracted)
-      await this.prisma.lead.updateMany({
-        where: { companyId, phone },
-        data: {
-          ...(extracted.name && !knownCustomerName && { name: extracted.name }),
-          ...(extracted.packageType && { packageType: extracted.packageType }),
-          ...(extracted.groupSize && { groupSize: extracted.groupSize }),
-          ...(extracted.budget && { budget: extracted.budget }),
-          ...(extracted.travelDate && { travelDate: extracted.travelDate }),
-          ...(extracted.companionNote && { companionNote: extracted.companionNote }),
-          score,
-          isHot: score >= 70,
-          status: score >= 70 ? LeadStatus.HOT : LeadStatus.CONTACTED,
-        },
-      })
+      try {
+        await this.prisma.lead.updateMany({
+          where: { companyId, phone },
+          data: {
+            ...(extracted.name && !knownCustomerName && { name: extracted.name }),
+            ...(extracted.packageType && { packageType: extracted.packageType }),
+            ...(extracted.groupSize && { groupSize: extracted.groupSize }),
+            ...(extracted.budget && { budget: extracted.budget }),
+            ...(extracted.travelDate && { travelDate: extracted.travelDate }),
+            ...(extracted.companionNote && { companionNote: extracted.companionNote }),
+            score,
+            isHot: score >= 70,
+            status: score >= 70 ? LeadStatus.HOT : LeadStatus.CONTACTED,
+          },
+        })
+      } catch (err) {
+        console.error(`DB_ERROR lead.updateMany phone=${phone} companyId=${companyId}`, err)
+      }
     }
 
     const { yes, reason } = shouldHandoff(score, history.length, extracted, text)
