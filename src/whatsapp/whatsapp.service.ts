@@ -5,6 +5,7 @@ import { ConvStatus, FollowUpStatus, LeadStatus } from '@prisma/client'
 import { getAgentReply, extractLeadData, calculateScore, shouldHandoff, LeadData, LeadFacts, PrebuiltCatalog, ApiCreditsExhaustedError, AI_ERROR_REPLY, BOOKING_KEYWORDS } from '../agent/agent.service'
 import { buildIndustryPromptFromDB } from '../agent/prompts/dynamic-catalog-builder'
 import { splitIntoMessages } from './message-splitter'
+import { applyHajjDateDisclaimer } from './hajj-date-disclaimer'
 
 // ── Branch mapping ───────────────────────────────────────────────────────────
 
@@ -80,17 +81,7 @@ function detectOnlinePayment(text: string): boolean {
   return /فودافون\s*كاش|إنستاباي|انستاباي|تحويل\s*بنكي|أونلاين|اونلاين|فيزا|محفظة/.test(text)
 }
 
-// Appends a provisional-date disclaimer whenever the reply mentions Hajj 1448H
-// dates. The LLM strips "تقريباً" from catalog text, so this is enforced here.
-function applyHajjDateDisclaimer(reply: string): string {
-  const mentionsHajj1448 =
-    reply.includes('ذي الحجة ١٤٤٨') ||
-    (reply.includes('ذي الحجة') && /٢٠٢٧/.test(reply))
-  if (!mentionsHajj1448) return reply
-  const disclaimer =
-    'ملاحظة: التواريخ الهجرية لبرامج الحج ١٤٤٨هـ تقديرية بناءً على الحساب الفلكي وسيُعلن الرسمي منها بعد رؤية الهلال قبل الموسم بأسابيع'
-  return `${reply}\n\n${disclaimer}`
-}
+
 
 // Returns true only when the conversation's own messages mention companion or group context.
 // Used to gate cross-session Lead facts (groupSize, companionNote) from being injected
