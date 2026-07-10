@@ -12,6 +12,7 @@ import { getGovFromText, branchMessage } from './branch-lookup'
 import { containsFirstMessageQuestion, detectUmrahMonth, detectFullDetailsIntent, detectContinueResponse, detectHajjOverviewIntent, detectNumberReply } from './intent-detectors'
 
 import { detectFollowUpIntent, clampToWindow, DEFERRAL_PHRASES } from './follow-up-scheduler'
+import { handleAICreditsExhausted, writeCostRecord } from './ai-cost-helpers'
 
 interface FullDetailsState {
   offset: number
@@ -35,29 +36,6 @@ export class WhatsAppService {
 
   constructor(private prisma: PrismaService) {}
 
-  private async handleAICreditsExhausted(companyId: string): Promise<void> {
-    console.error(`🔴 ANTHROPIC_CREDITS_EXHAUSTED — companyId=${companyId}`)
-    this.prisma.systemNotification.create({
-      data: {
-        companyId,
-        type: 'API_CREDITS_LOW',
-        message: 'تنبيه عاجل: رصيد Anthropic API نفذ — النظام متوقف عن الرد على العملاء',
-      },
-    }).catch(e => console.error('SystemNotification create error:', e))
-  }
-
-  private writeCostRecord(companyId: string, conversationId: string, costUSD: number): void {
-    if (costUSD <= 0) return
-    this.prisma.agentInsight.create({
-      data: {
-        companyId,
-        conversationId,
-        type: 'api_cost',
-        category: new Date().toISOString().slice(0, 10),
-        content: costUSD.toFixed(6),
-      },
-    }).catch(e => console.error('AgentInsight cost write error:', e))
-  }
 
   // Save each WhatsApp-split part as its own Message record so the dashboard
   // shows the same number of bubbles the customer sees on their phone.
@@ -325,9 +303,9 @@ export class WhatsAppService {
         try {
           const r = await getAgentReply(historyNH, company.name, packagesNH, aiPromptNH, waPhoneNH, company.industry, undefined, knownCustomerName, faqsNH, knownLeadFacts, prebuiltCatalogNH)
           rawNHReply = r.reply
-          this.writeCostRecord(companyId, conv.id, r.costUSD)
+          writeCostRecord(this.prisma, companyId, conv.id, r.costUSD)
         } catch (err) {
-          if (err instanceof ApiCreditsExhaustedError) await this.handleAICreditsExhausted(companyId)
+          if (err instanceof ApiCreditsExhaustedError) await handleAICreditsExhausted(this.prisma, companyId)
         }
         const replyNH = applyHajjDateDisclaimer(rawNHReply)
         await this.saveAssistantMessage(conv.id, replyNH)
@@ -540,7 +518,7 @@ export class WhatsAppService {
       rawAIReply = r.reply
       aiCostUSD = r.costUSD
     } catch (err) {
-      if (err instanceof ApiCreditsExhaustedError) await this.handleAICreditsExhausted(companyId)
+      if (err instanceof ApiCreditsExhaustedError) await handleAICreditsExhausted(this.prisma, companyId)
     }
 
     if (rawAIReply === AI_ERROR_REPLY) {
@@ -561,7 +539,7 @@ export class WhatsAppService {
     }
 
     this.aiFailureCount.delete(conv.id)
-    this.writeCostRecord(companyId, conv.id, aiCostUSD)
+    writeCostRecord(this.prisma, companyId, conv.id, aiCostUSD)
     const reply = applyHajjDateDisclaimer(rawAIReply)
 
     await this.saveAssistantMessage(conv.id, reply)
@@ -587,7 +565,7 @@ export class WhatsAppService {
         const extractResult = await extractLeadData([...history, { role: 'assistant', content: reply }])
         extracted = extractResult.data
       } catch (err) {
-        if (err instanceof ApiCreditsExhaustedError) await this.handleAICreditsExhausted(companyId)
+        if (err instanceof ApiCreditsExhaustedError) await handleAICreditsExhausted(this.prisma, companyId)
       }
       score = calculateScore(extracted)
       try {
@@ -675,12 +653,12 @@ export class WhatsAppService {
           secondReply = r2.reply
           secondCost = r2.costUSD
         } catch (err) {
-          if (err instanceof ApiCreditsExhaustedError) await this.handleAICreditsExhausted(companyId)
+          if (err instanceof ApiCreditsExhaustedError) await handleAICreditsExhausted(this.prisma, companyId)
         }
         if (secondReply && secondReply !== AI_ERROR_REPLY) {
           const secondCleaned = applyHajjDateDisclaimer(secondReply)
           await this.saveAssistantMessage(conv.id, secondCleaned)
-          this.writeCostRecord(companyId, conv.id, secondCost)
+          writeCostRecord(this.prisma, companyId, conv.id, secondCost)
           console.log(`FIRST_MSG_QUESTION_ANSWER → ${phone}`)
           return [reply, secondCleaned]
         }
@@ -790,9 +768,9 @@ export class WhatsAppService {
     try {
       const r = await getAgentReply(history, company.name, packages, aiPrompt, waPhone, company.industry, undefined, knownCustomerName, faqs, knownLeadFacts, prebuiltCatalogTrigger)
       rawTriggerReply = r.reply
-      this.writeCostRecord(conv.companyId, convId, r.costUSD)
+      writeCostRecord(this.prisma, conv.companyId, convId, r.costUSD)
     } catch (err) {
-      if (err instanceof ApiCreditsExhaustedError) await this.handleAICreditsExhausted(conv.companyId)
+      if (err instanceof ApiCreditsExhaustedError) await handleAICreditsExhausted(this.prisma, conv.companyId)
     }
     const reply = applyHajjDateDisclaimer(rawTriggerReply)
 
