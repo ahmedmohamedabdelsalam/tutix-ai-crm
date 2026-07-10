@@ -14,6 +14,7 @@ import { containsFirstMessageQuestion, detectUmrahMonth, detectFullDetailsIntent
 import { detectFollowUpIntent, clampToWindow, DEFERRAL_PHRASES } from './follow-up-scheduler'
 import { handleAICreditsExhausted, writeCostRecord } from './ai-cost-helpers'
 import { saveAssistantMessage, completeBookingAlert } from './message-persistence'
+import { getCompanyFAQ } from './faq-cache'
 
 interface FullDetailsState {
   offset: number
@@ -30,7 +31,6 @@ const HAJJ_OV_DISCLAIMER =
 
 @Injectable()
 export class WhatsAppService {
-  private faqCache = new Map<string, { data: { question: string; answer: string }[]; expiresAt: number }>()
   private readonly aiFailureCount = new Map<string, number>()
   private readonly fullDetailsMap = new Map<string, FullDetailsState>()
   private readonly overviewMap    = new Map<string, OverviewState>()
@@ -48,21 +48,6 @@ export class WhatsAppService {
     return buildIndustryPromptFromDB(config as any, companyName)
   }
 
-  private async getCompanyFAQ(companyId: string): Promise<{ question: string; answer: string }[]> {
-    const cached = this.faqCache.get(companyId)
-    if (cached && cached.expiresAt > Date.now()) {
-      console.log(`FAQ_CACHE HIT — companyId=${companyId}`)
-      return cached.data
-    }
-    const faqs = await this.prisma.companyFAQ.findMany({
-      where: { companyId, isActive: true },
-      select: { question: true, answer: true },
-      orderBy: { createdAt: 'asc' },
-    })
-    this.faqCache.set(companyId, { data: faqs, expiresAt: Date.now() + 10 * 60 * 1000 })
-    console.log(`FAQ_CACHE MISS — companyId=${companyId} fetched ${faqs.length} FAQs`)
-    return faqs
-  }
 
   async handleMessage(companyId: string, phone: string, text: string, source = 'direct', referralData?: object | null): Promise<string | string[]> {
     const company = await this.prisma.company.findUnique({ where: { id: companyId } })
@@ -252,7 +237,7 @@ export class WhatsAppService {
         const aiPromptNH = company.aiPrompt ?? ''
         // Suppress phone in CTA once handoff message already sent — prevents repeat
         const waPhoneNH  = conv.handoffMessageSent ? '' : (company.phone ?? company.ownerPhone ?? '')
-        const faqsNH = await this.getCompanyFAQ(companyId)
+        const faqsNH = await getCompanyFAQ(this.prisma, companyId)
         const prebuiltCatalogNH = await this.getPrebuiltCatalog(companyId, company.name)
         let rawNHReply = AI_ERROR_REPLY
         try {
@@ -327,7 +312,7 @@ export class WhatsAppService {
     const aiPrompt = company.aiPrompt ?? ''
     const waPhone  = company.phone ?? company.ownerPhone ?? ''
 
-    const companyFAQs = await this.getCompanyFAQ(companyId)
+    const companyFAQs = await getCompanyFAQ(this.prisma, companyId)
     const prebuiltCatalog = await this.getPrebuiltCatalog(companyId, company.name)
 
     // Meaningless-short guard: 1–2 Arabic chars with no semantic content = accidental tap / typo.
@@ -716,7 +701,7 @@ export class WhatsAppService {
     const packages = company.packages ?? ''
     const aiPrompt = company.aiPrompt ?? ''
     const waPhone  = company.phone ?? company.ownerPhone ?? ''
-    const faqs = await this.getCompanyFAQ(conv.companyId)
+    const faqs = await getCompanyFAQ(this.prisma, conv.companyId)
     const prebuiltCatalogTrigger = await this.getPrebuiltCatalog(conv.companyId, company.name)
 
     let rawTriggerReply = AI_ERROR_REPLY
