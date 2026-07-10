@@ -13,7 +13,7 @@ import { containsFirstMessageQuestion, detectUmrahMonth, detectFullDetailsIntent
 
 import { detectFollowUpIntent, clampToWindow, DEFERRAL_PHRASES } from './follow-up-scheduler'
 import { handleAICreditsExhausted, writeCostRecord } from './ai-cost-helpers'
-import { saveAssistantMessage } from './message-persistence'
+import { saveAssistantMessage, completeBookingAlert } from './message-persistence'
 
 interface FullDetailsState {
   offset: number
@@ -39,31 +39,6 @@ export class WhatsAppService {
 
 
 
-  private async completeBookingAlert(
-    convId: string,
-    companyId: string,
-    phone: string,
-    reason: string,
-    reply: string,
-  ): Promise<void> {
-    const lead = await this.prisma.lead.findFirst({
-      where: { companyId, phone },
-      select: { name: true },
-    })
-    const display = lead?.name ? `${lead.name} (${phone})` : phone
-    const notifMsg = `عميل جاهز للدفع — يحتاج تواصل من فريق المبيعات: ${display}`
-    await Promise.all([
-      this.prisma.conversation.update({
-        where: { id: convId },
-        data: { needsSalesContact: true, salesAlertReason: reason, bookingStage: 'DONE' },
-      }),
-      this.prisma.systemNotification.create({
-        data: { companyId, type: 'SALES_CONTACT_NEEDED', message: notifMsg },
-      }),
-    ])
-    await saveAssistantMessage(this.prisma, convId, reply)
-    console.log(`BOOKING_ALERT → ${phone} | reason=${reason}`)
-  }
 
   private async getPrebuiltCatalog(companyId: string, companyName: string): Promise<PrebuiltCatalog | undefined> {
     if (process.env.USE_DB_CATALOG !== 'true') return undefined
@@ -231,17 +206,17 @@ export class WhatsAppService {
         if (conv.bookingStage === 'AWAITING_BRANCH_CONFIRM') {
           if (detectOnlinePayment(text)) {
             const r = 'تمام يافندم، هنترتبلك مع زميلنا المختص بخصوص طريقة الدفع الأونلاين وسيتواصل معك قريباً إن شاء الله'
-            await this.completeBookingAlert(conv.id, companyId, phone, 'wants_online_payment', r)
+            await completeBookingAlert(this.prisma, conv.id, companyId, phone, 'wants_online_payment', r)
             return r
           }
           if (detectFarFromBranch(text)) {
             const r = 'تمام يافندم، هنترتبلك أنسب حاجة مع زميلنا المختص وسيتواصل معك قريباً إن شاء الله'
-            await this.completeBookingAlert(conv.id, companyId, phone, 'far_from_branch', r)
+            await completeBookingAlert(this.prisma, conv.id, companyId, phone, 'far_from_branch', r)
             return r
           }
           if (detectVisitConfirm(text)) {
             const r = 'ممتاز يافندم! فريقنا هيكون في انتظارك بالفرع إن شاء الله، وأي استفسار أنا هنا'
-            await this.completeBookingAlert(conv.id, companyId, phone, 'wants_branch_visit', r)
+            await completeBookingAlert(this.prisma, conv.id, companyId, phone, 'wants_branch_visit', r)
             return r
           }
           const clarify = 'معلش يافندم، هتيجي للفرع؟ أم تفضل يتواصل معك أحد زملائنا؟'
