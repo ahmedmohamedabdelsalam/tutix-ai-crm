@@ -16,15 +16,7 @@ import { handleAICreditsExhausted, writeCostRecord } from './ai-cost-helpers'
 import { saveAssistantMessage, completeBookingAlert } from './message-persistence'
 import { getCompanyFAQ } from './faq-cache'
 import { incrementAIFailure, resetAIFailure } from './ai-failure-tracker'
-
-interface FullDetailsState {
-  offset: number
-  total: number
-}
-
-interface OverviewState {
-  orderedDetails: string[]  // pre-rendered detail strings, index 0 = item ١ in the overview
-}
+import { fullDetailsMap, overviewMap } from './conversation-state'
 
 const HAJJ_OV_DISCLAIMER =
   'ملاحظة: التواريخ الهجرية لبرامج الحج ١٤٤٨هـ تقديرية بناءً على الحساب الفلكي وسيُعلن الرسمي منها بعد رؤية الهلال قبل الموسم بأسابيع'
@@ -32,9 +24,6 @@ const HAJJ_OV_DISCLAIMER =
 
 @Injectable()
 export class WhatsAppService {
-  private readonly fullDetailsMap = new Map<string, FullDetailsState>()
-  private readonly overviewMap    = new Map<string, OverviewState>()
-
   constructor(private prisma: PrismaService) {}
 
 
@@ -335,7 +324,7 @@ export class WhatsAppService {
     // The AI truncates when asked to show all 9 programs at once. This path bypasses
     // the AI entirely and delivers exactly 3 programs per message, code-built.
     if (prebuiltCatalog?.hajjProgramDetails?.length) {
-      const fdState = this.fullDetailsMap.get(conv.id)
+      const fdState = fullDetailsMap.get(conv.id)
       const isContinue = !!fdState && detectContinueResponse(text)
       const isNewRequest = !fdState && detectFullDetailsIntent(text)
 
@@ -353,8 +342,8 @@ export class WhatsAppService {
           : `دول ${toArabicIndic(nextOffset)} من ${toArabicIndic(total)} يافندم — أكملك الباقي؟`
         const fdReply = `${chunkText}\n\n${closingLine}`
 
-        if (isLast) this.fullDetailsMap.delete(conv.id)
-        else this.fullDetailsMap.set(conv.id, { offset: nextOffset, total })
+        if (isLast) fullDetailsMap.delete(conv.id)
+        else fullDetailsMap.set(conv.id, { offset: nextOffset, total })
 
         await saveAssistantMessage(this.prisma, conv.id, fdReply)
         console.log(`FD_CHUNK → ${phone} offset=${offset}..${nextOffset - 1}/${total} isLast=${isLast}`)
@@ -362,7 +351,7 @@ export class WhatsAppService {
       }
 
       if (fdState && !isContinue) {
-        this.fullDetailsMap.delete(conv.id)
+        fullDetailsMap.delete(conv.id)
       }
     }
 
@@ -370,18 +359,18 @@ export class WhatsAppService {
     // When a customer replies with a number after seeing the Hajj overview, deliver
     // that program's full details directly from the pre-rendered array — no AI involved.
     if (prebuiltCatalog) {
-      const ovState = this.overviewMap.get(conv.id)
+      const ovState = overviewMap.get(conv.id)
       if (ovState) {
         const n = detectNumberReply(text)
         if (n !== null && n >= 1 && n <= ovState.orderedDetails.length) {
           const detail = applyHajjDateDisclaimer(ovState.orderedDetails[n - 1])
-          this.overviewMap.delete(conv.id)
+          overviewMap.delete(conv.id)
           await saveAssistantMessage(this.prisma, conv.id, detail)
           console.log(`OV_NUMBER → ${phone} n=${n} → program detail sent`)
           return detail
         }
         // Topic changed — clear overview state and let normal AI handle it
-        this.overviewMap.delete(conv.id)
+        overviewMap.delete(conv.id)
       }
     }
 
@@ -397,7 +386,7 @@ export class WhatsAppService {
       const isUmrahOv = !!ovMonth && !!prebuiltCatalog.umrahMonthMessages?.[ovMonth]
 
       if (isHajjOv || isUmrahOv) {
-        this.fullDetailsMap.delete(conv.id)
+        fullDetailsMap.delete(conv.id)
         const firstName = knownCustomerName?.split(/\s+/)[0]
         const intro = firstName ? `تمام يا أستاذ ${firstName} اتفضل` : `اتفضل يافندم`
         await saveAssistantMessage(this.prisma, conv.id, intro)
@@ -405,7 +394,7 @@ export class WhatsAppService {
 
         if (isHajjOv) {
           const ovMsg = prebuiltCatalog.hajjOverviewMessage + '\n\n' + HAJJ_OV_DISCLAIMER
-          this.overviewMap.set(conv.id, { orderedDetails: prebuiltCatalog.hajjOverviewDetails })
+          overviewMap.set(conv.id, { orderedDetails: prebuiltCatalog.hajjOverviewDetails })
           await saveAssistantMessage(this.prisma, conv.id, ovMsg)
           parts.push(ovMsg)
           console.log(`HAJJ_OV_BYPASS → ${phone} programs=${prebuiltCatalog.hajjOverviewDetails.length}`)
@@ -428,7 +417,7 @@ export class WhatsAppService {
       const isUmrahOvFirst = !!firstMsgUmrahMonth && !!prebuiltCatalog.umrahMonthMessages?.[firstMsgUmrahMonth]
 
       if (isHajjOvFirst || isUmrahOvFirst) {
-        this.fullDetailsMap.delete(conv.id)
+        fullDetailsMap.delete(conv.id)
         const firstName = knownCustomerName?.split(/\s+/)[0]
         const intro = firstName ? `تمام يا أستاذ ${firstName} اتفضل` : `اتفضل يافندم`
         await saveAssistantMessage(this.prisma, conv.id, intro)
@@ -436,7 +425,7 @@ export class WhatsAppService {
 
         if (isHajjOvFirst) {
           const ovMsg = prebuiltCatalog.hajjOverviewMessage + '\n\n' + HAJJ_OV_DISCLAIMER
-          this.overviewMap.set(conv.id, { orderedDetails: prebuiltCatalog.hajjOverviewDetails })
+          overviewMap.set(conv.id, { orderedDetails: prebuiltCatalog.hajjOverviewDetails })
           await saveAssistantMessage(this.prisma, conv.id, ovMsg)
           parts.push(ovMsg)
           console.log(`HAJJ_OV_ZERO_AI → ${phone} programs=${prebuiltCatalog.hajjOverviewDetails.length}`)
@@ -561,9 +550,9 @@ export class WhatsAppService {
         // ── Hajj overview bypass: send pre-built overview, no second AI call ──────
         if (detectHajjOverviewIntent(text) && !detectFullDetailsIntent(text) &&
             prebuiltCatalog?.hajjOverviewMessage) {
-          this.fullDetailsMap.delete(conv.id)
+          fullDetailsMap.delete(conv.id)
           const ovMsg = prebuiltCatalog.hajjOverviewMessage + '\n\n' + HAJJ_OV_DISCLAIMER
-          this.overviewMap.set(conv.id, { orderedDetails: prebuiltCatalog.hajjOverviewDetails })
+          overviewMap.set(conv.id, { orderedDetails: prebuiltCatalog.hajjOverviewDetails })
           await saveAssistantMessage(this.prisma, conv.id, ovMsg)
           console.log(`HAJJ_OV_FIRST → ${phone} programs=${prebuiltCatalog.hajjOverviewDetails.length}`)
           return [reply, ovMsg]
