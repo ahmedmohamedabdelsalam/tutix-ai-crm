@@ -1029,12 +1029,14 @@ export class WhatsAppService {
       })
       if (lead?.name) knownCustomerName = lead.name
       if (lead && (lead.packageType || lead.groupSize != null || lead.travelDate || lead.budget || lead.companionNote)) {
+        const companionInThisConv = companionConfirmedInHistory(freshMessages)
+        const monthInThisConv = travelDateConfirmedInHistory(freshMessages)
         knownLeadFacts = {
           packageType: lead.packageType,
-          groupSize: lead.groupSize,
-          travelDate: lead.travelDate,
           budget: lead.budget,
-          companionNote: lead.companionNote,
+          travelDate:    monthInThisConv    ? lead.travelDate    : undefined,
+          groupSize:     companionInThisConv ? lead.groupSize     : undefined,
+          companionNote: companionInThisConv ? lead.companionNote : undefined,
         }
       }
     }

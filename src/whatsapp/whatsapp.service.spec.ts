@@ -1,5 +1,20 @@
 import { companionConfirmedInHistory, travelDateConfirmedInHistory } from './whatsapp.service'
 
+// triggerAIReply applies the same guards as handleMessage.
+// freshMessages (last 10 from DB) is what both guards scan.
+describe('dashboard triggerAIReply — stale-context guards', () => {
+  it('conversation with no month/companion mention → guards block stale Lead facts', () => {
+    // Simulates dashboard "send AI reply" for a lead whose Lead record has travelDate="أغسطس"
+    // and companionNote from a prior session, but the current messages mention neither.
+    const freshMessages = [
+      { content: 'قولي برامج العمرة' },
+      { content: 'تمام يافندم، أيه الوقت المناسب ليك؟' },
+    ]
+    expect(travelDateConfirmedInHistory(freshMessages)).toBe(false)   // stale month blocked
+    expect(companionConfirmedInHistory(freshMessages)).toBe(false)    // stale companion blocked
+  })
+})
+
 // Tests for the cross-session companion-leak fix.
 //
 // Bug: customer sends "قولي برامج العمرة" (no companion mention) →
