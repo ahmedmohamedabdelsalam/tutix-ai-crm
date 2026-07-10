@@ -5,18 +5,7 @@ import { WhatsAppService } from './whatsapp.service'
 import { FollowUpService } from './followup.service'
 import { PrismaService } from '../prisma/prisma.service'
 import { splitIntoMessages } from './message-splitter'
-
-function getTypingDelay(_text: string): number {
-  return 5000
-}
-
-async function metaPost(phoneId: string, token: string, body: object): Promise<void> {
-  await fetch(`https://graph.facebook.com/v18.0/${phoneId}/messages`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
-}
+import { metaPost, sendWhatsAppMessage } from './send-message'
 
 const MEDIA_REPLIES: Record<string, { label: string; reply: string }> = {
   audio:    { label: '[رسالة صوتية]',   reply: 'حضرتك بعتلنا رسالة صوتية، للأسف مش بنقدر نسمعها دلوقتي لو ممكن تكتب طلبك يافندم نكون شاكرين' },
@@ -129,13 +118,7 @@ export class WhatsAppController {
           data: { conversationId: convId, role: 'USER', content: media.label },
         })
         if (company.waToken && company.waPhoneId) {
-          await new Promise(r => setTimeout(r, 1500))
-          await metaPost(company.waPhoneId, company.waToken, {
-            messaging_product: 'whatsapp',
-            to: message.from,
-            type: 'text',
-            text: { body: media.reply },
-          })
+          await sendWhatsAppMessage(company.waPhoneId, company.waToken, message.from, media.reply)
         }
         await this.prisma.message.create({
           data: { conversationId: convId, role: 'ASSISTANT', content: media.reply },
@@ -152,35 +135,7 @@ export class WhatsAppController {
       if (hasContent && company.waToken && company.waPhoneId) {
         for (const r of replyList) {
           if (!r) continue
-          const parts = splitIntoMessages(r)
-          console.log(`Sending ${parts.length} part(s) to ${message.from}`)
-          for (let pi = 0; pi < parts.length; pi++) {
-            const part = parts[pi]
-            const delay = getTypingDelay(part)
-            console.log(`Part ${pi + 1}/${parts.length} (${part.length} chars, delay ${Math.round(delay / 1000)}s): ${part.substring(0, 60)}`)
-            await new Promise(r => setTimeout(r, delay))
-            const metaRes = await fetch(
-              `https://graph.facebook.com/v18.0/${company.waPhoneId}/messages`,
-              {
-                method: 'POST',
-                headers: {
-                  Authorization: `Bearer ${company.waToken}`,
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                  messaging_product: 'whatsapp',
-                  to: message.from,
-                  type: 'text',
-                  text: { body: part },
-                }),
-              },
-            )
-            if (!metaRes.ok) {
-              const err = await metaRes.text()
-              console.error(`Meta API error on part ${pi + 1} (${metaRes.status}):`, err)
-            }
-          }
-          console.log(`All ${parts.length} part(s) sent to ${message.from} via ${company.waPhoneId}`)
+          await sendWhatsAppMessage(company.waPhoneId, company.waToken, message.from, r)
         }
       } else if (hasContent) {
         console.warn(`Reply generated but not sent — waToken or waPhoneId missing for company: ${company.name}`)
@@ -268,17 +223,7 @@ export class WhatsAppController {
       if (!reply) return { success: false, error: 'no reply generated' }
 
       if (waToken && waPhoneId) {
-        const parts = splitIntoMessages(reply)
-        for (let pi = 0; pi < parts.length; pi++) {
-          const delay = getTypingDelay(parts[pi])
-          await new Promise(r => setTimeout(r, delay))
-          await metaPost(waPhoneId, waToken, {
-            messaging_product: 'whatsapp',
-            to: phone,
-            type: 'text',
-            text: { body: parts[pi] },
-          })
-        }
+        await sendWhatsAppMessage(waPhoneId, waToken, phone, reply)
       }
 
       return { success: true, reply }

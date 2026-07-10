@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service'
 import { FollowUpStatus, ConvStatus, MessageRole } from '@prisma/client'
 import { clampToWindow } from './whatsapp.service'
 import { CAIRO_OFFSET_MS } from '../utils/arabic-numerals'
+import { sendWhatsAppMessage } from './send-message'
 
 function categorizeDropOff(lastMsg: string, totalMsgCount: number): string {
   if (/غالي|تخفيض|خصم|أرخص/.test(lastMsg)) return 'بعد التعامل مع اعتراض'
@@ -55,28 +56,8 @@ export class FollowUpService {
       // Send via Meta API if credentials available
       if (conv.company.waToken && conv.company.waPhoneId) {
         try {
-          const res = await fetch(
-            `https://graph.facebook.com/v18.0/${conv.company.waPhoneId}/messages`,
-            {
-              method: 'POST',
-              headers: {
-                Authorization: `Bearer ${conv.company.waToken}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                messaging_product: 'whatsapp',
-                to: conv.phone,
-                type: 'text',
-                text: { body: msg },
-              }),
-            },
-          )
-          if (!res.ok) {
-            const err = await res.text()
-            this.logger.error(`Meta API error for ${conv.phone}: ${err}`)
-          } else {
-            this.logger.log(`Follow-up sent → ${conv.phone} (${conv.company.name})`)
-          }
+          await sendWhatsAppMessage(conv.company.waPhoneId, conv.company.waToken, conv.phone, msg)
+          this.logger.log(`Follow-up sent → ${conv.phone} (${conv.company.name})`)
         } catch (e) {
           this.logger.error(`Failed to send follow-up to ${conv.phone}:`, e)
         }
