@@ -63,5 +63,5 @@ export function branchMessage(gov: string): string {
   const branch = getBranch(gov)
   const remoteSuffix = !CAIRO_GOVS.has(gov) && branch.startsWith('فرع القاهرة')
     ? '\n(أو تواصل مع زميلنا المختص لترتيب أنسب طريقة ليك)' : ''
-  return `📍 ${branch}${remoteSuffix}`
+  return `${branch}${remoteSuffix}`
 }
