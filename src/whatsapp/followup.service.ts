@@ -34,51 +34,63 @@ export class FollowUpService {
     }
 
     const now = new Date()
-    const due = await this.prisma.conversation.findMany({
-      where: {
-        followUpStatus: FollowUpStatus.SCHEDULED,
-        followUpScheduledAt: { lte: now },
-      },
-      include: {
-        company: { select: { id: true, waToken: true, waPhoneId: true, name: true } },
-        lead: { select: { name: true } },
-      },
+
+    // Process each company in isolation: one DB query per company, credentials
+    // checked before querying so a tenant without WA config is skipped cleanly
+    // and cannot affect another tenant's run.
+    const companies = await this.prisma.company.findMany({
+      where: { isActive: true },
+      select: { id: true, name: true, waToken: true, waPhoneId: true },
     })
 
-    this.logger.log(`Follow-up check: ${due.length} due conversation(s) (Cairo hour=${hour})`)
+    this.logger.log(`Follow-up check: ${companies.length} active company(ies) (Cairo hour=${hour})`)
 
     let sent = 0
-    for (const conv of due) {
-      const leadName = conv.lead?.name?.trim()
-      const greeting = leadName ? `يا أستاذ ${leadName}` : 'يافندم'
-      const msg = `السلام عليكم ${greeting}\nحضرتك فكرت في موضوع الرحلة يافندم؟\nتحت أمرك لو احتجت أي تفاصيل`
+    for (const company of companies) {
+      if (!company.waToken || !company.waPhoneId) {
+        this.logger.debug(`Follow-up: skipping ${company.name} — no WA credentials`)
+        continue
+      }
 
-      // Send via Meta API if credentials available
-      if (conv.company.waToken && conv.company.waPhoneId) {
+      const due = await this.prisma.conversation.findMany({
+        where: {
+          companyId: company.id,
+          followUpStatus: FollowUpStatus.SCHEDULED,
+          followUpScheduledAt: { lte: now },
+        },
+        include: {
+          lead: { select: { name: true } },
+        },
+      })
+
+      this.logger.log(`Follow-up [${company.name}]: ${due.length} due conversation(s)`)
+
+      for (const conv of due) {
+        const leadName = conv.lead?.name?.trim()
+        const greeting = leadName ? `يا أستاذ ${leadName}` : 'يافندم'
+        const msg = `السلام عليكم ${greeting}\nحضرتك فكرت في موضوع الرحلة يافندم؟\nتحت أمرك لو احتجت أي تفاصيل`
+
         try {
-          await sendWhatsAppMessage(conv.company.waPhoneId, conv.company.waToken, conv.phone, msg)
-          this.logger.log(`Follow-up sent → ${conv.phone} (${conv.company.name})`)
+          await sendWhatsAppMessage(company.waPhoneId, company.waToken, conv.phone, msg)
+          this.logger.log(`Follow-up sent → ${conv.phone} (${company.name})`)
         } catch (e) {
           this.logger.error(`Failed to send follow-up to ${conv.phone}:`, e)
         }
-      } else {
-        // No credentials (test env) — log message only
-        this.logger.warn(`FOLLOW-UP (no waToken) → ${conv.phone}: ${msg.replace(/\n/g, ' | ')}`)
-      }
 
-      // Mark as sent + save to message history regardless of send result
-      try {
-        await this.prisma.conversation.update({
-          where: { id: conv.id },
-          data: { followUpStatus: FollowUpStatus.SENT, followUpScheduledAt: null },
-        })
-        await this.prisma.message.create({
-          data: { conversationId: conv.id, role: 'ASSISTANT', content: msg },
-        })
-      } catch (err) {
-        this.logger.error(`DB_ERROR follow-up mark-sent conv=${conv.id}`, err)
+        // Mark as sent + save to message history regardless of send result
+        try {
+          await this.prisma.conversation.update({
+            where: { id: conv.id },
+            data: { followUpStatus: FollowUpStatus.SENT, followUpScheduledAt: null },
+          })
+          await this.prisma.message.create({
+            data: { conversationId: conv.id, role: 'ASSISTANT', content: msg },
+          })
+        } catch (err) {
+          this.logger.error(`DB_ERROR follow-up mark-sent conv=${conv.id}`, err)
+        }
+        sent++
       }
-      sent++
     }
 
     await this.analyzeDropOffs(bypassWindow)
