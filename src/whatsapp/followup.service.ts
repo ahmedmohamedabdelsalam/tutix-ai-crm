@@ -102,43 +102,52 @@ export class FollowUpService {
       ? new Date(Date.now() + 60_000)           // effectively "all AI_HANDLING convs"
       : new Date(Date.now() - 2 * 60 * 60_000)  // idle for >2h
 
-    const stale = await this.prisma.conversation.findMany({
-      where: {
-        dropOffAnalyzed: false,
-        status: ConvStatus.AI_HANDLING,
-        updatedAt: { lt: cutoff },
-      },
-      select: {
-        id: true,
-        companyId: true,
-        phone: true,
-        _count: { select: { messages: true } },
-        messages: {
-          where: { role: MessageRole.ASSISTANT },
-          orderBy: { createdAt: 'desc' },
-          take: 1,
-          select: { content: true },
-        },
-      },
+    // Process each company in isolation — analytics only, no WA credentials needed.
+    const companies = await this.prisma.company.findMany({
+      where: { isActive: true },
+      select: { id: true, name: true },
     })
 
-    this.logger.log(`Drop-off analysis: ${stale.length} conversation(s) to classify`)
-    for (const conv of stale) {
-      const lastAsst = conv.messages[0]
-      const category = lastAsst
-        ? categorizeDropOff(lastAsst.content, conv._count.messages)
-        : 'أخرى'
+    for (const company of companies) {
+      const stale = await this.prisma.conversation.findMany({
+        where: {
+          companyId: company.id,
+          dropOffAnalyzed: false,
+          status: ConvStatus.AI_HANDLING,
+          updatedAt: { lt: cutoff },
+        },
+        select: {
+          id: true,
+          companyId: true,
+          phone: true,
+          _count: { select: { messages: true } },
+          messages: {
+            where: { role: MessageRole.ASSISTANT },
+            orderBy: { createdAt: 'desc' },
+            take: 1,
+            select: { content: true },
+          },
+        },
+      })
 
-      await Promise.all([
-        this.prisma.agentInsight.create({
-          data: { companyId: conv.companyId, conversationId: conv.id, type: 'drop_off_stage', category },
-        }),
-        this.prisma.conversation.update({
-          where: { id: conv.id },
-          data: { dropOffAnalyzed: true },
-        }),
-      ])
-      this.logger.log(`DROP-OFF: ${conv.phone} → ${category}`)
+      this.logger.log(`Drop-off analysis [${company.name}]: ${stale.length} conversation(s) to classify`)
+      for (const conv of stale) {
+        const lastAsst = conv.messages[0]
+        const category = lastAsst
+          ? categorizeDropOff(lastAsst.content, conv._count.messages)
+          : 'أخرى'
+
+        await Promise.all([
+          this.prisma.agentInsight.create({
+            data: { companyId: conv.companyId, conversationId: conv.id, type: 'drop_off_stage', category },
+          }),
+          this.prisma.conversation.update({
+            where: { id: conv.id },
+            data: { dropOffAnalyzed: true },
+          }),
+        ])
+        this.logger.log(`DROP-OFF: ${conv.phone} → ${category}`)
+      }
     }
   }
 
