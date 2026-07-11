@@ -244,10 +244,11 @@ export class WhatsAppController {
   // conversation without duplicating the user message. Called by the dashboard before
   // switching agentMode to HUMAN, so the customer gets a reply before the rep takes over.
   @Post('convreply')
-  async convReply(@Body() body: { convId: string }) {
+  async convReply(@Body() body: { convId: string; companyId: string }) {
     try {
-      if (!body.convId) return { error: 'convId required' }
-      const { reply, phone, waToken, waPhoneId } = await this.whatsapp.triggerAIReply(body.convId)
+      if (!body.convId)    return { error: 'convId required' }
+      if (!body.companyId) return { error: 'companyId required' }
+      const { reply, phone, waToken, waPhoneId } = await this.whatsapp.triggerAIReply(body.convId, body.companyId)
       if (!reply) return { success: false, error: 'no reply generated' }
 
       if (waToken && waPhoneId) {

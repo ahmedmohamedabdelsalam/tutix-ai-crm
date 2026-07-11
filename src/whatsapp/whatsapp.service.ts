@@ -664,7 +664,7 @@ export class WhatsAppService {
 
   // Generates one AI reply for an existing conversation without creating a duplicate
   // USER message — used by the dashboard "take over with AI reply" flow.
-  async triggerAIReply(convId: string): Promise<{
+  async triggerAIReply(convId: string, expectedCompanyId: string): Promise<{
     reply: string; phone: string; waToken: string | null; waPhoneId: string | null
   }> {
     const empty = { reply: '', phone: '', waToken: null, waPhoneId: null }
@@ -673,6 +673,10 @@ export class WhatsAppService {
       select: { id: true, phone: true, companyId: true, leadId: true },
     })
     if (!conv) return empty
+    if (conv.companyId !== expectedCompanyId) {
+      console.warn(`TRIGGER_AI_REPLY_BLOCKED: convId=${convId} belongs to company=${conv.companyId}, caller claimed=${expectedCompanyId}`)
+      return empty
+    }
 
     const company = await this.prisma.company.findUnique({ where: { id: conv.companyId } })
     if (!company || !company.isActive) return { ...empty, phone: conv.phone }
