@@ -21,6 +21,14 @@ import { fullDetailsMap, overviewMap } from './conversation-state'
 const HAJJ_OV_DISCLAIMER =
   'ملاحظة: التواريخ الهجرية لبرامج الحج ١٤٤٨هـ تقديرية بناءً على الحساب الفلكي وسيُعلن الرسمي منها بعد رؤية الهلال قبل الموسم بأسابيع'
 
+// Injected ONLY into the POST-HANDOFF AI path (after booking confirmed, before sales takes over).
+// Keeps official-price answers normal; defers any negotiation/discount request to sales.
+const POST_HANDOFF_NEGOTIATION_INSTR =
+  'لو العميل طلب خصم أو أقل سعر أو أرخص أو تخفيض أو سأل "ينفع أقل" أو "ممكن تنزّل" أو "آخر سعر" — ' +
+  'لا تقتبس سعراً منخفضاً ولا توعد بأي خصم. ' +
+  'قل فقط: "زميلنا المختص هيتواصل معك قريباً ويقدملك أحسن عرض إن شاء الله." ' +
+  'الأسعار الرسمية والأسئلة العادية — جاوب عليها بشكل طبيعي.'
+
 
 @Injectable()
 export class WhatsAppService {
@@ -190,13 +198,6 @@ export class WhatsAppService {
           return clarify
         }
 
-        // After booking confirmed — short ack for any follow-up messages
-        if (conv.needsSalesContact) {
-          const ack = 'تمام يافندم، فريق المبيعات هيتواصل معك قريباً إن شاء الله'
-          await saveAssistantMessage(this.prisma, conv.id, ack)
-          return ack
-        }
-
         // Repeat booking keyword after handoff already sent → short ack, no AI call
         if (conv.handoffMessageSent && BOOKING_KEYWORDS.some(kw => text.includes(kw))) {
           const repeatAck = 'تمام يافندم زميلنا هيتواصل معك في أقرب وقت إن شاء الله'
@@ -215,7 +216,10 @@ export class WhatsAppService {
           content: m.content,
         }))
         const packagesNH = company.packages ?? ''
-        const aiPromptNH = company.aiPrompt ?? ''
+        const baseAiPromptNH = company.aiPrompt ?? ''
+        const aiPromptNH = baseAiPromptNH
+          ? `${baseAiPromptNH}\n\n${POST_HANDOFF_NEGOTIATION_INSTR}`
+          : POST_HANDOFF_NEGOTIATION_INSTR
         // Suppress phone in CTA once handoff message already sent — prevents repeat
         const waPhoneNH  = conv.handoffMessageSent ? '' : (company.phone ?? company.ownerPhone ?? '')
         const faqsNH = await getCompanyFAQ(this.prisma, companyId)
