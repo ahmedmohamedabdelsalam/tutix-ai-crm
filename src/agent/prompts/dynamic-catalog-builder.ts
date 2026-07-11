@@ -313,9 +313,9 @@ const MONTH_NAME_TO_NUM: Record<string, number> = {
   'يوليو': 7, 'أغسطس': 8, 'سبتمبر': 9, 'أكتوبر': 10, 'نوفمبر': 11,
 }
 
-export function buildUmrahMonthMessage(month: string, rawPrograms: any[]): string {
+export function buildUmrahMonthMessage(month: string, rawPrograms: any[]): { message: string; orderedDetails: string[] } {
   const targetMon = MONTH_NAME_TO_NUM[month]
-  if (!targetMon) return ''
+  if (!targetMon) return { message: '', orderedDetails: [] }
 
   const groups = new Map<string, any[]>()
   for (const p of rawPrograms) {
@@ -331,6 +331,7 @@ export function buildUmrahMonthMessage(month: string, rawPrograms: any[]): strin
   type TripRow = {
     depISO: string; retISO: string; duration: number
     meccaHotel: string; medinaHotel: string; minQuad: number
+    progs: any[]
   }
   const trips: TripRow[] = []
   for (const [key, progs] of groups) {
@@ -344,11 +345,13 @@ export function buildUmrahMonthMessage(month: string, rawPrograms: any[]): strin
     const minProg = progs.find((p: any) => (p.quadPrice ?? p.priceQuad ?? 0) === minQuad) ?? progs[0]
     const meccaHotel  = minProg.makkahHotel  ?? minProg.meccaHotel  ?? ''
     const medinaHotel = minProg.madinahHotel ?? minProg.medinaHotel ?? ''
-    trips.push({ depISO, retISO, duration, meccaHotel, medinaHotel, minQuad })
+    trips.push({ depISO, retISO, duration, meccaHotel, medinaHotel, minQuad, progs })
   }
   trips.sort((a, b) => a.depISO.localeCompare(b.depISO))
 
-  if (trips.length === 0) return ''
+  if (trips.length === 0) return { message: '', orderedDetails: [] }
+
+  const orderedDetails = trips.map(t => renderUmrahTripDetail(t.depISO, t.retISO, t.duration, t.progs))
 
   const lines = [`*رحلات عمرة ${month} ٢٠٢٦*`]
   trips.forEach((t, i) => {
@@ -359,7 +362,7 @@ export function buildUmrahMonthMessage(month: string, rawPrograms: any[]): strin
   lines.push('')
   lines.push('ابعت رقم الرحلة وهبعتلك برامجها وأسعارها كاملة')
 
-  return lines.join('\n')
+  return { message: lines.join('\n'), orderedDetails }
 }
 
 // ── Umrah month overview — code-built for verbatim copy (no AI price hallucination) ──
@@ -373,6 +376,35 @@ function ovFmtDay(iso: string): string {
 }
 
 function ovDurWord(n: number): string { return n >= 3 && n <= 10 ? 'أيام' : 'يوم' }
+
+function renderUmrahTripDetail(depISO: string, retISO: string, duration: number, progs: any[]): string {
+  const header = `*رحلة ${ovFmtDay(depISO)} — ${ovFmtDay(retISO)} ٢٠٢٦ (${toArabicIndic(duration)} ${ovDurWord(duration)})*`
+  const sorted = [...progs].sort((a, b) => (a.quadPrice ?? a.priceQuad ?? 0) - (b.quadPrice ?? b.priceQuad ?? 0))
+  const lines: string[] = [header, '']
+  for (const p of sorted) {
+    const meccaHotel  = p.makkahHotel  ?? p.meccaHotel  ?? ''
+    const medinaHotel = p.madinahHotel ?? p.medinaHotel ?? ''
+    const meccaBf     = p.makkahBreakfast  ?? p.meccaBreakfast  ?? false
+    const medinaBf    = p.madinahBreakfast ?? p.medinaBreakfast ?? false
+    const quad   = p.quadPrice   ?? p.priceQuad   ?? 0
+    const triple = p.triplePrice ?? p.priceTriple ?? 0
+    const double = p.doublePrice ?? p.priceDouble ?? 0
+    const name: string = p.name ?? ''
+    let typeLabel: string
+    if (name.includes('خمس نجوم') || name.includes('فاخر')) typeLabel = 'خمس نجوم'
+    else if (name.includes('اقتصادي متميز')) typeLabel = 'اقتصادي متميز'
+    else if (name.includes('اقتصادي')) typeLabel = 'اقتصادي'
+    else typeLabel = name || 'اقتصادي'
+    const meccaStr  = meccaHotel  ? `مكة: ${meccaHotel}${meccaBf  ? ' (إفطار)' : ''}` : ''
+    const medinaStr = medinaHotel ? `المدينة: ${medinaHotel}${medinaBf ? ' (إفطار)' : ''}` : ''
+    const hotelsStr = [meccaStr, medinaStr].filter(Boolean).join(' | ')
+    lines.push(`• ${typeLabel}${hotelsStr ? ' — ' + hotelsStr : ''}`)
+    lines.push(`رباعي: ${formatPrice(quad)} ج | ثلاثي: ${formatPrice(triple)} ج | ثنائي: ${formatPrice(double)} ج`)
+    lines.push('')
+  }
+  if (lines[lines.length - 1] === '') lines.pop()
+  return lines.join('\n')
+}
 
 export function buildUmrahMonthOverview(rawPrograms: any[]): string {
   const groups = new Map<string, any[]>()
@@ -489,6 +521,7 @@ export interface IndustryPromptParts {
   hajjOverviewMessage: string
   hajjOverviewDetails: string[]
   umrahMonthMessages: Record<string, string>
+  umrahMonthDetails: Record<string, string[]>
 }
 
 export function buildIndustryPromptFromDB(
@@ -533,14 +566,15 @@ export function buildIndustryPromptFromDB(
     buildHajjOverviewMessage(cat.hajjPrograms)
 
   const umrahMonthMessages: Record<string, string> = {}
+  const umrahMonthDetails: Record<string, string[]> = {}
   for (const mon of ['يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر']) {
-    const msg = buildUmrahMonthMessage(mon, cat.umrahPrograms as any[])
-    if (msg) umrahMonthMessages[mon] = msg
+    const { message, orderedDetails } = buildUmrahMonthMessage(mon, cat.umrahPrograms as any[])
+    if (message) { umrahMonthMessages[mon] = message; umrahMonthDetails[mon] = orderedDetails }
   }
 
   return {
     identity, catalog, hotels, hotelList, monthOverviews: monthOverview,
-    hajjProgramDetails, hajjOverviewMessage, hajjOverviewDetails, umrahMonthMessages,
+    hajjProgramDetails, hajjOverviewMessage, hajjOverviewDetails, umrahMonthMessages, umrahMonthDetails,
   }
 }
 

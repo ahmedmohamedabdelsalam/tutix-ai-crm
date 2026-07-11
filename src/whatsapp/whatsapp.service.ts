@@ -392,9 +392,10 @@ export class WhatsAppService {
           console.log(`HAJJ_OV_BYPASS → ${phone} programs=${prebuiltCatalog.hajjOverviewDetails.length}`)
         } else if (isUmrahOv && ovMonth) {
           const ovMsg = prebuiltCatalog.umrahMonthMessages[ovMonth]
+          overviewMap.set(conv.id, { orderedDetails: prebuiltCatalog.umrahMonthDetails[ovMonth] })
           await saveAssistantMessage(this.prisma, conv.id, ovMsg)
           parts.push(ovMsg)
-          console.log(`UMRAH_OV_BYPASS → ${phone} month=${ovMonth}`)
+          console.log(`UMRAH_OV_BYPASS → ${phone} month=${ovMonth} trips=${prebuiltCatalog.umrahMonthDetails[ovMonth].length}`)
         }
 
         return parts.length === 1 ? parts[0] : parts
@@ -423,9 +424,10 @@ export class WhatsAppService {
           console.log(`HAJJ_OV_ZERO_AI → ${phone} programs=${prebuiltCatalog.hajjOverviewDetails.length}`)
         } else if (firstMsgUmrahMonth) {
           const ovMsg = prebuiltCatalog.umrahMonthMessages[firstMsgUmrahMonth]
+          overviewMap.set(conv.id, { orderedDetails: prebuiltCatalog.umrahMonthDetails[firstMsgUmrahMonth] })
           await saveAssistantMessage(this.prisma, conv.id, ovMsg)
           parts.push(ovMsg)
-          console.log(`UMRAH_OV_ZERO_AI_FIRST → ${phone} month=${firstMsgUmrahMonth}`)
+          console.log(`UMRAH_OV_ZERO_AI_FIRST → ${phone} month=${firstMsgUmrahMonth} trips=${prebuiltCatalog.umrahMonthDetails[firstMsgUmrahMonth].length}`)
         }
 
         return parts.length === 1 ? parts[0] : parts
@@ -553,8 +555,9 @@ export class WhatsAppService {
         // ── Umrah month bypass: send pre-built month message, no second AI call ──
         if (umrahMonth && prebuiltCatalog?.umrahMonthMessages?.[umrahMonth]) {
           const ovMsg = prebuiltCatalog.umrahMonthMessages[umrahMonth]
+          overviewMap.set(conv.id, { orderedDetails: prebuiltCatalog.umrahMonthDetails[umrahMonth] })
           await saveAssistantMessage(this.prisma, conv.id, ovMsg)
-          console.log(`UMRAH_OV_FIRST → ${phone} month=${umrahMonth}`)
+          console.log(`UMRAH_OV_FIRST → ${phone} month=${umrahMonth} trips=${prebuiltCatalog.umrahMonthDetails[umrahMonth].length}`)
           return [reply, ovMsg]
         }
 

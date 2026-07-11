@@ -14,6 +14,7 @@ export interface PrebuiltCatalog {
   hajjOverviewMessage: string
   hajjOverviewDetails: string[]
   umrahMonthMessages: Record<string, string>
+  umrahMonthDetails: Record<string, string[]>
 }
 
 // Lazy init — created on first use, after NestJS has loaded env vars
