@@ -8,7 +8,7 @@ import { applyHajjDateDisclaimer } from './hajj-date-disclaimer'
 import { companionConfirmedInHistory, travelDateConfirmedInHistory } from './lead-fact-guards'
 import { detectOnlinePayment, detectFarFromBranch, detectVisitConfirm } from './booking-stage-detectors'
 import { getGovFromText, branchMessage } from './branch-lookup'
-import { containsFirstMessageQuestion, detectUmrahMonth, detectFullDetailsIntent, detectContinueResponse, detectHajjOverviewIntent, detectNumberReply } from './intent-detectors'
+import { containsFirstMessageQuestion, detectUmrahMonth, detectFullDetailsIntent, detectContinueResponse, detectHajjOverviewIntent, detectNumberReply, detectUmrahOverviewIntent } from './intent-detectors'
 
 import { detectFollowUpIntent, clampToWindow, DEFERRAL_PHRASES } from './follow-up-scheduler'
 import { handleAICreditsExhausted, writeCostRecord } from './ai-cost-helpers'
@@ -375,9 +375,10 @@ export class WhatsAppService {
       const ovMonth = detectUmrahMonth(text)
       const isHajjOv  = detectHajjOverviewIntent(text) && !detectFullDetailsIntent(text) &&
                         !!prebuiltCatalog.hajjOverviewMessage
-      const isUmrahOv = !!ovMonth && !!prebuiltCatalog.umrahMonthMessages?.[ovMonth]
+      const isUmrahOv    = !!ovMonth && !!prebuiltCatalog.umrahMonthMessages?.[ovMonth]
+      const isUmrahAllOv = !ovMonth && detectUmrahOverviewIntent(text) && !!prebuiltCatalog.umrahAllMonthsMessage
 
-      if (isHajjOv || isUmrahOv) {
+      if (isHajjOv || isUmrahOv || isUmrahAllOv) {
         fullDetailsMap.delete(conv.id)
         const firstName = knownCustomerName?.split(/\s+/)[0]
         const intro = firstName ? `تمام يا أستاذ ${firstName} اتفضل` : `اتفضل يافندم`
@@ -396,6 +397,12 @@ export class WhatsAppService {
           await saveAssistantMessage(this.prisma, conv.id, ovMsg)
           parts.push(ovMsg)
           console.log(`UMRAH_OV_BYPASS → ${phone} month=${ovMonth} trips=${prebuiltCatalog.umrahMonthDetails[ovMonth].length}`)
+        } else if (isUmrahAllOv) {
+          const ovMsg = prebuiltCatalog.umrahAllMonthsMessage
+          overviewMap.set(conv.id, { orderedDetails: prebuiltCatalog.umrahAllMonthsDetails })
+          await saveAssistantMessage(this.prisma, conv.id, ovMsg)
+          parts.push(ovMsg)
+          console.log(`UMRAH_ALL_OV_BYPASS → ${phone} total=${prebuiltCatalog.umrahAllMonthsDetails.length}`)
         }
 
         return parts.length === 1 ? parts[0] : parts
@@ -405,11 +412,12 @@ export class WhatsAppService {
     // First-message overview bypass: zero AI calls — intro from code, prebuilt message appended
     if (totalMsgCount === 1 && containsFirstMessageQuestion(text) && prebuiltCatalog) {
       const firstMsgUmrahMonth = detectUmrahMonth(text)
-      const isHajjOvFirst = detectHajjOverviewIntent(text) && !detectFullDetailsIntent(text)
+      const isHajjOvFirst    = detectHajjOverviewIntent(text) && !detectFullDetailsIntent(text)
         && !!prebuiltCatalog.hajjOverviewMessage
-      const isUmrahOvFirst = !!firstMsgUmrahMonth && !!prebuiltCatalog.umrahMonthMessages?.[firstMsgUmrahMonth]
+      const isUmrahOvFirst   = !!firstMsgUmrahMonth && !!prebuiltCatalog.umrahMonthMessages?.[firstMsgUmrahMonth]
+      const isUmrahAllOvFirst = !firstMsgUmrahMonth && detectUmrahOverviewIntent(text) && !!prebuiltCatalog.umrahAllMonthsMessage
 
-      if (isHajjOvFirst || isUmrahOvFirst) {
+      if (isHajjOvFirst || isUmrahOvFirst || isUmrahAllOvFirst) {
         fullDetailsMap.delete(conv.id)
         const firstName = knownCustomerName?.split(/\s+/)[0]
         const intro = firstName ? `تمام يا أستاذ ${firstName} اتفضل` : `اتفضل يافندم`
@@ -428,6 +436,12 @@ export class WhatsAppService {
           await saveAssistantMessage(this.prisma, conv.id, ovMsg)
           parts.push(ovMsg)
           console.log(`UMRAH_OV_ZERO_AI_FIRST → ${phone} month=${firstMsgUmrahMonth} trips=${prebuiltCatalog.umrahMonthDetails[firstMsgUmrahMonth].length}`)
+        } else if (isUmrahAllOvFirst) {
+          const ovMsg = prebuiltCatalog.umrahAllMonthsMessage
+          overviewMap.set(conv.id, { orderedDetails: prebuiltCatalog.umrahAllMonthsDetails })
+          await saveAssistantMessage(this.prisma, conv.id, ovMsg)
+          parts.push(ovMsg)
+          console.log(`UMRAH_ALL_OV_ZERO_AI_FIRST → ${phone} total=${prebuiltCatalog.umrahAllMonthsDetails.length}`)
         }
 
         return parts.length === 1 ? parts[0] : parts
@@ -558,6 +572,15 @@ export class WhatsAppService {
           overviewMap.set(conv.id, { orderedDetails: prebuiltCatalog.umrahMonthDetails[umrahMonth] })
           await saveAssistantMessage(this.prisma, conv.id, ovMsg)
           console.log(`UMRAH_OV_FIRST → ${phone} month=${umrahMonth} trips=${prebuiltCatalog.umrahMonthDetails[umrahMonth].length}`)
+          return [reply, ovMsg]
+        }
+
+        // ── Umrah all-months bypass: general umrah query with no specific month ──
+        if (!umrahMonth && detectUmrahOverviewIntent(text) && prebuiltCatalog?.umrahAllMonthsMessage) {
+          const ovMsg = prebuiltCatalog.umrahAllMonthsMessage
+          overviewMap.set(conv.id, { orderedDetails: prebuiltCatalog.umrahAllMonthsDetails })
+          await saveAssistantMessage(this.prisma, conv.id, ovMsg)
+          console.log(`UMRAH_ALL_OV_FIRST → ${phone} total=${prebuiltCatalog.umrahAllMonthsDetails.length}`)
           return [reply, ovMsg]
         }
 

@@ -449,6 +449,74 @@ export function buildUmrahMonthOverview(rawPrograms: any[]): string {
   return `## ملخص رحلات العمرة بالشهر (جاهز — انقل سطور كل شهر حرفياً بدون تعديل)\n${blocks.join('\n\n')}`
 }
 
+// ── All-months umrah overview — numbered globally across months, for general queries ──
+
+export function buildUmrahAllMonthsOverview(rawPrograms: any[]): { message: string; orderedDetails: string[] } {
+  const MONTH_ORDER = ['يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر']
+  const MONTH_NUM: Record<string, number> = { 'يوليو': 7, 'أغسطس': 8, 'سبتمبر': 9, 'أكتوبر': 10, 'نوفمبر': 11 }
+
+  type TripEntry = {
+    depISO: string; retISO: string; duration: number
+    meccaHotel: string; medinaHotel: string; minQuad: number
+    progs: any[]; month: string
+  }
+
+  const allTrips: TripEntry[] = []
+
+  for (const month of MONTH_ORDER) {
+    const targetMon = MONTH_NUM[month]
+    const groups = new Map<string, any[]>()
+    for (const p of rawPrograms) {
+      const dep = p.departureDate ?? ''
+      const ret = p.returnDate ?? ''
+      if (!dep || !ret || !/^\d{4}-\d{2}-\d{2}$/.test(dep)) continue
+      if (parseInt(dep.slice(5, 7), 10) !== targetMon) continue
+      const key = `${dep}|${ret}`
+      if (!groups.has(key)) groups.set(key, [])
+      groups.get(key)!.push(p)
+    }
+    const monthTrips: TripEntry[] = []
+    for (const [key, progs] of groups) {
+      const [depISO, retISO] = key.split('|')
+      const depMs = new Date(depISO + 'T00:00:00Z').getTime()
+      const retMs = new Date(retISO + 'T00:00:00Z').getTime()
+      const duration = Math.round((retMs - depMs) / 86400000) + 1
+      const quadPrices = progs.map((p: any) => p.quadPrice ?? p.priceQuad ?? 0).filter((x: number) => x > 0)
+      if (quadPrices.length === 0) continue
+      const minQuad = Math.min(...quadPrices)
+      const minProg = progs.find((p: any) => (p.quadPrice ?? p.priceQuad ?? 0) === minQuad) ?? progs[0]
+      const meccaHotel  = minProg.makkahHotel  ?? minProg.meccaHotel  ?? ''
+      const medinaHotel = minProg.madinahHotel ?? minProg.medinaHotel ?? ''
+      monthTrips.push({ depISO, retISO, duration, meccaHotel, medinaHotel, minQuad, progs, month })
+    }
+    monthTrips.sort((a, b) => a.depISO.localeCompare(b.depISO))
+    allTrips.push(...monthTrips)
+  }
+
+  if (allTrips.length === 0) return { message: '', orderedDetails: [] }
+
+  const orderedDetails = allTrips.map(t => renderUmrahTripDetail(t.depISO, t.retISO, t.duration, t.progs))
+
+  const lines: string[] = ['*برامج العمرة ٢٠٢٦*']
+  let currentMonth = ''
+  let n = 0
+  for (const t of allTrips) {
+    if (t.month !== currentMonth) {
+      currentMonth = t.month
+      lines.push('')
+      lines.push(`*${t.month}:*`)
+    }
+    n++
+    const dur = `${toArabicIndic(t.duration)} ${ovDurWord(t.duration)}`
+    const hotels = [t.meccaHotel, t.medinaHotel].filter(Boolean).join(' + ')
+    lines.push(`${toArabicIndic(n)}• ${ovFmtDay(t.depISO)} — ${ovFmtDay(t.retISO)} (${dur}) — ${hotels} — يبدأ من ${formatPrice(t.minQuad)} ج`)
+  }
+  lines.push('')
+  lines.push('ابعت رقم الرحلة وهبعتلك برامجها وأسعارها كاملة')
+
+  return { message: lines.join('\n'), orderedDetails }
+}
+
 // ── General knowledge + FAQ — pre-stored in industryData or fallback static ──
 
 const HAJJ_GENERAL_KNOWLEDGE_STATIC = `## القسم ٣ج — معلومات عامة عن رحلة الحج (للإجابة على أسئلة العملاء)
@@ -522,6 +590,8 @@ export interface IndustryPromptParts {
   hajjOverviewDetails: string[]
   umrahMonthMessages: Record<string, string>
   umrahMonthDetails: Record<string, string[]>
+  umrahAllMonthsMessage: string
+  umrahAllMonthsDetails: string[]
 }
 
 export function buildIndustryPromptFromDB(
@@ -572,9 +642,13 @@ export function buildIndustryPromptFromDB(
     if (message) { umrahMonthMessages[mon] = message; umrahMonthDetails[mon] = orderedDetails }
   }
 
+  const { message: umrahAllMonthsMessage, orderedDetails: umrahAllMonthsDetails } =
+    buildUmrahAllMonthsOverview(cat.umrahPrograms as any[])
+
   return {
     identity, catalog, hotels, hotelList, monthOverviews: monthOverview,
-    hajjProgramDetails, hajjOverviewMessage, hajjOverviewDetails, umrahMonthMessages, umrahMonthDetails,
+    hajjProgramDetails, hajjOverviewMessage, hajjOverviewDetails,
+    umrahMonthMessages, umrahMonthDetails, umrahAllMonthsMessage, umrahAllMonthsDetails,
   }
 }
 

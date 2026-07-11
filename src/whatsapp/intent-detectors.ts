@@ -38,6 +38,10 @@ export function detectHajjOverviewIntent(text: string): boolean {
     (/حج/.test(text) && /برامج|اسعار|أسعار|قولي|اعرض|عايز\s*اعرف/.test(text))
 }
 
+export function detectUmrahOverviewIntent(text: string): boolean {
+  return /عمرة/.test(text) && /برامج|رحلات|أسعار|اسعار|عندكم|عايز|محتاج|قولي/.test(text)
+}
+
 export function detectNumberReply(text: string): number | null {
   const t = text.trim()
   // Arabic-Indic single digit ١-٩
