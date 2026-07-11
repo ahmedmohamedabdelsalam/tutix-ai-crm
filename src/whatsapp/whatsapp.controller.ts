@@ -16,6 +16,28 @@ const MEDIA_REPLIES: Record<string, { label: string; reply: string }> = {
 }
 const MEDIA_TYPES = new Set(Object.keys(MEDIA_REPLIES))
 
+// Dedup guard: Meta sometimes delivers the same webhook twice within seconds.
+// Keep the last 200 message IDs with their arrival timestamp; evict entries
+// older than 5 minutes so memory stays bounded under sustained traffic.
+const SEEN_MSG_TTL_MS = 5 * 60 * 1000   // 5 minutes
+const SEEN_MSG_MAX    = 200
+const seenMessageIds  = new Map<string, number>() // id → timestamp
+
+function isDuplicateMessage(id: string): boolean {
+  const now = Date.now()
+
+  // Evict stale entries to keep the map bounded
+  if (seenMessageIds.size >= SEEN_MSG_MAX) {
+    for (const [k, ts] of seenMessageIds) {
+      if (now - ts > SEEN_MSG_TTL_MS) seenMessageIds.delete(k)
+    }
+  }
+
+  if (seenMessageIds.has(id)) return true
+  seenMessageIds.set(id, now)
+  return false
+}
+
 function detectAdSource(referral?: { source_url?: string }): string {
   if (!referral) return 'direct'
   const url = referral.source_url ?? ''
@@ -60,6 +82,12 @@ export class WhatsAppController {
       const message = value?.messages?.[0]
       if (!message?.from || !message?.id) return
       if (!message?.text?.body && !MEDIA_TYPES.has(message?.type)) return
+
+      // Dedup: Meta re-delivers webhooks; skip duplicates (200 already sent above)
+      if (isDuplicateMessage(message.id as string)) {
+        console.log(`WEBHOOK_DUP → skipped duplicate message.id=${message.id} from=${message.from}`)
+        return
+      }
 
       const incomingPhoneId = value?.metadata?.phone_number_id
       const referral        = message.referral ?? null
