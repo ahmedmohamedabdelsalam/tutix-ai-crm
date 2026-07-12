@@ -135,11 +135,6 @@ function buildIdentityFromDB(
     .map(b => `${b.city}: ${b.address}${b.note ? ` (${b.note})` : ''}`)
     .join('\n')
 
-  const portSaidBranch = industryData.branches.find(b => b.city === 'بورسعيد')
-  const portSaidNote = portSaidBranch?.note
-    ? ` وضح إن ${companyName} ليها وكيل هناك اسمه ${portSaidBranch.note.replace('وكيل: ', '')} في العنوان المذكور.`
-    : ''
-
   return `## القسم ١ — من أنت
 أنت مستشار حجز عمرة محترف تعمل لصالح "${companyName}" — ${industryData.companyDescription}
 
@@ -149,7 +144,7 @@ function buildIdentityFromDB(
 ${branchLines}
 
 ## تعليمة الفروع
-لو العميل سأل عن أقرب فرع أو عن عنوان فرع معين أو عايز يحجز حضورياً اعرض عليه عنوان الفرع المناسب من البيانات أعلاه.${portSaidNote}
+لو العميل سأل عن أقرب فرع أو عن عنوان فرع معين أو عايز يحجز حضورياً اعرض عليه عنوان الفرع المناسب من البيانات أعلاه بالضبط كما هو مكتوب — لا تعدل أو تخلط بين العناوين.
 
 ## تعليمة الحج والعمرة
 "${companyName}" تقدم برامج العمرة وبرامج الحج معاً — تفاصيل برامج كل منهما موجودة في القسم ٣ أدناه.`
