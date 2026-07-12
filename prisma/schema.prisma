@@ -68,9 +68,11 @@ model User {
   name          String
   email         String   @unique
   password      String
-  role          UserRole @default(AGENT)
-  isActive      Boolean  @default(true)
-  createdAt     DateTime @default(now())
+  role                UserRole @default(AGENT)
+  isActive            Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  manualLeadWeight    Int      @default(0)
+  aiLeadWeight        Int      @default(0)
   company       Company  @relation(fields: [companyId], references: [id])
   assignedLeads Lead[]   @relation("LeadAssignment")
   tasks         Task[]
@@ -110,6 +112,7 @@ model Lead {
   extraNotes    String?
   companionNote String?
   referralData  Json?
+  customerType  String?
   assignedTo    String?
   assignedAt    DateTime?
   tripDepartureDate  DateTime?
@@ -260,6 +263,7 @@ model PermanentCustomer {
   phoneAlt           String?
   tripDate           DateTime?
   hotelName          String?
+  tripProgramName    String?
   packageLevel       Int?
   gender             String?
   birthDate          DateTime?
