@@ -268,9 +268,9 @@ export function buildHajjOverviewMessage(hajjPrograms: HajjProgram[]): HajjOverv
     const ticketNote = p.ticketType && p.ticketType !== 'طيران'
       ? ` (بدون تذكرة ال${p.ticketType.replace(/^ال/, '')})` : ''
     if (p.discountedPrice) {
-      return `${num}• *${name}* — ${price} ج وبعد الخصم ${formatPrice(p.discountedPrice)} ج`
+      return `${num}• *${name}* — ${price} جنيه/فرد وبعد الخصم ${formatPrice(p.discountedPrice)} جنيه/فرد`
     }
-    return `${num}• *${name}* — ${price} ج${ticketNote}`
+    return `${num}• *${name}* — ${price} جنيه/فرد${ticketNote}`
   }
 
   const lines: string[] = [`*برامج الحج ١٤٤٨هـ — مايو ٢٠٢٧م*`]
@@ -352,7 +352,7 @@ export function buildUmrahMonthMessage(month: string, rawPrograms: any[]): { mes
   trips.forEach((t, i) => {
     const dur = `${toArabicIndic(t.duration)} ${ovDurWord(t.duration)}`
     const hotels = [t.meccaHotel, t.medinaHotel].filter(Boolean).join(' + ')
-    lines.push(`${toArabicIndic(i + 1)}• ${ovFmtDay(t.depISO)} — ${ovFmtDay(t.retISO)} (${dur}) — ${hotels} — يبدأ من ${formatPrice(t.minQuad)} ج`)
+    lines.push(`${toArabicIndic(i + 1)}• ${ovFmtDay(t.depISO)} — ${ovFmtDay(t.retISO)} (${dur}) — ${hotels} — يبدأ من ${formatPrice(t.minQuad)} جنيه/فرد`)
   })
   lines.push('')
   lines.push('ابعت رقم الرحلة وهبعتلك برامجها وأسعارها كاملة')
@@ -394,7 +394,7 @@ function renderUmrahTripDetail(depISO: string, retISO: string, duration: number,
     const medinaStr = medinaHotel ? `المدينة: ${medinaHotel}${medinaBf ? ' (إفطار)' : ''}` : ''
     const hotelsStr = [meccaStr, medinaStr].filter(Boolean).join(' | ')
     lines.push(`• ${typeLabel}${hotelsStr ? ' — ' + hotelsStr : ''}`)
-    lines.push(`رباعي: ${formatPrice(quad)} ج | ثلاثي: ${formatPrice(triple)} ج | ثنائي: ${formatPrice(double)} ج`)
+    lines.push(`رباعي: ${formatPrice(quad)} ج/فرد | ثلاثي: ${formatPrice(triple)} ج/فرد | ثنائي: ${formatPrice(double)} ج/فرد`)
     lines.push('')
   }
   if (lines[lines.length - 1] === '') lines.pop()
@@ -504,7 +504,7 @@ export function buildUmrahAllMonthsOverview(rawPrograms: any[]): { message: stri
     n++
     const dur = `${toArabicIndic(t.duration)} ${ovDurWord(t.duration)}`
     const hotels = [t.meccaHotel, t.medinaHotel].filter(Boolean).join(' + ')
-    lines.push(`${toArabicIndic(n)}• ${ovFmtDay(t.depISO)} — ${ovFmtDay(t.retISO)} (${dur}) — ${hotels} — يبدأ من ${formatPrice(t.minQuad)} ج`)
+    lines.push(`${toArabicIndic(n)}• ${ovFmtDay(t.depISO)} — ${ovFmtDay(t.retISO)} (${dur}) — ${hotels} — يبدأ من ${formatPrice(t.minQuad)} جنيه/فرد`)
   }
   lines.push('')
   lines.push('ابعت رقم الرحلة وهبعتلك برامجها وأسعارها كاملة')
