@@ -37,6 +37,7 @@ model Company {
   aiConfig          CompanyAIConfig?
   branches          Branch[]
   attendanceRecords AttendanceRecord[]
+  specialtyWeights  UserSpecialtyWeight[]
 }
 
 model CompanyAIConfig {
@@ -78,6 +79,7 @@ model User {
   tasks         Task[]
   callLogs          CallLog[]
   attendanceRecords AttendanceRecord[]
+  specialtyWeights  UserSpecialtyWeight[]
 
   @@index([companyId])
 }
@@ -220,6 +222,13 @@ enum FollowUpStatus {
 enum MessageRole {
   USER
   ASSISTANT
+}
+
+enum ServiceSpecialty {
+  HAJJ
+  UMRAH
+  FLIGHTS
+  OTHER
 }
 
 model Task {
@@ -425,5 +434,22 @@ model AttendanceRecord {
   @@index([userId])
   @@index([branchId])
   @@index([checkInAt])
+}
+
+model UserSpecialtyWeight {
+  id           String           @id @default(cuid())
+  companyId    String
+  userId       String
+  specialty    ServiceSpecialty
+  manualWeight Int              @default(0)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id])
+  user    User    @relation(fields: [userId], references: [id])
+
+  @@unique([userId, specialty])
+  @@index([companyId])
+  @@index([userId])
 }
 
