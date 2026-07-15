@@ -20,6 +20,7 @@ export interface PrebuiltCatalog {
   hajjFiveStarDetails: string[]
   umrahMonthMessages: Record<string, string>
   umrahMonthDetails: Record<string, string[]>
+  umrahMonthLevelMessages: Record<string, Record<string, string>>
   umrahAllMonthsMessage: string
   umrahAllMonthsDetails: string[]
 }

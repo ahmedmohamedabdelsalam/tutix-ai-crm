@@ -438,7 +438,7 @@ function renderUmrahTripCard(
   ].join('\n')
 }
 
-export function buildUmrahMonthMessage(month: string, rawPrograms: any[]): { message: string; orderedDetails: string[] } {
+export function buildUmrahMonthMessage(month: string, rawPrograms: any[], level?: string): { message: string; orderedDetails: string[] } {
   const targetMon = MONTH_NAME_TO_NUM[month]
   if (!targetMon) return { message: '', orderedDetails: [] }
 
@@ -476,11 +476,45 @@ export function buildUmrahMonthMessage(month: string, rawPrograms: any[]): { mes
 
   if (trips.length === 0) return { message: '', orderedDetails: [] }
 
+  // orderedDetails always covers ALL trips so global trip numbers resolve correctly via overviewMap
   const orderedDetails = trips.map(t => renderUmrahTripDetail(t.depISO, t.retISO, t.duration, t.progs))
 
-  const parts: string[] = [`*رحلات عمرة ${month} ٢٠٢٦*`]
+  // Build per-card display info — level filter narrows cards but preserves global trip numbers
+  type CardInfo = {
+    globalN: number; depISO: string; retISO: string; duration: number
+    mecca: string; medina: string; displayLevels: string[]; minQuad: number
+  }
+  const cards: CardInfo[] = []
   trips.forEach((t, i) => {
-    parts.push(renderUmrahTripCard(i + 1, t.depISO, t.retISO, t.duration, t.meccaHotel, t.medinaHotel, t.levels, t.minQuad))
+    const globalN = i + 1
+    if (level) {
+      const levelProgs = t.progs.filter(p => umrahProgramLevel(p) === level)
+      if (levelProgs.length === 0) return
+      const lvlPrices = levelProgs.map((p: any) => p.quadPrice ?? p.priceQuad ?? 0).filter((x: number) => x > 0)
+      if (lvlPrices.length === 0) return
+      const lvlMin  = Math.min(...lvlPrices)
+      const lvlProg = levelProgs.find((p: any) => (p.quadPrice ?? p.priceQuad ?? 0) === lvlMin) ?? levelProgs[0]
+      cards.push({
+        globalN, depISO: t.depISO, retISO: t.retISO, duration: t.duration,
+        mecca:  lvlProg.makkahHotel  ?? lvlProg.meccaHotel  ?? '',
+        medina: lvlProg.madinahHotel ?? lvlProg.medinaHotel ?? '',
+        displayLevels: [level],
+        minQuad: lvlMin,
+      })
+    } else {
+      cards.push({
+        globalN, depISO: t.depISO, retISO: t.retISO, duration: t.duration,
+        mecca: t.meccaHotel, medina: t.medinaHotel, displayLevels: t.levels, minQuad: t.minQuad,
+      })
+    }
+  })
+
+  if (level && cards.length === 0) return { message: '', orderedDetails: [] }
+
+  const title = level ? `*رحلات عمرة ${month} ٢٠٢٦ — ${level}*` : `*رحلات عمرة ${month} ٢٠٢٦*`
+  const parts: string[] = [title]
+  cards.forEach(c => {
+    parts.push(renderUmrahTripCard(c.globalN, c.depISO, c.retISO, c.duration, c.mecca, c.medina, c.displayLevels, c.minQuad))
   })
   parts.push('ابعت رقم الرحلة اللي تناسبك وهبعتلك مستوياتها وأسعارها كاملة')
 
@@ -714,6 +748,7 @@ export interface IndustryPromptParts {
   hajjFiveStarDetails: string[]
   umrahMonthMessages: Record<string, string>
   umrahMonthDetails: Record<string, string[]>
+  umrahMonthLevelMessages: Record<string, Record<string, string>>
   umrahAllMonthsMessage: string
   umrahAllMonthsDetails: string[]
 }
@@ -772,6 +807,17 @@ export function buildIndustryPromptFromDB(
     if (message) { umrahMonthMessages[mon] = message; umrahMonthDetails[mon] = orderedDetails }
   }
 
+  const umrahMonthLevelMessages: Record<string, Record<string, string>> = {}
+  for (const mon of ['يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر']) {
+    for (const lev of UMRAH_LEVEL_ORDER) {
+      const { message } = buildUmrahMonthMessage(mon, cat.umrahPrograms as any[], lev)
+      if (message) {
+        if (!umrahMonthLevelMessages[mon]) umrahMonthLevelMessages[mon] = {}
+        umrahMonthLevelMessages[mon][lev] = message
+      }
+    }
+  }
+
   const { message: umrahAllMonthsMessage, orderedDetails: umrahAllMonthsDetails } =
     buildUmrahAllMonthsOverview(cat.umrahPrograms as any[])
 
@@ -780,7 +826,8 @@ export function buildIndustryPromptFromDB(
     hajjProgramDetails, hajjOverviewMessage, hajjOverviewDetails,
     hajjCategoryQuestion, hajjEconomyPrograms, hajjEconomyDetails,
     hajjFiveStarPrograms, hajjFiveStarDetails,
-    umrahMonthMessages, umrahMonthDetails, umrahAllMonthsMessage, umrahAllMonthsDetails,
+    umrahMonthMessages, umrahMonthDetails, umrahMonthLevelMessages,
+    umrahAllMonthsMessage, umrahAllMonthsDetails,
   }
 }
 

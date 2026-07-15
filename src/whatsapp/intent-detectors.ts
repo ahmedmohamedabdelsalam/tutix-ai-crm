@@ -18,6 +18,16 @@ export function detectUmrahMonth(text: string): string | null {
   return null
 }
 
+// Detects the requested Umrah level from a customer message.
+// "اقتصادي متميز" must be checked before "اقتصادي" (substring containment).
+// فاخر maps to خمس نجوم — mirrors umrahProgramLevel() in dynamic-catalog-builder.
+export function detectUmrahLevel(text: string): 'اقتصادي' | 'اقتصادي متميز' | 'خمس نجوم' | null {
+  if (/اقتصادي\s*متميز/.test(text)) return 'اقتصادي متميز'
+  if (/اقتصادي/.test(text)) return 'اقتصادي'
+  if (/خمس\s*نجوم|٥\s*نجوم|5\s*نجوم|فاخر|فاخرة/.test(text)) return 'خمس نجوم'
+  return null
+}
+
 // Extracts just the trip lines for a specific month from the monthOverviews block.
 export function detectFullDetailsIntent(text: string): boolean {
   // Match requests for full program details even when modifier words are between keywords
