@@ -170,13 +170,55 @@ export class WhatsAppService {
             console.log(`BOOKING_GOV_RESOLVED → ${phone} gov=${gov}`)
             return bMsg
           }
-          const isTopicChange =
-            detectUmrahMonth(text) !== null ||
-            detectHajjOverviewIntent(text) !== null ||
-            detectUmrahOverviewIntent(text)
+          const ovMonthEsc      = detectUmrahMonth(text)
+          const hajjOvIntentEsc = detectHajjOverviewIntent(text)
+          const isUmrahOvEsc    = ovMonthEsc !== null
+          const isUmrahAllOvEsc = !ovMonthEsc && detectUmrahOverviewIntent(text)
+          const isTopicChange   = hajjOvIntentEsc !== null || isUmrahOvEsc || isUmrahAllOvEsc
+
           if (isTopicChange) {
             await this.prisma.conversation.update({ where: { id: conv.id }, data: { bookingStage: 'NONE' } })
-            // fall through to POST-HANDOFF AI pipeline
+            fullDetailsMap.delete(conv.id)
+            const prebuiltCatalogEsc = await getPrebuiltCatalog(this.prisma, companyId, company.name)
+            if (prebuiltCatalogEsc) {
+              if (hajjOvIntentEsc !== null) {
+                if (hajjOvIntentEsc === 'GENERIC' && prebuiltCatalogEsc.hajjCategoryQuestion) {
+                  categoryQuestionMap.set(conv.id, true)
+                  await saveAssistantMessage(this.prisma, conv.id, prebuiltCatalogEsc.hajjCategoryQuestion)
+                  console.log(`BOOKING_ESC HAJJ_CAT_Q → ${phone}`)
+                  return prebuiltCatalogEsc.hajjCategoryQuestion
+                }
+                const catMsgEsc     = hajjOvIntentEsc === 'ECONOMY' ? prebuiltCatalogEsc.hajjEconomyPrograms : prebuiltCatalogEsc.hajjFiveStarPrograms
+                const catDetailsEsc = hajjOvIntentEsc === 'ECONOMY' ? prebuiltCatalogEsc.hajjEconomyDetails  : prebuiltCatalogEsc.hajjFiveStarDetails
+                if (catMsgEsc) {
+                  overviewMap.set(conv.id, { orderedDetails: catDetailsEsc })
+                  await saveAssistantMessage(this.prisma, conv.id, catMsgEsc)
+                  console.log(`BOOKING_ESC HAJJ_OV → ${phone} cat=${hajjOvIntentEsc} programs=${catDetailsEsc.length}`)
+                  return catMsgEsc
+                }
+              }
+              if (isUmrahOvEsc && ovMonthEsc && prebuiltCatalogEsc.umrahMonthMessages?.[ovMonthEsc]) {
+                const firstName = knownCustomerName?.split(/\s+/)[0]
+                const intro = firstName ? `تمام يا أستاذ ${firstName} اتفضل` : `اتفضل يافندم`
+                await saveAssistantMessage(this.prisma, conv.id, intro)
+                const ovMsg = prebuiltCatalogEsc.umrahMonthMessages[ovMonthEsc]
+                overviewMap.set(conv.id, { orderedDetails: prebuiltCatalogEsc.umrahMonthDetails[ovMonthEsc] })
+                await saveAssistantMessage(this.prisma, conv.id, ovMsg)
+                console.log(`BOOKING_ESC UMRAH_OV → ${phone} month=${ovMonthEsc}`)
+                return [intro, ovMsg]
+              }
+              if (isUmrahAllOvEsc && prebuiltCatalogEsc.umrahAllMonthsMessage) {
+                const firstName = knownCustomerName?.split(/\s+/)[0]
+                const intro = firstName ? `تمام يا أستاذ ${firstName} اتفضل` : `اتفضل يافندم`
+                await saveAssistantMessage(this.prisma, conv.id, intro)
+                const ovMsg = prebuiltCatalogEsc.umrahAllMonthsMessage
+                overviewMap.set(conv.id, { orderedDetails: prebuiltCatalogEsc.umrahAllMonthsDetails })
+                await saveAssistantMessage(this.prisma, conv.id, ovMsg)
+                console.log(`BOOKING_ESC UMRAH_ALL_OV → ${phone}`)
+                return [intro, ovMsg]
+              }
+            }
+            // prebuiltCatalog unavailable or no bypass path matched → fall through to AI pipeline
           } else {
             const askAgain = 'معلش يافندم، مفهمتش — حضرتك من أنهي محافظة بالضبط؟'
             await saveAssistantMessage(this.prisma, conv.id, askAgain)
