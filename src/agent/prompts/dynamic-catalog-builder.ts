@@ -403,6 +403,41 @@ const MONTH_NAME_TO_NUM: Record<string, number> = {
   'يوليو': 7, 'أغسطس': 8, 'سبتمبر': 9, 'أكتوبر': 10, 'نوفمبر': 11,
 }
 
+function umrahProgramLevel(p: any): string {
+  const name: string = p.name ?? ''
+  if (name.includes('خمس نجوم') || name.includes('فاخر')) return 'خمس نجوم'
+  if (name.includes('اقتصادي متميز')) return 'اقتصادي متميز'
+  if (name.includes('اقتصادي')) return 'اقتصادي'
+  return name || 'اقتصادي'
+}
+
+const UMRAH_LEVEL_ORDER = ['اقتصادي', 'اقتصادي متميز', 'خمس نجوم']
+
+function umrahTripLevels(progs: any[]): string[] {
+  const seen = new Set(progs.map(umrahProgramLevel))
+  const ordered = UMRAH_LEVEL_ORDER.filter(l => seen.has(l))
+  for (const l of seen) { if (!UMRAH_LEVEL_ORDER.includes(l)) ordered.push(l) }
+  return ordered
+}
+
+function renderUmrahTripCard(
+  n: number,
+  depISO: string, retISO: string, duration: number,
+  meccaHotel: string, medinaHotel: string,
+  levels: string[], minQuad: number,
+): string {
+  const dur = `${toArabicIndic(duration)} ${ovDurWord(duration)}`
+  const hotelParts: string[] = []
+  if (meccaHotel)  hotelParts.push(`مكة: ${meccaHotel}`)
+  if (medinaHotel) hotelParts.push(`المدينة: ${medinaHotel}`)
+  return [
+    `⭐ ${toArabicIndic(n)}• ${ovFmtDay(depISO)} — ${ovFmtDay(retISO)} (${dur})`,
+    `· ${hotelParts.join(' | ')}`,
+    `· المستويات المتاحة: ${levels.join(' / ')}`,
+    `· يبدأ من ${formatPrice(minQuad)} جنيه/فرد`,
+  ].join('\n')
+}
+
 export function buildUmrahMonthMessage(month: string, rawPrograms: any[]): { message: string; orderedDetails: string[] } {
   const targetMon = MONTH_NAME_TO_NUM[month]
   if (!targetMon) return { message: '', orderedDetails: [] }
@@ -421,7 +456,7 @@ export function buildUmrahMonthMessage(month: string, rawPrograms: any[]): { mes
   type TripRow = {
     depISO: string; retISO: string; duration: number
     meccaHotel: string; medinaHotel: string; minQuad: number
-    progs: any[]
+    levels: string[]; progs: any[]
   }
   const trips: TripRow[] = []
   for (const [key, progs] of groups) {
@@ -435,7 +470,7 @@ export function buildUmrahMonthMessage(month: string, rawPrograms: any[]): { mes
     const minProg = progs.find((p: any) => (p.quadPrice ?? p.priceQuad ?? 0) === minQuad) ?? progs[0]
     const meccaHotel  = minProg.makkahHotel  ?? minProg.meccaHotel  ?? ''
     const medinaHotel = minProg.madinahHotel ?? minProg.medinaHotel ?? ''
-    trips.push({ depISO, retISO, duration, meccaHotel, medinaHotel, minQuad, progs })
+    trips.push({ depISO, retISO, duration, meccaHotel, medinaHotel, minQuad, levels: umrahTripLevels(progs), progs })
   }
   trips.sort((a, b) => a.depISO.localeCompare(b.depISO))
 
@@ -443,16 +478,13 @@ export function buildUmrahMonthMessage(month: string, rawPrograms: any[]): { mes
 
   const orderedDetails = trips.map(t => renderUmrahTripDetail(t.depISO, t.retISO, t.duration, t.progs))
 
-  const lines = [`*رحلات عمرة ${month} ٢٠٢٦*`]
+  const parts: string[] = [`*رحلات عمرة ${month} ٢٠٢٦*`]
   trips.forEach((t, i) => {
-    const dur = `${toArabicIndic(t.duration)} ${ovDurWord(t.duration)}`
-    const hotels = [t.meccaHotel, t.medinaHotel].filter(Boolean).join(' + ')
-    lines.push(`${toArabicIndic(i + 1)}• ${ovFmtDay(t.depISO)} — ${ovFmtDay(t.retISO)} (${dur}) — ${hotels} — يبدأ من ${formatPrice(t.minQuad)} جنيه/فرد`)
+    parts.push(renderUmrahTripCard(i + 1, t.depISO, t.retISO, t.duration, t.meccaHotel, t.medinaHotel, t.levels, t.minQuad))
   })
-  lines.push('')
-  lines.push('ابعت رقم الرحلة وهبعتلك برامجها وأسعارها كاملة')
+  parts.push('ابعت رقم الرحلة اللي تناسبك وهبعتلك مستوياتها وأسعارها كاملة')
 
-  return { message: lines.join('\n'), orderedDetails }
+  return { message: parts.join('\n\n'), orderedDetails }
 }
 
 // ── Umrah month overview — code-built for verbatim copy (no AI price hallucination) ──
@@ -548,7 +580,7 @@ export function buildUmrahAllMonthsOverview(rawPrograms: any[]): { message: stri
   type TripEntry = {
     depISO: string; retISO: string; duration: number
     meccaHotel: string; medinaHotel: string; minQuad: number
-    progs: any[]; month: string
+    levels: string[]; progs: any[]; month: string
   }
 
   const allTrips: TripEntry[] = []
@@ -577,7 +609,7 @@ export function buildUmrahAllMonthsOverview(rawPrograms: any[]): { message: stri
       const minProg = progs.find((p: any) => (p.quadPrice ?? p.priceQuad ?? 0) === minQuad) ?? progs[0]
       const meccaHotel  = minProg.makkahHotel  ?? minProg.meccaHotel  ?? ''
       const medinaHotel = minProg.madinahHotel ?? minProg.medinaHotel ?? ''
-      monthTrips.push({ depISO, retISO, duration, meccaHotel, medinaHotel, minQuad, progs, month })
+      monthTrips.push({ depISO, retISO, duration, meccaHotel, medinaHotel, minQuad, levels: umrahTripLevels(progs), progs, month })
     }
     monthTrips.sort((a, b) => a.depISO.localeCompare(b.depISO))
     allTrips.push(...monthTrips)
@@ -587,24 +619,21 @@ export function buildUmrahAllMonthsOverview(rawPrograms: any[]): { message: stri
 
   const orderedDetails = allTrips.map(t => renderUmrahTripDetail(t.depISO, t.retISO, t.duration, t.progs))
 
-  const lines: string[] = ['*برامج العمرة ٢٠٢٦*']
+  // Option A: month header as its own \n\n-separated segment → becomes its own WhatsApp message
+  const parts: string[] = ['*برامج العمرة ٢٠٢٦*']
   let currentMonth = ''
   let n = 0
   for (const t of allTrips) {
     if (t.month !== currentMonth) {
       currentMonth = t.month
-      lines.push('')
-      lines.push(`*${t.month}:*`)
+      parts.push(`*${t.month}:*`)
     }
     n++
-    const dur = `${toArabicIndic(t.duration)} ${ovDurWord(t.duration)}`
-    const hotels = [t.meccaHotel, t.medinaHotel].filter(Boolean).join(' + ')
-    lines.push(`${toArabicIndic(n)}• ${ovFmtDay(t.depISO)} — ${ovFmtDay(t.retISO)} (${dur}) — ${hotels} — يبدأ من ${formatPrice(t.minQuad)} جنيه/فرد`)
+    parts.push(renderUmrahTripCard(n, t.depISO, t.retISO, t.duration, t.meccaHotel, t.medinaHotel, t.levels, t.minQuad))
   }
-  lines.push('')
-  lines.push('ابعت رقم الرحلة وهبعتلك برامجها وأسعارها كاملة')
+  parts.push('ابعت رقم الرحلة اللي تناسبك وهبعتلك مستوياتها وأسعارها كاملة')
 
-  return { message: lines.join('\n'), orderedDetails }
+  return { message: parts.join('\n\n'), orderedDetails }
 }
 
 // ── General knowledge + FAQ — pre-stored in industryData or fallback static ──
