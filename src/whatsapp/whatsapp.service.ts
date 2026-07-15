@@ -170,9 +170,18 @@ export class WhatsAppService {
             console.log(`BOOKING_GOV_RESOLVED → ${phone} gov=${gov}`)
             return bMsg
           }
-          const askAgain = 'معلش يافندم، مفهمتش — حضرتك من أنهي محافظة بالضبط؟'
-          await saveAssistantMessage(this.prisma, conv.id, askAgain)
-          return askAgain
+          const isTopicChange =
+            detectUmrahMonth(text) !== null ||
+            detectHajjOverviewIntent(text) !== null ||
+            detectUmrahOverviewIntent(text)
+          if (isTopicChange) {
+            await this.prisma.conversation.update({ where: { id: conv.id }, data: { bookingStage: 'NONE' } })
+            // fall through to POST-HANDOFF AI pipeline
+          } else {
+            const askAgain = 'معلش يافندم، مفهمتش — حضرتك من أنهي محافظة بالضبط؟'
+            await saveAssistantMessage(this.prisma, conv.id, askAgain)
+            return askAgain
+          }
         }
 
         if (conv.bookingStage === 'AWAITING_BRANCH_CONFIRM') {
