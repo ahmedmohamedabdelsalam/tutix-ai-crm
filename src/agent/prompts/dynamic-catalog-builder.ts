@@ -318,7 +318,7 @@ export function buildHajjCategoryQuestion(): string {
 }
 
 function renderHajjProgramValueFirst(p: HajjProgram, num: number): string {
-  const lines: string[] = [`${toArabicIndic(num)}• *${p.name}*`]
+  const lines: string[] = [`⭐ ${toArabicIndic(num)}• *${p.name}*`]
 
   if (p.scholarNote) lines.push(`· ${p.scholarNote}`)
   if (p.subLevels)   lines.push(`· مدة البرنامج: ${p.subLevels}`)
@@ -373,13 +373,10 @@ export function buildHajjCategoryPrograms(
   let programs: HajjProgram[]
   let header: string
   if (category === 'FIVE_STAR') {
-    programs = hajjPrograms.filter(p => hasPrice(p) && is5Star(p)).sort(sortByPrice)
+    programs = hajjPrograms.filter(p => hasPrice(p) && (is5Star(p) || isKadan(p))).sort(sortByPrice)
     header = `*برامج خمس نجوم — الحج ١٤٤٨هـ*`
   } else {
-    programs = [
-      ...hajjPrograms.filter(p => hasPrice(p) && !is5Star(p) && !isKadan(p)).sort(sortByPrice),
-      ...hajjPrograms.filter(p => hasPrice(p) && isKadan(p)).sort(sortByPrice),
-    ]
+    programs = hajjPrograms.filter(p => hasPrice(p) && !is5Star(p) && !isKadan(p)).sort(sortByPrice)
     header = `*البرامج الاقتصادية — الحج ١٤٤٨هـ*`
   }
 
