@@ -13,6 +13,11 @@ export interface PrebuiltCatalog {
   hajjProgramDetails: string[]
   hajjOverviewMessage: string
   hajjOverviewDetails: string[]
+  hajjCategoryQuestion: string
+  hajjEconomyPrograms: string
+  hajjEconomyDetails: string[]
+  hajjFiveStarPrograms: string
+  hajjFiveStarDetails: string[]
   umrahMonthMessages: Record<string, string>
   umrahMonthDetails: Record<string, string[]>
   umrahAllMonthsMessage: string

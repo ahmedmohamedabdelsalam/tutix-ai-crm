@@ -33,9 +33,23 @@ export function detectContinueResponse(text: string): boolean {
   return /^(كمل|اكمل|كمّل|ايوه|أيوه|اه|أه|آه|نعم|تمام|ماشي)(\s.*)?$/.test(text.trim())
 }
 
-export function detectHajjOverviewIntent(text: string): boolean {
-  return /برامج\s*الحج|أسعار\s*الحج|اسعار\s*الحج|برامج\s*حج|عن\s*برامج\s*الحج/.test(text) ||
+export function detectHajjOverviewIntent(text: string): 'ECONOMY' | 'FIVE_STAR' | 'GENERIC' | null {
+  const isHajj =
+    /برامج\s*الحج|أسعار\s*الحج|اسعار\s*الحج|برامج\s*حج|عن\s*برامج\s*الحج/.test(text) ||
     (/حج/.test(text) && /برامج|اسعار|أسعار|قولي|اعرض|عايز\s*اعرف/.test(text))
+  if (!isHajj) return null
+  if (/اقتصادي|اقتصادية/.test(text)) return 'ECONOMY'
+  if (/خمس\s*نجوم|٥\s*نجوم|5\s*نجوم|فاخر|فاخرة/.test(text)) return 'FIVE_STAR'
+  return 'GENERIC'
+}
+
+export function detectHajjCategoryReply(text: string): 'ECONOMY' | 'FIVE_STAR' | null {
+  const t = text.trim()
+  if (/^[١1]$/.test(t)) return 'ECONOMY'
+  if (/^[٢2]$/.test(t)) return 'FIVE_STAR'
+  if (/اقتصادي|اقتصادية/.test(t)) return 'ECONOMY'
+  if (/خمس\s*نجوم|٥\s*نجوم|5\s*نجوم|فاخر|فاخرة/.test(t)) return 'FIVE_STAR'
+  return null
 }
 
 export function detectUmrahOverviewIntent(text: string): boolean {

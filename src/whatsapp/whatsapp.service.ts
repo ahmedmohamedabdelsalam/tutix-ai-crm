@@ -8,7 +8,7 @@ import { applyHajjDateDisclaimer } from './hajj-date-disclaimer'
 import { companionConfirmedInHistory, travelDateConfirmedInHistory } from './lead-fact-guards'
 import { detectOnlinePayment, detectFarFromBranch, detectVisitConfirm } from './booking-stage-detectors'
 import { getGovFromText, branchMessage } from './branch-lookup'
-import { containsFirstMessageQuestion, detectUmrahMonth, detectFullDetailsIntent, detectContinueResponse, detectHajjOverviewIntent, detectNumberReply, detectUmrahOverviewIntent } from './intent-detectors'
+import { containsFirstMessageQuestion, detectUmrahMonth, detectFullDetailsIntent, detectContinueResponse, detectHajjOverviewIntent, detectHajjCategoryReply, detectNumberReply, detectUmrahOverviewIntent } from './intent-detectors'
 
 import { detectFollowUpIntent, clampToWindow, DEFERRAL_PHRASES } from './follow-up-scheduler'
 import { handleAICreditsExhausted, writeCostRecord } from './ai-cost-helpers'
@@ -16,10 +16,8 @@ import { saveAssistantMessage, completeBookingAlert } from './message-persistenc
 import { getCompanyFAQ } from './faq-cache'
 import { incrementAIFailure, resetAIFailure } from './ai-failure-tracker'
 import { getPrebuiltCatalog } from './catalog-loader'
-import { fullDetailsMap, overviewMap } from './conversation-state'
-
-const HAJJ_OV_DISCLAIMER =
-  'ملاحظة: التواريخ الهجرية لبرامج الحج ١٤٤٨هـ تقديرية بناءً على الحساب الفلكي وسيُعلن الرسمي منها بعد رؤية الهلال قبل الموسم بأسابيع'
+import { fullDetailsMap, overviewMap, categoryQuestionMap } from './conversation-state'
+import { HAJJ_OV_DISCLAIMER } from '../agent/prompts/dynamic-catalog-builder'
 
 // Injected ONLY into the POST-HANDOFF AI path (after booking confirmed, before sales takes over).
 // Keeps official-price answers normal; defers any negotiation/discount request to sales.
@@ -370,32 +368,64 @@ export class WhatsAppService {
       }
     }
 
+    // ── Category-reply handler: customer replied to the Hajj category question ──
+    if (prebuiltCatalog && categoryQuestionMap.has(conv.id)) {
+      const catReply = detectHajjCategoryReply(text)
+      if (catReply !== null) {
+        categoryQuestionMap.delete(conv.id)
+        fullDetailsMap.delete(conv.id)
+        const catMsg     = catReply === 'ECONOMY' ? prebuiltCatalog.hajjEconomyPrograms : prebuiltCatalog.hajjFiveStarPrograms
+        const catDetails = catReply === 'ECONOMY' ? prebuiltCatalog.hajjEconomyDetails  : prebuiltCatalog.hajjFiveStarDetails
+        if (catMsg) {
+          overviewMap.set(conv.id, { orderedDetails: catDetails })
+          await saveAssistantMessage(this.prisma, conv.id, catMsg)
+          console.log(`HAJJ_CAT_REPLY → ${phone} cat=${catReply} programs=${catDetails.length}`)
+          return catMsg
+        }
+      }
+      // Topic changed — clear category state and let AI handle it
+      categoryQuestionMap.delete(conv.id)
+    }
+
     // ── Overview bypass: non-first-message hajj/umrah overview request ───────────
     // For first messages, the bypass runs inside the firstMessageQuestion block below.
     // Here we handle subsequent messages asking for an overview, so the AI never
     // composes the list — it only provides a one-line intro, then code appends the
     // pre-built overview message.
     if (totalMsgCount > 1 && prebuiltCatalog) {
-      const ovMonth = detectUmrahMonth(text)
-      const isHajjOv  = detectHajjOverviewIntent(text) && !detectFullDetailsIntent(text) &&
-                        !!prebuiltCatalog.hajjOverviewMessage
+      const ovMonth      = detectUmrahMonth(text)
+      const hajjOvIntent = detectHajjOverviewIntent(text)
       const isUmrahOv    = !!ovMonth && !!prebuiltCatalog.umrahMonthMessages?.[ovMonth]
       const isUmrahAllOv = !ovMonth && detectUmrahOverviewIntent(text) && !!prebuiltCatalog.umrahAllMonthsMessage
 
-      if (isHajjOv || isUmrahOv || isUmrahAllOv) {
+      // Hajj category-aware bypass — handled separately (no intro message)
+      if (hajjOvIntent !== null && !detectFullDetailsIntent(text)) {
+        fullDetailsMap.delete(conv.id)
+        if (hajjOvIntent === 'GENERIC' && prebuiltCatalog.hajjCategoryQuestion) {
+          categoryQuestionMap.set(conv.id, true)
+          await saveAssistantMessage(this.prisma, conv.id, prebuiltCatalog.hajjCategoryQuestion)
+          console.log(`HAJJ_CAT_Q_BYPASS → ${phone}`)
+          return prebuiltCatalog.hajjCategoryQuestion
+        }
+        const catMsg     = hajjOvIntent === 'ECONOMY' ? prebuiltCatalog.hajjEconomyPrograms : prebuiltCatalog.hajjFiveStarPrograms
+        const catDetails = hajjOvIntent === 'ECONOMY' ? prebuiltCatalog.hajjEconomyDetails  : prebuiltCatalog.hajjFiveStarDetails
+        if (catMsg) {
+          overviewMap.set(conv.id, { orderedDetails: catDetails })
+          await saveAssistantMessage(this.prisma, conv.id, catMsg)
+          console.log(`HAJJ_OV_BYPASS → ${phone} cat=${hajjOvIntent} programs=${catDetails.length}`)
+          return catMsg
+        }
+      }
+
+      // Umrah overviews — existing logic unchanged
+      if (isUmrahOv || isUmrahAllOv) {
         fullDetailsMap.delete(conv.id)
         const firstName = knownCustomerName?.split(/\s+/)[0]
         const intro = firstName ? `تمام يا أستاذ ${firstName} اتفضل` : `اتفضل يافندم`
         await saveAssistantMessage(this.prisma, conv.id, intro)
         const parts: string[] = [intro]
 
-        if (isHajjOv) {
-          const ovMsg = prebuiltCatalog.hajjOverviewMessage + '\n\n' + HAJJ_OV_DISCLAIMER
-          overviewMap.set(conv.id, { orderedDetails: prebuiltCatalog.hajjOverviewDetails })
-          await saveAssistantMessage(this.prisma, conv.id, ovMsg)
-          parts.push(ovMsg)
-          console.log(`HAJJ_OV_BYPASS → ${phone} programs=${prebuiltCatalog.hajjOverviewDetails.length}`)
-        } else if (isUmrahOv && ovMonth) {
+        if (isUmrahOv && ovMonth) {
           const ovMsg = prebuiltCatalog.umrahMonthMessages[ovMonth]
           overviewMap.set(conv.id, { orderedDetails: prebuiltCatalog.umrahMonthDetails[ovMonth] })
           await saveAssistantMessage(this.prisma, conv.id, ovMsg)
@@ -415,26 +445,39 @@ export class WhatsAppService {
 
     // First-message overview bypass: zero AI calls — intro from code, prebuilt message appended
     if (totalMsgCount === 1 && containsFirstMessageQuestion(text) && prebuiltCatalog) {
-      const firstMsgUmrahMonth = detectUmrahMonth(text)
-      const isHajjOvFirst    = detectHajjOverviewIntent(text) && !detectFullDetailsIntent(text)
-        && !!prebuiltCatalog.hajjOverviewMessage
-      const isUmrahOvFirst   = !!firstMsgUmrahMonth && !!prebuiltCatalog.umrahMonthMessages?.[firstMsgUmrahMonth]
-      const isUmrahAllOvFirst = !firstMsgUmrahMonth && detectUmrahOverviewIntent(text) && !!prebuiltCatalog.umrahAllMonthsMessage
+      const firstMsgUmrahMonth  = detectUmrahMonth(text)
+      const hajjOvIntentFirst   = detectHajjOverviewIntent(text)
+      const isUmrahOvFirst      = !!firstMsgUmrahMonth && !!prebuiltCatalog.umrahMonthMessages?.[firstMsgUmrahMonth]
+      const isUmrahAllOvFirst   = !firstMsgUmrahMonth && detectUmrahOverviewIntent(text) && !!prebuiltCatalog.umrahAllMonthsMessage
 
-      if (isHajjOvFirst || isUmrahOvFirst || isUmrahAllOvFirst) {
+      // Hajj category-aware bypass — no intro, no AI
+      if (hajjOvIntentFirst !== null && !detectFullDetailsIntent(text)) {
+        fullDetailsMap.delete(conv.id)
+        if (hajjOvIntentFirst === 'GENERIC' && prebuiltCatalog.hajjCategoryQuestion) {
+          categoryQuestionMap.set(conv.id, true)
+          await saveAssistantMessage(this.prisma, conv.id, prebuiltCatalog.hajjCategoryQuestion)
+          console.log(`HAJJ_CAT_Q_ZERO_AI → ${phone}`)
+          return prebuiltCatalog.hajjCategoryQuestion
+        }
+        const catMsg     = hajjOvIntentFirst === 'ECONOMY' ? prebuiltCatalog.hajjEconomyPrograms : prebuiltCatalog.hajjFiveStarPrograms
+        const catDetails = hajjOvIntentFirst === 'ECONOMY' ? prebuiltCatalog.hajjEconomyDetails  : prebuiltCatalog.hajjFiveStarDetails
+        if (catMsg) {
+          overviewMap.set(conv.id, { orderedDetails: catDetails })
+          await saveAssistantMessage(this.prisma, conv.id, catMsg)
+          console.log(`HAJJ_OV_ZERO_AI → ${phone} cat=${hajjOvIntentFirst} programs=${catDetails.length}`)
+          return catMsg
+        }
+      }
+
+      // Umrah overviews — existing logic unchanged
+      if (isUmrahOvFirst || isUmrahAllOvFirst) {
         fullDetailsMap.delete(conv.id)
         const firstName = knownCustomerName?.split(/\s+/)[0]
         const intro = firstName ? `تمام يا أستاذ ${firstName} اتفضل` : `اتفضل يافندم`
         await saveAssistantMessage(this.prisma, conv.id, intro)
         const parts: string[] = [intro]
 
-        if (isHajjOvFirst) {
-          const ovMsg = prebuiltCatalog.hajjOverviewMessage + '\n\n' + HAJJ_OV_DISCLAIMER
-          overviewMap.set(conv.id, { orderedDetails: prebuiltCatalog.hajjOverviewDetails })
-          await saveAssistantMessage(this.prisma, conv.id, ovMsg)
-          parts.push(ovMsg)
-          console.log(`HAJJ_OV_ZERO_AI → ${phone} programs=${prebuiltCatalog.hajjOverviewDetails.length}`)
-        } else if (firstMsgUmrahMonth) {
+        if (firstMsgUmrahMonth) {
           const ovMsg = prebuiltCatalog.umrahMonthMessages[firstMsgUmrahMonth]
           overviewMap.set(conv.id, { orderedDetails: prebuiltCatalog.umrahMonthDetails[firstMsgUmrahMonth] })
           await saveAssistantMessage(this.prisma, conv.id, ovMsg)
@@ -559,15 +602,26 @@ export class WhatsAppService {
       if (totalMsgCount === 1 && containsFirstMessageQuestion(text)) {
         const umrahMonth = detectUmrahMonth(text)
 
-        // ── Hajj overview bypass: send pre-built overview, no second AI call ──────
-        if (detectHajjOverviewIntent(text) && !detectFullDetailsIntent(text) &&
-            prebuiltCatalog?.hajjOverviewMessage) {
-          fullDetailsMap.delete(conv.id)
-          const ovMsg = prebuiltCatalog.hajjOverviewMessage + '\n\n' + HAJJ_OV_DISCLAIMER
-          overviewMap.set(conv.id, { orderedDetails: prebuiltCatalog.hajjOverviewDetails })
-          await saveAssistantMessage(this.prisma, conv.id, ovMsg)
-          console.log(`HAJJ_OV_FIRST → ${phone} programs=${prebuiltCatalog.hajjOverviewDetails.length}`)
-          return [reply, ovMsg]
+        // ── Hajj category-aware bypass: after AI welcome, append prebuilt Hajj message ─
+        if (!detectFullDetailsIntent(text)) {
+          const hajjOvIntentPost = detectHajjOverviewIntent(text)
+          if (hajjOvIntentPost !== null) {
+            fullDetailsMap.delete(conv.id)
+            if (hajjOvIntentPost === 'GENERIC' && prebuiltCatalog?.hajjCategoryQuestion) {
+              categoryQuestionMap.set(conv.id, true)
+              await saveAssistantMessage(this.prisma, conv.id, prebuiltCatalog.hajjCategoryQuestion)
+              console.log(`HAJJ_CAT_Q_FIRST → ${phone}`)
+              return [reply, prebuiltCatalog.hajjCategoryQuestion]
+            }
+            const catMsg     = hajjOvIntentPost === 'ECONOMY' ? prebuiltCatalog?.hajjEconomyPrograms : prebuiltCatalog?.hajjFiveStarPrograms
+            const catDetails = hajjOvIntentPost === 'ECONOMY' ? prebuiltCatalog?.hajjEconomyDetails  : prebuiltCatalog?.hajjFiveStarDetails
+            if (catMsg && catDetails) {
+              overviewMap.set(conv.id, { orderedDetails: catDetails })
+              await saveAssistantMessage(this.prisma, conv.id, catMsg)
+              console.log(`HAJJ_OV_FIRST → ${phone} cat=${hajjOvIntentPost} programs=${catDetails.length}`)
+              return [reply, catMsg]
+            }
+          }
         }
 
         // ── Umrah month bypass: send pre-built month message, no second AI call ──

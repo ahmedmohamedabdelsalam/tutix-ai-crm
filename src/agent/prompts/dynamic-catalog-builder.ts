@@ -302,6 +302,104 @@ export function buildHajjOverviewMessage(hajjPrograms: HajjProgram[]): HajjOverv
   return { message: lines.join('\n'), orderedDetails }
 }
 
+// ── Category-first Hajj flow ──────────────────────────────────────────────────
+
+export const HAJJ_OV_DISCLAIMER =
+  'ملاحظة: التواريخ الهجرية لبرامج الحج ١٤٤٨هـ تقديرية بناءً على الحساب الفلكي وسيُعلن الرسمي منها بعد رؤية الهلال قبل الموسم بأسابيع'
+
+export function buildHajjCategoryQuestion(): string {
+  return `*برامج الحج ١٤٤٨هـ — مايو ٢٠٢٧م*
+
+عندنا نوعين من البرامج:
+١• *البرامج الاقتصادية* — أفضل الأسعار مع مواصفات متميزة
+٢• *برامج خمس نجوم* — أعلى مستوى من الراحة والفخامة
+
+إيه اللي يناسبك يافندم — اقتصادي ولا خمس نجوم؟`
+}
+
+function renderHajjProgramValueFirst(p: HajjProgram, num: number): string {
+  const lines: string[] = [`${toArabicIndic(num)}• *${p.name}*`]
+
+  if (p.scholarNote) lines.push(`· ${p.scholarNote}`)
+  if (p.subLevels)   lines.push(`· مدة البرنامج: ${p.subLevels}`)
+
+  if (p.medina) {
+    const rm = p.medina.roomType ? ` — ${p.medina.roomType}` : ''
+    lines.push(`· المدينة: ${p.medina.dateHijri} (${p.medina.dateGregorian}) — ${p.medina.hotel}${rm} — ${p.medina.meals}`)
+  }
+  if (p.transitToMecca) lines.push(`· ${p.transitToMecca}`)
+  if (p.aziziyah) {
+    const noteStr = p.aziziyah.note ? ` (${p.aziziyah.note})` : ''
+    const rm = p.aziziyah.roomType ? ` — ${p.aziziyah.roomType}` : ''
+    lines.push(`· العزيزية: ${p.aziziyah.dateHijri} (${p.aziziyah.dateGregorian})${noteStr} — ${p.aziziyah.hotel}${rm} — ${p.aziziyah.meals}`)
+  }
+  if (p.makkahPreSeason) {
+    lines.push(`· مكة: ${p.makkahPreSeason.dateHijri} (${p.makkahPreSeason.dateGregorian}) — ${p.makkahPreSeason.hotel} — ${p.makkahPreSeason.meals}`)
+  }
+  if (p.arafat)        lines.push(`· عرفات: ${p.arafat}`)
+  if (p.mina)          lines.push(`· منى: ${p.mina}`)
+  if (p.manasikhMeals) lines.push(`· ${p.manasikhMeals}`)
+  if (p.tahseen) {
+    const durStr = p.tahseen.durationDays ? ` (${p.tahseen.durationDays} أيام كاملة)` : ''
+    lines.push(`· التحسين: ${p.tahseen.dateHijri} (${p.tahseen.dateGregorian}) — ${p.tahseen.hotel}${durStr} — ${p.tahseen.meals}`)
+  }
+  p.highlights.forEach(h => lines.push(`· ${h}`))
+
+  // Price comes last
+  if (!p.pricePerPerson) {
+    lines.push(`السعر: للتواصل مع المبيعات`)
+  } else if (p.discountedPrice) {
+    lines.push(`السعر: ${formatPrice(p.pricePerPerson)} جنيه/فرد — وبعد الخصم ${formatPrice(p.discountedPrice)} جنيه/فرد (بدون تذكرة ${p.ticketType})`)
+  } else {
+    const ticketNote = p.ticketType ? ` (بدون تذكرة ${p.ticketType})` : ''
+    lines.push(`السعر: ${formatPrice(p.pricePerPerson)} جنيه/فرد${ticketNote}`)
+  }
+
+  return lines.join('\n')
+}
+
+export function buildHajjCategoryPrograms(
+  category: 'ECONOMY' | 'FIVE_STAR',
+  hajjPrograms: HajjProgram[],
+  disclaimer: string,
+): { message: string; orderedDetails: string[] } {
+  const is5Star  = (p: HajjProgram) =>
+    p.name.startsWith('برنامج ٥ نجوم') || p.name.startsWith('٥ نجوم') || p.name.includes('خمس نجوم')
+  const isKadan  = (p: HajjProgram) => p.name.includes('كدانة')
+  const hasPrice = (p: HajjProgram) => !!p.pricePerPerson
+  const sortByPrice = (a: HajjProgram, b: HajjProgram) =>
+    (a.pricePerPerson ?? 0) - (b.pricePerPerson ?? 0)
+
+  let programs: HajjProgram[]
+  let header: string
+  if (category === 'FIVE_STAR') {
+    programs = hajjPrograms.filter(p => hasPrice(p) && is5Star(p)).sort(sortByPrice)
+    header = `*برامج خمس نجوم — الحج ١٤٤٨هـ*`
+  } else {
+    programs = [
+      ...hajjPrograms.filter(p => hasPrice(p) && !is5Star(p) && !isKadan(p)).sort(sortByPrice),
+      ...hajjPrograms.filter(p => hasPrice(p) && isKadan(p)).sort(sortByPrice),
+    ]
+    header = `*البرامج الاقتصادية — الحج ١٤٤٨هـ*`
+  }
+
+  if (programs.length === 0) return { message: '', orderedDetails: [] }
+
+  const orderedDetails = programs.map((p, i) => renderHajjProgram(p, i))
+
+  const lines: string[] = [header]
+  programs.forEach((p, i) => {
+    lines.push('')
+    lines.push(renderHajjProgramValueFirst(p, i + 1))
+  })
+  lines.push('')
+  lines.push('تحب تعرف تفاصيل الحجز؟ ابعت رقم البرنامج وهبعتلك الكل')
+  lines.push('')
+  lines.push(disclaimer)
+
+  return { message: lines.join('\n'), orderedDetails }
+}
+
 // ── Deterministic Umrah month overview — one WhatsApp message with hotel info ─
 
 const MONTH_NAME_TO_NUM: Record<string, number> = {
@@ -583,6 +681,11 @@ export interface IndustryPromptParts {
   hajjProgramDetails: string[]
   hajjOverviewMessage: string
   hajjOverviewDetails: string[]
+  hajjCategoryQuestion: string
+  hajjEconomyPrograms: string
+  hajjEconomyDetails: string[]
+  hajjFiveStarPrograms: string
+  hajjFiveStarDetails: string[]
   umrahMonthMessages: Record<string, string>
   umrahMonthDetails: Record<string, string[]>
   umrahAllMonthsMessage: string
@@ -630,6 +733,12 @@ export function buildIndustryPromptFromDB(
   const { message: hajjOverviewMessage, orderedDetails: hajjOverviewDetails } =
     buildHajjOverviewMessage(cat.hajjPrograms)
 
+  const hajjCategoryQuestion = buildHajjCategoryQuestion()
+  const { message: hajjEconomyPrograms, orderedDetails: hajjEconomyDetails } =
+    buildHajjCategoryPrograms('ECONOMY', cat.hajjPrograms, HAJJ_OV_DISCLAIMER)
+  const { message: hajjFiveStarPrograms, orderedDetails: hajjFiveStarDetails } =
+    buildHajjCategoryPrograms('FIVE_STAR', cat.hajjPrograms, HAJJ_OV_DISCLAIMER)
+
   const umrahMonthMessages: Record<string, string> = {}
   const umrahMonthDetails: Record<string, string[]> = {}
   for (const mon of ['يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر']) {
@@ -643,6 +752,8 @@ export function buildIndustryPromptFromDB(
   return {
     identity, catalog, hotels, hotelList, monthOverviews: monthOverview,
     hajjProgramDetails, hajjOverviewMessage, hajjOverviewDetails,
+    hajjCategoryQuestion, hajjEconomyPrograms, hajjEconomyDetails,
+    hajjFiveStarPrograms, hajjFiveStarDetails,
     umrahMonthMessages, umrahMonthDetails, umrahAllMonthsMessage, umrahAllMonthsDetails,
   }
 }
