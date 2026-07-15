@@ -34,6 +34,12 @@ export function detectContinueResponse(text: string): boolean {
 }
 
 export function detectHajjOverviewIntent(text: string): 'ECONOMY' | 'FIVE_STAR' | 'GENERIC' | null {
+  // حج(?!ز) matches the pilgrimage noun ("حج", "الحج") but NOT the booking verb ("حجز", "أحجز", "يحجز").
+  // Category word alone + حج is sufficient intent — no program-request keyword needed.
+  if (/حج(?!ز)/.test(text)) {
+    if (/اقتصادي|اقتصادية/.test(text)) return 'ECONOMY'
+    if (/خمس\s*نجوم|٥\s*نجوم|5\s*نجوم|فاخر|فاخرة/.test(text)) return 'FIVE_STAR'
+  }
   const isHajj =
     /برامج\s*الحج|أسعار\s*الحج|اسعار\s*الحج|برامج\s*حج|عن\s*برامج\s*الحج/.test(text) ||
     (/حج/.test(text) && /برامج|اسعار|أسعار|قولي|اعرض|عايز\s*اعرف/.test(text))
