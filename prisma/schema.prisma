@@ -120,7 +120,9 @@ model Lead {
   tripDepartureDate  DateTime?
   tripProgramName    String?
   branchName         String?
-  contactLink   String?
+  contactLink         String?
+  manualFollowUpAt    DateTime?
+  manualFollowUpNote  String?
   isArchived    Boolean        @default(false)
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
