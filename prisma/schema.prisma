@@ -120,6 +120,8 @@ model Lead {
   tripDepartureDate  DateTime?
   tripProgramName    String?
   branchName         String?
+  contactLink   String?
+  isArchived    Boolean        @default(false)
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
   conversations Conversation[]
