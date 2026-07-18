@@ -419,21 +419,24 @@ model Branch {
 }
 
 model AttendanceRecord {
-  id          String    @id @default(cuid())
-  companyId   String
-  userId      String
-  branchId    String
-  checkInAt   DateTime
-  checkOutAt  DateTime?
-  checkInLat  Float
-  checkInLng  Float
-  checkOutLat Float?
-  checkOutLng Float?
-  notes       String?
-  createdAt   DateTime  @default(now())
-  company     Company   @relation(fields: [companyId], references: [id])
-  user        User      @relation(fields: [userId], references: [id])
-  branch      Branch    @relation(fields: [branchId], references: [id])
+  id           String    @id @default(cuid())
+  companyId    String
+  userId       String
+  branchId     String
+  checkInAt    DateTime
+  checkOutAt   DateTime?
+  checkInLat   Float
+  checkInLng   Float
+  checkOutLat  Float?
+  checkOutLng  Float?
+  notes        String?
+  isAutoClosed Boolean   @default(false)
+  correctedBy  String?
+  correctedAt  DateTime?
+  createdAt    DateTime  @default(now())
+  company      Company   @relation(fields: [companyId], references: [id])
+  user         User      @relation(fields: [userId], references: [id])
+  branch       Branch    @relation(fields: [branchId], references: [id])
 
   @@index([companyId])
   @@index([userId])
