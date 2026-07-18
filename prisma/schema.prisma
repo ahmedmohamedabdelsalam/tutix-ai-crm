@@ -38,6 +38,7 @@ model Company {
   branches          Branch[]
   attendanceRecords AttendanceRecord[]
   specialtyWeights  UserSpecialtyWeight[]
+  activityLogs      ActivityLog[]
 }
 
 model CompanyAIConfig {
@@ -455,5 +456,39 @@ model UserSpecialtyWeight {
   @@unique([userId, specialty])
   @@index([companyId])
   @@index([userId])
+}
+
+enum ActivityAction {
+  CREATE
+  IMPORT
+  STATUS_CHANGE
+  FIELD_EDIT
+  NOTE_EDIT
+  CLAIM
+  ASSIGN
+  UNASSIGN
+  ARCHIVE
+  UNARCHIVE
+  WON
+  FOLLOWUP_SET
+  FOLLOWUP_CANCEL
+}
+
+model ActivityLog {
+  id        String         @id @default(cuid())
+  companyId String
+  leadId    String
+  userId    String
+  userName  String
+  userRole  String
+  action    ActivityAction
+  details   String?
+  createdAt DateTime       @default(now())
+
+  company   Company        @relation(fields: [companyId], references: [id])
+
+  @@index([leadId, createdAt(sort: Desc)])
+  @@index([companyId, userId, createdAt])
+  @@index([companyId, createdAt])
 }
 
