@@ -373,7 +373,7 @@ export function buildHajjCategoryPrograms(
   let programs: HajjProgram[]
   let header: string
   if (category === 'FIVE_STAR') {
-    programs = hajjPrograms.filter(p => hasPrice(p) && (is5Star(p) || isKadan(p))).sort(sortByPrice)
+    programs = hajjPrograms.filter(p => hasPrice(p) && is5Star(p)).sort(sortByPrice)
     header = `*برامج خمس نجوم — الحج ١٤٤٨هـ*`
   } else {
     programs = hajjPrograms.filter(p => hasPrice(p) && !is5Star(p) && !isKadan(p)).sort(sortByPrice)
@@ -391,6 +391,9 @@ export function buildHajjCategoryPrograms(
   })
   lines.push('')
   lines.push('تحب تعرف تفاصيل الحجز؟ ابعت رقم البرنامج وهبعتلك الكل')
+  if (category === 'FIVE_STAR') {
+    lines.push('وعندنا كمان برامج أبراج كدانة — قوللي لو حابب تفاصيلها')
+  }
   lines.push('')
   lines.push(disclaimer)
 
@@ -425,13 +428,19 @@ function renderUmrahTripCard(
   depISO: string, retISO: string, duration: number,
   meccaHotel: string, medinaHotel: string,
   levels: string[], minQuad: number,
+  levelPrices?: Record<string, number>,
 ): string {
   const dur = `${toArabicIndic(duration)} ${ovDurWord(duration)}`
+  const header = `⭐ ${toArabicIndic(n)}• ${ovFmtDay(depISO)} — ${ovFmtDay(retISO)} (${dur})`
+  if (levelPrices && levels.length > 1) {
+    const priceLine = levels.map(l => `${l}: من ${formatPrice(levelPrices[l] ?? 0)}`).join(' | ')
+    return [header, `· ${priceLine}`, `· ابعت رقم الرحلة لتفاصيل الفنادق والأسعار`].join('\n')
+  }
   const hotelParts: string[] = []
   if (meccaHotel)  hotelParts.push(`مكة: ${meccaHotel}`)
   if (medinaHotel) hotelParts.push(`المدينة: ${medinaHotel}`)
   return [
-    `⭐ ${toArabicIndic(n)}• ${ovFmtDay(depISO)} — ${ovFmtDay(retISO)} (${dur})`,
+    header,
     `· ${hotelParts.join(' | ')}`,
     `· المستويات المتاحة: ${levels.join(' / ')}`,
     `· يبدأ من ${formatPrice(minQuad)} جنيه/فرد`,
@@ -483,6 +492,7 @@ export function buildUmrahMonthMessage(month: string, rawPrograms: any[], level?
   type CardInfo = {
     globalN: number; depISO: string; retISO: string; duration: number
     mecca: string; medina: string; displayLevels: string[]; minQuad: number
+    levelPrices?: Record<string, number>
   }
   const cards: CardInfo[] = []
   trips.forEach((t, i) => {
@@ -502,9 +512,21 @@ export function buildUmrahMonthMessage(month: string, rawPrograms: any[], level?
         minQuad: lvlMin,
       })
     } else {
+      let levelPrices: Record<string, number> | undefined
+      if (t.levels.length > 1) {
+        levelPrices = {}
+        for (const lvl of t.levels) {
+          const lvlPrices = t.progs
+            .filter((p: any) => umrahProgramLevel(p) === lvl)
+            .map((p: any) => p.quadPrice ?? p.priceQuad ?? 0)
+            .filter((x: number) => x > 0)
+          if (lvlPrices.length > 0) levelPrices[lvl] = Math.min(...lvlPrices)
+        }
+      }
       cards.push({
         globalN, depISO: t.depISO, retISO: t.retISO, duration: t.duration,
         mecca: t.meccaHotel, medina: t.medinaHotel, displayLevels: t.levels, minQuad: t.minQuad,
+        levelPrices,
       })
     }
   })
@@ -514,7 +536,7 @@ export function buildUmrahMonthMessage(month: string, rawPrograms: any[], level?
   const title = level ? `*رحلات عمرة ${month} ٢٠٢٦ — ${level}*` : `*رحلات عمرة ${month} ٢٠٢٦*`
   const parts: string[] = [title]
   cards.forEach(c => {
-    parts.push(renderUmrahTripCard(c.globalN, c.depISO, c.retISO, c.duration, c.mecca, c.medina, c.displayLevels, c.minQuad))
+    parts.push(renderUmrahTripCard(c.globalN, c.depISO, c.retISO, c.duration, c.mecca, c.medina, c.displayLevels, c.minQuad, c.levelPrices))
   })
   parts.push('ابعت رقم الرحلة اللي تناسبك وهبعتلك مستوياتها وأسعارها كاملة')
 
@@ -663,7 +685,18 @@ export function buildUmrahAllMonthsOverview(rawPrograms: any[]): { message: stri
       parts.push(`*${t.month}:*`)
     }
     n++
-    parts.push(renderUmrahTripCard(n, t.depISO, t.retISO, t.duration, t.meccaHotel, t.medinaHotel, t.levels, t.minQuad))
+    let tripLevelPrices: Record<string, number> | undefined
+    if (t.levels.length > 1) {
+      tripLevelPrices = {}
+      for (const lvl of t.levels) {
+        const lvlPrices = t.progs
+          .filter((p: any) => umrahProgramLevel(p) === lvl)
+          .map((p: any) => p.quadPrice ?? p.priceQuad ?? 0)
+          .filter((x: number) => x > 0)
+        if (lvlPrices.length > 0) tripLevelPrices[lvl] = Math.min(...lvlPrices)
+      }
+    }
+    parts.push(renderUmrahTripCard(n, t.depISO, t.retISO, t.duration, t.meccaHotel, t.medinaHotel, t.levels, t.minQuad, tripLevelPrices))
   }
   parts.push('ابعت رقم الرحلة اللي تناسبك وهبعتلك مستوياتها وأسعارها كاملة')
 

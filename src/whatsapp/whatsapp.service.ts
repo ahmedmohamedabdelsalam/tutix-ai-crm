@@ -27,6 +27,14 @@ const POST_HANDOFF_NEGOTIATION_INSTR =
   'قل فقط: "زميلنا المختص هيتواصل معك قريباً ويقدملك أحسن عرض إن شاء الله." ' +
   'الأسعار الرسمية والأسئلة العادية — جاوب عليها بشكل طبيعي.'
 
+function countNameAsksInHistory(messages: any[]): number {
+  const patterns = ['تشرفنا باسم', 'اسم حضرتك', 'باسم حضرتك', 'ممكن اعرف اسم']
+  return messages.filter(m => m.role === 'ASSISTANT' && patterns.some(p => m.content.includes(p))).length
+}
+
+function hasNameComplaint(text: string): boolean {
+  return ['بتطلبوا الاسم', 'الاسم كتير', 'بتطلب الاسم', 'ليه بتسأل عن الاسم'].some(p => text.includes(p))
+}
 
 @Injectable()
 export class WhatsAppService {
@@ -62,6 +70,19 @@ export class WhatsAppService {
         data: { followUpStatus: FollowUpStatus.CANCELLED, followUpScheduledAt: null },
       })
       console.log(`FOLLOW-UP CANCELLED — ${phone} replied before deadline`)
+    }
+
+    // Webhook dedup guard: Meta sometimes delivers the same event twice (voice transcription, retry).
+    // If the latest stored USER message is identical to incoming text and < 8s old, skip processing.
+    if (conv?.messages) {
+      const lastUserMsg = [...(conv.messages as any[])].reverse().find(m => m.role === 'USER')
+      if (lastUserMsg && lastUserMsg.content === text) {
+        const ageMs = Date.now() - new Date(lastUserMsg.createdAt).getTime()
+        if (ageMs < 8000) {
+          console.log(`DEDUP_GUARD → ${phone} duplicate within ${ageMs}ms, skipping`)
+          return ''
+        }
+      }
     }
 
     // knownCustomerName is set here when we find an existing lead with a name — used later
@@ -231,7 +252,10 @@ export class WhatsAppService {
             // prebuiltCatalog unavailable or no bypass path matched → fall through to AI pipeline
           } else {
             const askAgain = 'معلش يافندم، مفهمتش — حضرتك من أنهي محافظة بالضبط؟'
-            await saveAssistantMessage(this.prisma, conv.id, askAgain)
+            const recentAsk = await this.prisma.message.findFirst({
+              where: { conversationId: conv.id, role: 'ASSISTANT', content: askAgain, createdAt: { gte: new Date(Date.now() - 10000) } },
+            })
+            if (!recentAsk) await saveAssistantMessage(this.prisma, conv.id, askAgain)
             return askAgain
           }
         }
@@ -358,6 +382,12 @@ export class WhatsAppService {
 
     const companyFAQs = await getCompanyFAQ(this.prisma, companyId)
     const prebuiltCatalog = await getPrebuiltCatalog(this.prisma, companyId, company.name)
+
+    // Name-ask ceiling: stop asking for name after 2 asks or if customer complained
+    const nameAsks = countNameAsksInHistory((conv.messages as any[]) ?? [])
+    const effectiveAiPrompt = (!knownCustomerName && (nameAsks >= 2 || hasNameComplaint(text)))
+      ? '⛔ لا تسأل عن اسم العميل — تابع المحادثة بدون طلب الاسم' + (aiPrompt ? '\n\n' + aiPrompt : '')
+      : aiPrompt
 
     // Meaningless-short guard: 1–2 Arabic chars with no semantic content = accidental tap / typo.
     // Handled here in code so the LLM never sees these inputs and can't mis-apply clarification rules.
@@ -581,7 +611,7 @@ export class WhatsAppService {
     let rawAIReply = AI_ERROR_REPLY
     let aiCostUSD = 0
     try {
-      const r = await getAgentReply(history, company.name, packages, aiPrompt, waPhone, company.industry, returningCustomer, knownCustomerName, companyFAQs, knownLeadFacts, prebuiltCatalog)
+      const r = await getAgentReply(history, company.name, packages, effectiveAiPrompt, waPhone, company.industry, returningCustomer, knownCustomerName, companyFAQs, knownLeadFacts, prebuiltCatalog)
       rawAIReply = r.reply
       aiCostUSD = r.costUSD
     } catch (err) {
@@ -654,7 +684,7 @@ export class WhatsAppService {
       }
     }
 
-    const { yes, reason } = shouldHandoff(score, history.length, extracted, text)
+    const { yes, reason } = shouldHandoff(score, totalMsgCount, extracted, text)
 
     if (!yes) {
       // Guard: if the AI self-triggered the handoff CTA (should not happen but prompt is non-deterministic),
@@ -732,7 +762,7 @@ export class WhatsAppService {
           { role: 'user' as const, content: `اعرضلي نظرة عامة مختصرة على كل البرامج المتاحة — اسم البرنامج والسعر للفرد في سطر واحد لكل برنامج — بدون تفاصيل زيادة` },
         ]
         const overviewInstr = '[تعليمات إلزامية: اعرض الآن نظرة عامة مختصرة على كل البرامج المتاحة — اسم البرنامج + السعر للفرد في سطر واحد — ممنوع تأجيل العرض أو طلب اسم أو عدد — البرامج ذات السعر الخاص تُدرج حرفاً بـ"سعر خاص — للتواصل مع المبيعات" ولا تُحذف — اجمعهم بشكل طبيعي بعد العرض — اختم بـ: "تحب تفاصيل برنامج معين ولا أعرضلك تفاصيل كل البرامج؟"]'
-        const secondAiPrompt = aiPrompt ? `${aiPrompt}\n\n${overviewInstr}` : overviewInstr
+        const secondAiPrompt = effectiveAiPrompt ? `${effectiveAiPrompt}\n\n${overviewInstr}` : overviewInstr
         let secondReply = ''
         let secondCost = 0
         try {

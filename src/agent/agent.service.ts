@@ -368,19 +368,26 @@ function hasExplicitBookingIntent(lastUserMessage: string): boolean {
   return BOOKING_KEYWORDS.some(kw => normalized.includes(kw));
 }
 
+const FRUSTRATION_KEYWORDS = [
+  'مش فاهم', 'انت فاهمني غلط', 'فاهمني غلط',
+  'كلمني حد', 'عايز حد', 'اتكلم مع حد', 'مش بيفهم',
+]
+
+function hasFrustrationSignal(text: string): boolean {
+  return FRUSTRATION_KEYWORDS.some(kw => text.includes(kw))
+}
+
 export function shouldHandoff(
   score: number,
   msgCount: number,
   data: Partial<LeadData>,
   lastUserMessage = '',
 ): { yes: boolean; reason: string } {
-  // Handoff only on explicit booking keyword in the actual message (never on score alone)
-  if (hasExplicitBookingIntent(lastUserMessage)) {
-    return { yes: true, reason: 'العميل جاهز للحجز' };
-  }
-  // Safety fallback for very long conversations (30 total msgs = ~15 exchanges)
-  if (msgCount >= 30) return { yes: true, reason: 'محادثة طويلة' };
-  return { yes: false, reason: '' };
+  if (hasExplicitBookingIntent(lastUserMessage)) return { yes: true, reason: 'العميل جاهز للحجز' }
+  if (score >= 60) return { yes: true, reason: 'ليد ساخن' }
+  if (hasFrustrationSignal(lastUserMessage)) return { yes: true, reason: 'العميل محتاج تدخل بشري' }
+  if (msgCount >= 30) return { yes: true, reason: 'محادثة طويلة' }
+  return { yes: false, reason: '' }
 }
 
 export interface LeadData {
