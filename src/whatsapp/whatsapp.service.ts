@@ -113,7 +113,7 @@ export class WhatsAppService {
             phone,
             leadId: lead.id,
             status: ConvStatus.AI_HANDLING,
-            agentMode: hasWonLead ? 'HUMAN' : 'AI',
+            agentMode: 'HUMAN', // AI paused — sales handles manually; restore to: hasWonLead ? 'HUMAN' : 'AI'
           },
           include: msgInclude,
         })
