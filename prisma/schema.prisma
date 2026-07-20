@@ -39,6 +39,7 @@ model Company {
   attendanceRecords AttendanceRecord[]
   specialtyWeights  UserSpecialtyWeight[]
   activityLogs      ActivityLog[]
+  savedReplies      SavedReply[]
 }
 
 model CompanyAIConfig {
@@ -178,10 +179,13 @@ model Message {
   senderName     String?
   mediaUrl       String?
   mediaType      String?
+  whatsappMsgId  String?
+  replyToId      String?
   createdAt      DateTime     @default(now())
   conversation   Conversation @relation(fields: [conversationId], references: [id])
 
   @@index([conversationId])
+  @@index([whatsappMsgId])
 }
 
 enum Industry {
@@ -497,3 +501,16 @@ model ActivityLog {
   @@index([companyId, createdAt])
 }
 
+model SavedReply {
+  id        String   @id @default(cuid())
+  companyId String
+  userId    String?
+  title     String
+  content   String   @db.Text
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  company   Company  @relation(fields: [companyId], references: [id])
+
+  @@index([companyId, userId])
+}

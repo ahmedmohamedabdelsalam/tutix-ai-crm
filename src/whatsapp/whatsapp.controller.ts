@@ -93,6 +93,8 @@ export class WhatsAppController {
       const incomingPhoneId = value?.metadata?.phone_number_id
       const referral        = message.referral ?? null
       const adSource        = detectAdSource(referral)
+      const incomingWamid   = message.id as string | undefined
+      const contextWamid    = (message as Record<string, any>).context?.id as string | undefined
       console.log(`Webhook received | phone_number_id: ${incomingPhoneId} | from: ${message.from} | type: ${message.type} | adSource: ${adSource}`)
 
       // Look up company by waPhoneId so multi-tenant routing works correctly
@@ -106,6 +108,16 @@ export class WhatsAppController {
       if (!company) {
         console.warn(`Unknown waPhoneId ${incomingPhoneId} — message ignored, no company matched`)
         return
+      }
+
+      // Resolve which of OUR messages the customer is quoting (if any)
+      let resolvedReplyToId: string | undefined
+      if (contextWamid) {
+        const parentMsg = await this.prisma.message.findFirst({
+          where: { conversation: { companyId: company.id }, whatsappMsgId: contextWamid },
+          select: { id: true },
+        })
+        resolvedReplyToId = parentMsg?.id
       }
 
       // Mark incoming message as read (shows blue ticks to customer)
@@ -144,7 +156,13 @@ export class WhatsAppController {
           convId = newConv.id
         }
         const savedUserMsg = await this.prisma.message.create({
-          data: { conversationId: convId, role: 'USER', content: media.label },
+          data: {
+            conversationId: convId,
+            role: 'USER',
+            content: media.label,
+            ...(incomingWamid && { whatsappMsgId: incomingWamid }),
+            ...(resolvedReplyToId && { replyToId: resolvedReplyToId }),
+          },
         })
 
         // Fire-and-forget: download from Meta → upload to Supabase → stamp mediaUrl on the row.
@@ -174,14 +192,50 @@ export class WhatsAppController {
 
       // Send each reply via Meta WhatsApp Cloud API — split into parts with typing delays
       const hasContent = replyList.some(r => r)
+      const outWamids: (string | null)[] = []
       if (hasContent && company.waToken && company.waPhoneId) {
         for (const r of replyList) {
           if (!r) continue
-          await sendWhatsAppMessage(company.waPhoneId, company.waToken, message.from, r)
+          const w = await sendWhatsAppMessage(company.waPhoneId, company.waToken, message.from, r)
+          outWamids.push(w)
         }
       } else if (hasContent) {
         console.warn(`Reply generated but not sent — waToken or waPhoneId missing for company: ${company.name}`)
       }
+
+      // Fire-and-forget: stamp wamid on incoming USER message + outgoing ASSISTANT messages
+      void (async () => {
+        const cutoff = new Date(Date.now() - 300000) // 5-min window
+        const phone  = message.from as string
+        if (incomingWamid) {
+          const lastUser = await this.prisma.message.findFirst({
+            where: { conversation: { companyId: company.id, phone }, role: 'USER', whatsappMsgId: null, createdAt: { gte: cutoff } },
+            orderBy: { createdAt: 'desc' },
+            select: { id: true },
+          })
+          if (lastUser) {
+            await this.prisma.message.update({
+              where: { id: lastUser.id },
+              data: { whatsappMsgId: incomingWamid, ...(resolvedReplyToId && { replyToId: resolvedReplyToId }) },
+            })
+          }
+        }
+        if (outWamids.some(w => w)) {
+          const recentAsst = await this.prisma.message.findMany({
+            where: { conversation: { companyId: company.id, phone }, role: 'ASSISTANT', whatsappMsgId: null, createdAt: { gte: cutoff } },
+            orderBy: { createdAt: 'asc' },
+            select: { id: true },
+          })
+          for (let i = 0; i < Math.min(recentAsst.length, outWamids.length); i++) {
+            if (outWamids[i]) {
+              await this.prisma.message.update({
+                where: { id: recentAsst[i].id },
+                data: { whatsappMsgId: outWamids[i] },
+              })
+            }
+          }
+        }
+      })().catch(err => console.error('[WAMID_STAMP]', err))
     } catch (err) {
       console.error('Webhook error:', err)
     }
