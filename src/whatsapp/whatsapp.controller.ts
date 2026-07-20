@@ -6,6 +6,7 @@ import { FollowUpService } from './followup.service'
 import { PrismaService } from '../prisma/prisma.service'
 import { splitIntoMessages } from './message-splitter'
 import { metaPost, sendWhatsAppMessage } from './send-message'
+import { captureMedia } from './capture-media'
 
 const MEDIA_REPLIES: Record<string, { label: string; reply: string }> = {
   audio:    { label: '[رسالة صوتية]',   reply: 'حضرتك بعتلنا رسالة صوتية، للأسف مش بنقدر نسمعها دلوقتي لو ممكن تكتب طلبك يافندم نكون شاكرين' },
@@ -142,9 +143,22 @@ export class WhatsAppController {
           })
           convId = newConv.id
         }
-        await this.prisma.message.create({
+        const savedUserMsg = await this.prisma.message.create({
           data: { conversationId: convId, role: 'USER', content: media.label },
         })
+
+        // Fire-and-forget: download from Meta → upload to Supabase → stamp mediaUrl on the row.
+        // Never blocks the 200 response. Failures are logged; the placeholder stays as fallback.
+        if (company.waToken) {
+          const rawMediaId = (message as Record<string, any>)[mediaType]?.id as string | undefined
+          if (rawMediaId) {
+            void captureMedia(
+              this.prisma, savedUserMsg.id, rawMediaId, company.waToken,
+              company.id, convId, mediaType,
+            ).catch(err => console.error(`[MEDIA_CAPTURE] ${mediaType} msg=${savedUserMsg.id}:`, err))
+          }
+        }
+
         if (company.waToken && company.waPhoneId) {
           await sendWhatsAppMessage(company.waPhoneId, company.waToken, message.from, media.reply)
         }
