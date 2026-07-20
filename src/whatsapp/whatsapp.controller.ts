@@ -129,15 +129,17 @@ export class WhatsAppController {
         })
       }
 
-      // Non-text media: save placeholder + send fixed reply, skip AI entirely
+      // Non-text media: save placeholder + capture + send fixed reply ONLY in AI mode
       if (!message.text?.body) {
         const mediaType = message.type as string
         const media = MEDIA_REPLIES[mediaType] ?? MEDIA_REPLIES['document']
-        console.log(`MEDIA MESSAGE (${mediaType}) from ${message.from} — sending fixed reply`)
         const conv = await this.prisma.conversation.findFirst({
           where: { companyId: company.id, phone: message.from, status: { not: ConvStatus.CLOSED } },
           orderBy: { updatedAt: 'desc' },
         })
+        const isHumanMode = conv?.agentMode === 'HUMAN'
+        console.log(`MEDIA MESSAGE (${mediaType}) from ${message.from} — agentMode=${conv?.agentMode ?? 'new'} humanMode=${isHumanMode}`)
+
         let convId = conv?.id
         if (!convId) {
           const existingLead = await this.prisma.lead.findFirst({
@@ -155,6 +157,13 @@ export class WhatsAppController {
           })
           convId = newConv.id
         }
+
+        // Touch updatedAt so the inbox list re-sorts on every incoming message
+        await this.prisma.conversation.update({
+          where: { id: convId },
+          data: { updatedAt: new Date() },
+        })
+
         const savedUserMsg = await this.prisma.message.create({
           data: {
             conversationId: convId,
@@ -166,7 +175,7 @@ export class WhatsAppController {
         })
 
         // Fire-and-forget: download from Meta → upload to Supabase → stamp mediaUrl on the row.
-        // Never blocks the 200 response. Failures are logged; the placeholder stays as fallback.
+        // Runs in all modes so the dashboard always shows the actual file.
         if (company.waToken) {
           const rawMediaId = (message as Record<string, any>)[mediaType]?.id as string | undefined
           if (rawMediaId) {
@@ -174,9 +183,18 @@ export class WhatsAppController {
               this.prisma, savedUserMsg.id, rawMediaId, company.waToken,
               company.id, convId, mediaType,
             ).catch(err => console.error(`[MEDIA_CAPTURE] ${mediaType} msg=${savedUserMsg.id}:`, err))
+          } else {
+            console.warn(`[MEDIA_CAPTURE] no rawMediaId in message for ${mediaType} from ${message.from} — capture skipped`)
           }
         }
 
+        // HUMAN mode: message saved and captured — no auto-reply to customer
+        if (isHumanMode) {
+          console.log(`MEDIA HUMAN MODE (${mediaType}) — saved for ${message.from}, no auto-reply sent`)
+          return
+        }
+
+        // AI mode: send the canned reply
         if (company.waToken && company.waPhoneId) {
           await sendWhatsAppMessage(company.waPhoneId, company.waToken, message.from, media.reply)
         }

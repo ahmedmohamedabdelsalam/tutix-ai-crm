@@ -176,6 +176,10 @@ export class WhatsAppService {
       await this.prisma.message.create({
         data: { conversationId: conv.id, role: 'USER', content: text },
       })
+      await this.prisma.conversation.update({
+        where: { id: conv.id },
+        data: { updatedAt: new Date() },
+      })
 
       // NEEDS_HUMAN = still waiting for a human agent → AI responds normally
       // (per system prompt: "لو حصل تحويل وبعدين العميل بعت رسالة تانية — جاوبه عادي")
@@ -330,6 +334,10 @@ export class WhatsAppService {
     if (conv.status !== ConvStatus.AI_HANDLING) {
       await this.prisma.message.create({
         data: { conversationId: conv.id, role: 'USER', content: text },
+      })
+      await this.prisma.conversation.update({
+        where: { id: conv.id },
+        data: { updatedAt: new Date() },
       })
       return ''
     }

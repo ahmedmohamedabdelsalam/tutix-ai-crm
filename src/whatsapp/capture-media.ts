@@ -37,7 +37,8 @@ export async function captureMedia(
   const supabaseUrl = process.env.SUPABASE_URL
   const supabaseKey = process.env.SUPABASE_SERVICE_KEY
   if (!supabaseUrl || !supabaseKey) {
-    console.warn('[MEDIA_CAPTURE] SUPABASE_URL or SUPABASE_SERVICE_KEY not set — skipping')
+    const missing = [!supabaseUrl && 'SUPABASE_URL', !supabaseKey && 'SUPABASE_SERVICE_KEY'].filter(Boolean).join(', ')
+    console.error(`[MEDIA_CAPTURE] MISSING ENV VARS: ${missing} — capture skipped for msg=${msgId}. Set these on Railway and redeploy.`)
     return
   }
 
