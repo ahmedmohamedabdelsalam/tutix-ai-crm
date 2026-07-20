@@ -159,6 +159,7 @@ model Conversation {
   handledByUserId      String?
   handledByName        String?
   handledAt            DateTime?
+  markedUnread         Boolean        @default(false)
   createdAt            DateTime       @default(now())
   updatedAt            DateTime       @updatedAt
   company    Company    @relation(fields: [companyId], references: [id])
