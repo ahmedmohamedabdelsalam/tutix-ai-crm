@@ -150,12 +150,16 @@ export class WhatsAppService {
     // "معاك والدتك يعني شخصين". Gate these two fields: only carry them forward when the CURRENT
     // conversation's own messages already mention a companion or group.
     let knownLeadFacts: LeadFacts | undefined
+    const lockedByManual = new Set<string>()
     if (conv.leadId) {
       const lead = await this.prisma.lead.findUnique({
         where: { id: conv.leadId },
-        select: { name: true, packageType: true, groupSize: true, travelDate: true, budget: true, companionNote: true },
+        select: { name: true, packageType: true, groupSize: true, travelDate: true, budget: true, companionNote: true, manualFields: true },
       })
       if (!knownCustomerName && lead?.name) knownCustomerName = lead.name
+      if (lead?.manualFields) {
+        for (const f of lead.manualFields.split(',')) { if (f.trim()) lockedByManual.add(f.trim()) }
+      }
       if (lead && (lead.packageType || lead.groupSize != null || lead.travelDate || lead.budget || lead.companionNote)) {
         const companionInThisConv = companionConfirmedInHistory(conv.messages ?? [])
         const monthInThisConv = travelDateConfirmedInHistory(conv.messages ?? [])
@@ -188,7 +192,7 @@ export class WhatsAppService {
         if (conv.bookingStage === 'AWAITING_GOVERNORATE') {
           const gov = getGovFromText(text)
           if (gov) {
-            if (conv.leadId) await this.prisma.lead.update({ where: { id: conv.leadId }, data: { governorate: gov } })
+            if (conv.leadId && !lockedByManual.has('governorate')) await this.prisma.lead.update({ where: { id: conv.leadId }, data: { governorate: gov } })
             const bMsg = `شكراً يافندم! بناءً على موقعك في ${gov} — أقرب فرع ليك هو:\n${branchMessage(gov)}\n\nهتيجي للفرع لإتمام الحجز؟`
             await this.prisma.conversation.update({ where: { id: conv.id }, data: { bookingStage: 'AWAITING_BRANCH_CONFIRM' } })
             await saveAssistantMessage(this.prisma, conv.id, bMsg)
@@ -676,12 +680,12 @@ export class WhatsAppService {
         if (conv.leadId) await this.prisma.lead.update({
           where: { id: conv.leadId },
           data: {
-            ...(extracted.name && !knownCustomerName && { name: extracted.name }),
-            ...(extracted.packageType && { packageType: extracted.packageType }),
-            ...(extracted.groupSize && { groupSize: extracted.groupSize }),
-            ...(extracted.budget && { budget: extracted.budget }),
-            ...(extracted.travelDate && { travelDate: extracted.travelDate }),
-            ...(extracted.companionNote && { companionNote: extracted.companionNote }),
+            ...(extracted.name        && !knownCustomerName                    && !lockedByManual.has('name')         && { name: extracted.name }),
+            ...(extracted.packageType && !lockedByManual.has('packageType')    && { packageType: extracted.packageType }),
+            ...(extracted.groupSize   && !lockedByManual.has('groupSize')      && { groupSize: extracted.groupSize }),
+            ...(extracted.budget      && !lockedByManual.has('budget')         && { budget: extracted.budget }),
+            ...(extracted.travelDate  && !lockedByManual.has('travelDate')     && { travelDate: extracted.travelDate }),
+            ...(extracted.companionNote && !lockedByManual.has('companionNote') && { companionNote: extracted.companionNote }),
             score,
             isHot: score >= 70,
             status: score >= 70 ? LeadStatus.HOT : LeadStatus.CONTACTED,

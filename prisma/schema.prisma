@@ -99,6 +99,7 @@ model Lead {
   score                Int            @default(0)
   isHot                Boolean        @default(false)
   manualReviewRequired Boolean        @default(false)
+  manualFields  String?
   status        LeadStatus     @default(NEW)
   source        String         @default("whatsapp")
   platform      String?
@@ -160,6 +161,7 @@ model Conversation {
   handledByName        String?
   handledAt            DateTime?
   markedUnread         Boolean        @default(false)
+  isPinned             Boolean        @default(false)
   createdAt            DateTime       @default(now())
   updatedAt            DateTime       @updatedAt
   company    Company    @relation(fields: [companyId], references: [id])
