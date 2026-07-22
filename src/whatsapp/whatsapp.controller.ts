@@ -7,6 +7,7 @@ import { PrismaService } from '../prisma/prisma.service'
 import { splitIntoMessages } from './message-splitter'
 import { metaPost, sendWhatsAppMessage } from './send-message'
 import { captureMedia } from './capture-media'
+import { isAIConfigActive } from './ai-config-cache'
 
 const MEDIA_REPLIES: Record<string, { label: string; reply: string }> = {
   audio:    { label: '[رسالة صوتية]',   reply: 'حضرتك بعتلنا رسالة صوتية، للأسف مش بنقدر نسمعها دلوقتي لو ممكن تكتب طلبك يافندم نكون شاكرين' },
@@ -138,7 +139,10 @@ export class WhatsAppController {
           orderBy: { updatedAt: 'desc' },
         })
         const isHumanMode = conv?.agentMode === 'HUMAN'
-        console.log(`MEDIA MESSAGE (${mediaType}) from ${message.from} — agentMode=${conv?.agentMode ?? 'new'} humanMode=${isHumanMode}`)
+        // Kill-switch check for media path — the main text path gates via handleMessage(),
+        // but the media branch is a separate short-circuit that must check both locks itself.
+        const mediaAiActive = await isAIConfigActive(this.prisma, company.id)
+        console.log(`MEDIA MESSAGE (${mediaType}) from ${message.from} — agentMode=${conv?.agentMode ?? 'new'} humanMode=${isHumanMode} aiActive=${mediaAiActive}`)
 
         let convId = conv?.id
         if (!convId) {
@@ -188,13 +192,15 @@ export class WhatsAppController {
           }
         }
 
-        // HUMAN mode: message saved and captured — no auto-reply to customer
-        if (isHumanMode) {
-          console.log(`MEDIA HUMAN MODE (${mediaType}) — saved for ${message.from}, no auto-reply sent`)
+        // HUMAN mode OR kill switch OFF: message saved and captured — no auto-reply to customer.
+        // Either lock alone is sufficient to block; both must be clear for a canned reply to send.
+        if (isHumanMode || !mediaAiActive) {
+          const pauseReason = isHumanMode ? 'HUMAN_MODE' : 'KILL_SWITCH'
+          console.log(`MEDIA ${pauseReason} (${mediaType}) — saved for ${message.from}, no auto-reply sent`)
           return
         }
 
-        // AI mode: send the canned reply
+        // AI mode with both locks clear: send the canned reply
         if (company.waToken && company.waPhoneId) {
           await sendWhatsAppMessage(company.waPhoneId, company.waToken, message.from, media.reply)
         }

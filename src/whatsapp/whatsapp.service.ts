@@ -143,8 +143,8 @@ export class WhatsAppService {
                 agentNotes: 'عميل عائد - تسليم فوري للمبيعات',
               },
             })
-            console.log(`RETURNING CUSTOMER → ${phone}`)
-            return welcomeBack
+            console.log(`RETURNING CUSTOMER → ${phone} — message saved for sales, not auto-sent`)
+            return ''
           }
           await this.prisma.conversation.update({
             where: { id: conv.id },
@@ -686,7 +686,7 @@ export class WhatsAppService {
     if (conv.bookingStage !== 'NONE') {
       const ack = 'تمام يافندم، زميلنا هيتواصل معك في أقرب وقت إن شاء الله'
       await saveAssistantMessage(this.prisma, conv.id, ack)
-      return ack
+      return ''  // saved for sales dashboard, never auto-sent
     }
 
     const leadForBooking = await this.prisma.lead.findFirst({
@@ -723,7 +723,7 @@ export class WhatsAppService {
       data: { status: LeadStatus.PENDING_PAYMENT, isHot: true },
     })
     console.log(`BOOKING_FLOW → ${phone} stage=${newStage} | Score: ${score} | ${reason}`)
-    return bookingMsg
+    return ''  // handoff message saved for sales dashboard, never auto-sent
   }
 
   // Generates one AI reply for an existing conversation without creating a duplicate
