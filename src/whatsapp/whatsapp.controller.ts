@@ -302,6 +302,14 @@ export class WhatsAppController {
         null,
         simulate,  // structural guarantee: ONLY this endpoint passes simulate=true
       )
+
+      // Stamp the conversation as a test so it is excluded from the sales inbox.
+      // Done after handleMessage so the conversation is guaranteed to exist.
+      await this.prisma.conversation.updateMany({
+        where: { companyId, phone: body.phone ?? '201234567890' },
+        data: { isTest: true },
+      })
+
       const replies = Array.isArray(result) ? result : (result ? [result] : [])
       const parts = replies.flatMap(r => r ? splitIntoMessages(r) : [])
       console.log(`TEST${simulate ? ' [SIMULATE]' : ''}: ${replies.length} message(s), ${parts.length} part(s) total`)
@@ -334,9 +342,11 @@ export class WhatsAppController {
     if (!convId) {
       const lead = await this.prisma.lead.create({ data: { companyId, phone, source: 'whatsapp' } })
       const newConv = await this.prisma.conversation.create({
-        data: { companyId, phone, leadId: lead.id, status: ConvStatus.AI_HANDLING, agentMode: 'HUMAN' },
+        data: { companyId, phone, leadId: lead.id, status: ConvStatus.AI_HANDLING, agentMode: 'HUMAN', isTest: true },
       })
       convId = newConv.id
+    } else {
+      await this.prisma.conversation.update({ where: { id: convId }, data: { isTest: true } })
     }
     await this.prisma.message.create({ data: { conversationId: convId, role: 'USER', content: media.label } })
     await this.prisma.message.create({ data: { conversationId: convId, role: 'ASSISTANT', content: media.reply } })

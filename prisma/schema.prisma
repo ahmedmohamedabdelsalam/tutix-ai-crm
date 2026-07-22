@@ -162,6 +162,7 @@ model Conversation {
   handledAt            DateTime?
   markedUnread         Boolean        @default(false)
   isPinned             Boolean        @default(false)
+  isTest               Boolean        @default(false)
   createdAt            DateTime       @default(now())
   updatedAt            DateTime       @updatedAt
   company    Company    @relation(fields: [companyId], references: [id])
