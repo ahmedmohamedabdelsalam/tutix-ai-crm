@@ -147,7 +147,7 @@ model Conversation {
   leadId               String?
   phone                String
   status               ConvStatus     @default(AI_HANDLING)
-  agentMode            String         @default("AI")
+  agentMode            String         @default("HUMAN")
   assignedSalesId      String?
   agentNotes           String?
   followUpScheduledAt  DateTime?

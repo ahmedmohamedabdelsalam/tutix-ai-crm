@@ -160,6 +160,54 @@ export class FollowUpService {
     }
   }
 
+  // ── AI Leak Watchdog ─────────────────────────────────────────────────────────
+  // Runs every 5 minutes. Detects automated AI messages that should have been
+  // silenced — either because the conversation is in HUMAN mode or the company
+  // kill switch is OFF. Logs [AI_LEAK_ALARM] loudly so it appears in Railway logs.
+  // Read-only: no writes, no side effects.
+  @Cron('*/5 * * * *')
+  async auditForAILeaks(): Promise<void> {
+    const cutoff = new Date(Date.now() - 5 * 60_000)
+
+    const companies = await this.prisma.company.findMany({
+      where: { isActive: true },
+      select: { id: true, name: true },
+    })
+
+    for (const company of companies) {
+      try {
+        const aiActive = await isAIConfigActive(this.prisma, company.id)
+
+        // When kill switch is OFF: any automated outbound message is a leak.
+        // When kill switch is ON: only automated messages on HUMAN-mode convs are leaks.
+        const leakyConvs = await this.prisma.conversation.findMany({
+          where: {
+            companyId: company.id,
+            ...(aiActive ? { agentMode: 'HUMAN' } : {}),
+            messages: {
+              some: {
+                role: MessageRole.ASSISTANT,
+                senderUserId: null,
+                createdAt: { gte: cutoff },
+              },
+            },
+          },
+          select: { phone: true, agentMode: true },
+        })
+
+        if (leakyConvs.length > 0) {
+          const phones = [...new Set(leakyConvs.map(c => c.phone))].join(', ')
+          const reason = aiActive ? 'HUMAN-mode-bypass' : 'kill-switch-bypass'
+          this.logger.error(
+            `[AI_LEAK_ALARM] company=${company.name} reason=${reason} affected=${leakyConvs.length} phones=${phones}`,
+          )
+        }
+      } catch (err) {
+        this.logger.error(`[AI_LEAK_ALARM] audit error for company=${company.name}`, err)
+      }
+    }
+  }
+
   // Manual trigger for testing — bypasses time window AND 2h idle threshold
   async triggerNow(): Promise<{ ran: boolean; ts: string; result: { sent: number; skipped: string | null } }> {
     const result = await this.sendDueFollowUps(true)

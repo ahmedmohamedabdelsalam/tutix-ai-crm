@@ -112,6 +112,12 @@ export class WhatsAppService {
           },
         })
 
+        // Schema default is 'HUMAN' — any creation path that omits agentMode fails silent.
+        // This is the only place where agentMode='AI' is written for new conversations.
+        // RE-ENABLE AFTER PAUSE (both locks must be cleared deliberately):
+        //   Step 1 — set CompanyAIConfig.isActive=true via the dashboard kill-switch toggle
+        //   Step 2 — conversations must reach agentMode='AI' (created here, or bulk-flipped)
+        //   Either lock alone keeps AI fully silent.
         conv = await this.prisma.conversation.create({
           data: {
             companyId,
