@@ -266,7 +266,7 @@ export class WhatsAppController {
   }
 
   @Post('test')
-  async test(@Body() body: { phone: string; message: string }) {
+  async test(@Body() body: { phone: string; message: string; simulate?: boolean }) {
     try {
       console.log('--- /webhook/test called ---')
       console.log('DEFAULT_COMPANY_ID:', process.env.DEFAULT_COMPANY_ID ?? '❌ NOT SET')
@@ -274,6 +274,14 @@ export class WhatsAppController {
       const companyId = process.env.DEFAULT_COMPANY_ID
       if (!companyId) {
         return { error: 'DEFAULT_COMPANY_ID not set' }
+      }
+
+      // simulate=true: bypasses AI-pause gates so catalog bypasses can be tested while AI stays locked.
+      // This endpoint NEVER calls sendWhatsAppMessage — replies are returned via HTTP only.
+      // The simulate flag is ONLY accepted here; it is never passed by the real Meta webhook path.
+      const simulate = body.simulate === true
+      if (simulate) {
+        console.log('[SIMULATE] mode active — gates bypassed, replies returned via HTTP only, not persisted to DB')
       }
 
       console.log(`🔍 Looking up company: ${companyId}`)
@@ -290,15 +298,18 @@ export class WhatsAppController {
         companyId,
         body.phone ?? '201234567890',
         body.message ?? 'مرحباً',
+        'direct',
+        null,
+        simulate,  // structural guarantee: ONLY this endpoint passes simulate=true
       )
       const replies = Array.isArray(result) ? result : (result ? [result] : [])
       const parts = replies.flatMap(r => r ? splitIntoMessages(r) : [])
-      console.log(`TEST: ${replies.length} message(s), ${parts.length} part(s) total`)
+      console.log(`TEST${simulate ? ' [SIMULATE]' : ''}: ${replies.length} message(s), ${parts.length} part(s) total`)
       replies.forEach((r, i) => {
         const rParts = r ? splitIntoMessages(r) : []
         rParts.forEach((p, pi) => console.log(`  [msg${i + 1} part${pi + 1}] ${p.substring(0, 80)}`))
       })
-      return { replies, parts }
+      return { simulate, replies, parts }
     } catch (err: any) {
       console.error('❌ /webhook/test error:', err?.message ?? err)
       return { error: err?.message ?? 'Internal server error', stack: err?.stack?.split('\n').slice(0, 3) }

@@ -45,7 +45,16 @@ export class WhatsAppService {
 
 
 
-  async handleMessage(companyId: string, phone: string, text: string, source = 'direct', referralData?: object | null): Promise<string | string[]> {
+  async handleMessage(companyId: string, phone: string, text: string, source = 'direct', referralData?: object | null, simulate = false): Promise<string | string[]> {
+    // simulate=true: accepted ONLY from /webhook/test — never passed by the real Meta webhook path.
+    // Gates are bypassed so catalog bypasses can be tested while AI stays fully locked.
+    // Assistant replies are NOT persisted to DB in this mode (prevents watchdog false-alarms
+    // and keeps the test conversation clean). sendWhatsAppMessage is structurally unreachable
+    // from handleMessage; the /webhook/test endpoint never calls it either.
+    const persistReply = simulate
+      ? async (_convId: string, _content: string): Promise<any> => {}
+      : (convId: string, content: string) => saveAssistantMessage(this.prisma, convId, content)
+
     const company = await this.prisma.company.findUnique({ where: { id: companyId } })
     if (!company || !company.isActive) return ''
 
@@ -135,7 +144,7 @@ export class WhatsAppService {
           })
           if (aiActive) {
             const welcomeBack = 'أهلاً بعودتك يافندم نورتنا تاني سيتواصل معك أحد متخصصينا قريباً إن شاء الله'
-            await saveAssistantMessage(this.prisma, conv.id, welcomeBack)
+            await persistReply(conv.id,welcomeBack)
             await this.prisma.conversation.update({
               where: { id: conv.id },
               data: {
@@ -194,8 +203,10 @@ export class WhatsAppService {
       }
     }
 
+    if (simulate) console.log(`[SIMULATE] phone=${phone} — bypassing HUMAN/STATUS/KILL_SWITCH gates, replies returned via HTTP only`)
+
     // ── PART 2: HUMAN mode — save message ───────────────────
-    if (conv.agentMode === 'HUMAN') {
+    if (!simulate && conv.agentMode === 'HUMAN') {
       await this.prisma.message.create({
         data: { conversationId: conv.id, role: 'USER', content: text },
       })
@@ -210,7 +221,7 @@ export class WhatsAppService {
     }
 
     // ── AI mode but conversation already handed off ───────────
-    if (conv.status !== ConvStatus.AI_HANDLING) {
+    if (!simulate && conv.status !== ConvStatus.AI_HANDLING) {
       await this.prisma.message.create({
         data: { conversationId: conv.id, role: 'USER', content: text },
       })
@@ -227,7 +238,7 @@ export class WhatsAppService {
     })
 
     // Company-wide AI kill switch: message saved for inbox, no automated reply
-    if (!aiActive) {
+    if (!simulate && !aiActive) {
       await this.prisma.conversation.update({
         where: { id: conv.id },
         data: { updatedAt: new Date() },
@@ -297,7 +308,7 @@ export class WhatsAppService {
     const trimmedText = text.trim()
     if (/^[ء-ي]{1,2}$/.test(trimmedText) && !SHORT_WHITELIST.has(trimmedText)) {
       const clarify = 'معلش يافندم مفهمتش، تحب تقولي إيه بالتحديد؟'
-      await saveAssistantMessage(this.prisma, conv.id, clarify)
+      await persistReply(conv.id,clarify)
       console.log(`SHORT-MSG GUARD → ${phone} sent "${trimmedText}"`)
       return clarify
     }
@@ -327,7 +338,7 @@ export class WhatsAppService {
         if (isLast) fullDetailsMap.delete(conv.id)
         else fullDetailsMap.set(conv.id, { offset: nextOffset, total })
 
-        await saveAssistantMessage(this.prisma, conv.id, fdReply)
+        await persistReply(conv.id,fdReply)
         console.log(`FD_CHUNK → ${phone} offset=${offset}..${nextOffset - 1}/${total} isLast=${isLast}`)
         return fdReply
       }
@@ -347,7 +358,7 @@ export class WhatsAppService {
         if (n !== null && n >= 1 && n <= ovState.orderedDetails.length) {
           const detail = applyHajjDateDisclaimer(ovState.orderedDetails[n - 1])
           overviewMap.delete(conv.id)
-          await saveAssistantMessage(this.prisma, conv.id, detail)
+          await persistReply(conv.id,detail)
           console.log(`OV_NUMBER → ${phone} n=${n} → program detail sent`)
           return detail
         }
@@ -366,7 +377,7 @@ export class WhatsAppService {
         const catDetails = catReply === 'ECONOMY' ? prebuiltCatalog.hajjEconomyDetails  : prebuiltCatalog.hajjFiveStarDetails
         if (catMsg) {
           overviewMap.set(conv.id, { orderedDetails: catDetails })
-          await saveAssistantMessage(this.prisma, conv.id, catMsg)
+          await persistReply(conv.id,catMsg)
           console.log(`HAJJ_CAT_REPLY → ${phone} cat=${catReply} programs=${catDetails.length}`)
           return catMsg
         }
@@ -392,7 +403,7 @@ export class WhatsAppService {
         fullDetailsMap.delete(conv.id)
         if (hajjOvIntent === 'GENERIC' && prebuiltCatalog.hajjCategoryQuestion) {
           categoryQuestionMap.set(conv.id, true)
-          await saveAssistantMessage(this.prisma, conv.id, prebuiltCatalog.hajjCategoryQuestion)
+          await persistReply(conv.id,prebuiltCatalog.hajjCategoryQuestion)
           console.log(`HAJJ_CAT_Q_BYPASS → ${phone}`)
           return prebuiltCatalog.hajjCategoryQuestion
         }
@@ -400,7 +411,7 @@ export class WhatsAppService {
         const catDetails = hajjOvIntent === 'ECONOMY' ? prebuiltCatalog.hajjEconomyDetails  : prebuiltCatalog.hajjFiveStarDetails
         if (catMsg) {
           overviewMap.set(conv.id, { orderedDetails: catDetails })
-          await saveAssistantMessage(this.prisma, conv.id, catMsg)
+          await persistReply(conv.id,catMsg)
           console.log(`HAJJ_OV_BYPASS → ${phone} cat=${hajjOvIntent} programs=${catDetails.length}`)
           return catMsg
         }
@@ -411,7 +422,7 @@ export class WhatsAppService {
         fullDetailsMap.delete(conv.id)
         const firstName = knownCustomerName?.split(/\s+/)[0]
         const intro = firstName ? `تمام يا أستاذ ${firstName} اتفضل` : `اتفضل يافندم`
-        await saveAssistantMessage(this.prisma, conv.id, intro)
+        await persistReply(conv.id,intro)
         const parts: string[] = [intro]
 
         if (isUmrahOv && ovMonth) {
@@ -420,20 +431,20 @@ export class WhatsAppService {
           if (umrahLevel && !filteredMsg) {
             const fallback = `مش عندنا برامج ${umrahLevel} في ${ovMonth} — اتفضل كل برامج الشهر:`
             const fullMsg = prebuiltCatalog.umrahMonthMessages[ovMonth]
-            await saveAssistantMessage(this.prisma, conv.id, fallback)
-            await saveAssistantMessage(this.prisma, conv.id, fullMsg)
+            await persistReply(conv.id,fallback)
+            await persistReply(conv.id,fullMsg)
             parts.push(fallback, fullMsg)
             console.log(`UMRAH_OV_BYPASS_NO_LEVEL → ${phone} month=${ovMonth} level=${umrahLevel}`)
           } else {
             const ovMsg = filteredMsg ?? prebuiltCatalog.umrahMonthMessages[ovMonth]
-            await saveAssistantMessage(this.prisma, conv.id, ovMsg)
+            await persistReply(conv.id,ovMsg)
             parts.push(ovMsg)
             console.log(`UMRAH_OV_BYPASS → ${phone} month=${ovMonth}${umrahLevel ? ` level=${umrahLevel}` : ''} trips=${prebuiltCatalog.umrahMonthDetails[ovMonth].length}`)
           }
         } else if (isUmrahAllOv) {
           const ovMsg = prebuiltCatalog.umrahAllMonthsMessage
           overviewMap.set(conv.id, { orderedDetails: prebuiltCatalog.umrahAllMonthsDetails })
-          await saveAssistantMessage(this.prisma, conv.id, ovMsg)
+          await persistReply(conv.id,ovMsg)
           parts.push(ovMsg)
           console.log(`UMRAH_ALL_OV_BYPASS → ${phone} total=${prebuiltCatalog.umrahAllMonthsDetails.length}`)
         }
@@ -455,7 +466,7 @@ export class WhatsAppService {
         fullDetailsMap.delete(conv.id)
         if (hajjOvIntentFirst === 'GENERIC' && prebuiltCatalog.hajjCategoryQuestion) {
           categoryQuestionMap.set(conv.id, true)
-          await saveAssistantMessage(this.prisma, conv.id, prebuiltCatalog.hajjCategoryQuestion)
+          await persistReply(conv.id,prebuiltCatalog.hajjCategoryQuestion)
           console.log(`HAJJ_CAT_Q_ZERO_AI → ${phone}`)
           return prebuiltCatalog.hajjCategoryQuestion
         }
@@ -463,7 +474,7 @@ export class WhatsAppService {
         const catDetails = hajjOvIntentFirst === 'ECONOMY' ? prebuiltCatalog.hajjEconomyDetails  : prebuiltCatalog.hajjFiveStarDetails
         if (catMsg) {
           overviewMap.set(conv.id, { orderedDetails: catDetails })
-          await saveAssistantMessage(this.prisma, conv.id, catMsg)
+          await persistReply(conv.id,catMsg)
           console.log(`HAJJ_OV_ZERO_AI → ${phone} cat=${hajjOvIntentFirst} programs=${catDetails.length}`)
           return catMsg
         }
@@ -474,7 +485,7 @@ export class WhatsAppService {
         fullDetailsMap.delete(conv.id)
         const firstName = knownCustomerName?.split(/\s+/)[0]
         const intro = firstName ? `تمام يا أستاذ ${firstName} اتفضل` : `اتفضل يافندم`
-        await saveAssistantMessage(this.prisma, conv.id, intro)
+        await persistReply(conv.id,intro)
         const parts: string[] = [intro]
 
         if (firstMsgUmrahMonth) {
@@ -483,20 +494,20 @@ export class WhatsAppService {
           if (firstMsgUmrahLevel && !filteredMsgFirst) {
             const fallback = `مش عندنا برامج ${firstMsgUmrahLevel} في ${firstMsgUmrahMonth} — اتفضل كل برامج الشهر:`
             const fullMsg = prebuiltCatalog.umrahMonthMessages[firstMsgUmrahMonth]
-            await saveAssistantMessage(this.prisma, conv.id, fallback)
-            await saveAssistantMessage(this.prisma, conv.id, fullMsg)
+            await persistReply(conv.id,fallback)
+            await persistReply(conv.id,fullMsg)
             parts.push(fallback, fullMsg)
             console.log(`UMRAH_OV_ZERO_AI_FIRST_NO_LEVEL → ${phone} month=${firstMsgUmrahMonth} level=${firstMsgUmrahLevel}`)
           } else {
             const ovMsg = filteredMsgFirst ?? prebuiltCatalog.umrahMonthMessages[firstMsgUmrahMonth]
-            await saveAssistantMessage(this.prisma, conv.id, ovMsg)
+            await persistReply(conv.id,ovMsg)
             parts.push(ovMsg)
             console.log(`UMRAH_OV_ZERO_AI_FIRST → ${phone} month=${firstMsgUmrahMonth}${firstMsgUmrahLevel ? ` level=${firstMsgUmrahLevel}` : ''} trips=${prebuiltCatalog.umrahMonthDetails[firstMsgUmrahMonth].length}`)
           }
         } else if (isUmrahAllOvFirst) {
           const ovMsg = prebuiltCatalog.umrahAllMonthsMessage
           overviewMap.set(conv.id, { orderedDetails: prebuiltCatalog.umrahAllMonthsDetails })
-          await saveAssistantMessage(this.prisma, conv.id, ovMsg)
+          await persistReply(conv.id,ovMsg)
           parts.push(ovMsg)
           console.log(`UMRAH_ALL_OV_ZERO_AI_FIRST → ${phone} total=${prebuiltCatalog.umrahAllMonthsDetails.length}`)
         }
@@ -526,7 +537,7 @@ export class WhatsAppService {
         console.log(`AI_FAILURE_ESCALATED → ${phone} (${fc} consecutive failures)`)
         return ''
       }
-      await saveAssistantMessage(this.prisma, conv.id, rawAIReply)
+      await persistReply(conv.id,rawAIReply)
       console.log(`AI_FAILURE_1 → ${phone} (failure count: ${fc})`)
       return rawAIReply
     }
@@ -535,7 +546,7 @@ export class WhatsAppService {
     writeCostRecord(this.prisma, companyId, conv.id, aiCostUSD)
     const reply = applyHajjDateDisclaimer(rawAIReply)
 
-    await saveAssistantMessage(this.prisma, conv.id, reply)
+    await persistReply(conv.id,reply)
 
     // Non-blocking: log deferral events for analytics
     if (DEFERRAL_PHRASES.some(p => reply.includes(p))) {
@@ -619,7 +630,7 @@ export class WhatsAppService {
             fullDetailsMap.delete(conv.id)
             if (hajjOvIntentPost === 'GENERIC' && prebuiltCatalog?.hajjCategoryQuestion) {
               categoryQuestionMap.set(conv.id, true)
-              await saveAssistantMessage(this.prisma, conv.id, prebuiltCatalog.hajjCategoryQuestion)
+              await persistReply(conv.id,prebuiltCatalog.hajjCategoryQuestion)
               console.log(`HAJJ_CAT_Q_FIRST → ${phone}`)
               return [reply, prebuiltCatalog.hajjCategoryQuestion]
             }
@@ -627,7 +638,7 @@ export class WhatsAppService {
             const catDetails = hajjOvIntentPost === 'ECONOMY' ? prebuiltCatalog?.hajjEconomyDetails  : prebuiltCatalog?.hajjFiveStarDetails
             if (catMsg && catDetails) {
               overviewMap.set(conv.id, { orderedDetails: catDetails })
-              await saveAssistantMessage(this.prisma, conv.id, catMsg)
+              await persistReply(conv.id,catMsg)
               console.log(`HAJJ_OV_FIRST → ${phone} cat=${hajjOvIntentPost} programs=${catDetails.length}`)
               return [reply, catMsg]
             }
@@ -638,7 +649,7 @@ export class WhatsAppService {
         if (umrahMonth && prebuiltCatalog?.umrahMonthMessages?.[umrahMonth]) {
           const ovMsg = prebuiltCatalog.umrahMonthMessages[umrahMonth]
           overviewMap.set(conv.id, { orderedDetails: prebuiltCatalog.umrahMonthDetails[umrahMonth] })
-          await saveAssistantMessage(this.prisma, conv.id, ovMsg)
+          await persistReply(conv.id,ovMsg)
           console.log(`UMRAH_OV_FIRST → ${phone} month=${umrahMonth} trips=${prebuiltCatalog.umrahMonthDetails[umrahMonth].length}`)
           return [reply, ovMsg]
         }
@@ -647,7 +658,7 @@ export class WhatsAppService {
         if (!umrahMonth && detectUmrahOverviewIntent(text) && prebuiltCatalog?.umrahAllMonthsMessage) {
           const ovMsg = prebuiltCatalog.umrahAllMonthsMessage
           overviewMap.set(conv.id, { orderedDetails: prebuiltCatalog.umrahAllMonthsDetails })
-          await saveAssistantMessage(this.prisma, conv.id, ovMsg)
+          await persistReply(conv.id,ovMsg)
           console.log(`UMRAH_ALL_OV_FIRST → ${phone} total=${prebuiltCatalog.umrahAllMonthsDetails.length}`)
           return [reply, ovMsg]
         }
@@ -671,7 +682,7 @@ export class WhatsAppService {
         }
         if (secondReply && secondReply !== AI_ERROR_REPLY) {
           const secondCleaned = applyHajjDateDisclaimer(secondReply)
-          await saveAssistantMessage(this.prisma, conv.id, secondCleaned)
+          await persistReply(conv.id,secondCleaned)
           writeCostRecord(this.prisma, companyId, conv.id, secondCost)
           console.log(`FIRST_MSG_QUESTION_ANSWER → ${phone}`)
           return [reply, secondCleaned]
@@ -685,8 +696,8 @@ export class WhatsAppService {
     // If booking flow already in progress (AI self-handoff edge case), send short ack
     if (conv.bookingStage !== 'NONE') {
       const ack = 'تمام يافندم، زميلنا هيتواصل معك في أقرب وقت إن شاء الله'
-      await saveAssistantMessage(this.prisma, conv.id, ack)
-      return ''  // saved for sales dashboard, never auto-sent
+      await persistReply(conv.id, ack)
+      return simulate ? ack : ''  // saved for sales dashboard, never auto-sent (simulate: return for HTTP inspection)
     }
 
     const leadForBooking = await this.prisma.lead.findFirst({
@@ -706,24 +717,28 @@ export class WhatsAppService {
       newStage = 'AWAITING_GOVERNORATE'
     }
 
-    await this.prisma.conversation.update({
-      where: { id: conv.id },
-      data: {
-        status: ConvStatus.NEEDS_HUMAN,
-        agentMode: 'HUMAN',
-        agentNotes: `${reason} | Score: ${score}/100`,
-        handoffMessageSent: true,
-        bookingStage: newStage,
-      },
-    })
-    await saveAssistantMessage(this.prisma, conv.id, bookingMsg)
-    // First booking flow trigger → promote lead to PENDING_PAYMENT
-    if (conv.leadId) await this.prisma.lead.update({
-      where: { id: conv.leadId },
-      data: { status: LeadStatus.PENDING_PAYMENT, isHot: true },
-    })
+    if (!simulate) {
+      // Skip handoff writes in simulate mode: conv.agentMode must NOT be set to HUMAN
+      // (would break subsequent simulate calls) and lead status must not be promoted.
+      await this.prisma.conversation.update({
+        where: { id: conv.id },
+        data: {
+          status: ConvStatus.NEEDS_HUMAN,
+          agentMode: 'HUMAN',
+          agentNotes: `${reason} | Score: ${score}/100`,
+          handoffMessageSent: true,
+          bookingStage: newStage,
+        },
+      })
+      // First booking flow trigger → promote lead to PENDING_PAYMENT
+      if (conv.leadId) await this.prisma.lead.update({
+        where: { id: conv.leadId },
+        data: { status: LeadStatus.PENDING_PAYMENT, isHot: true },
+      })
+    }
+    await persistReply(conv.id, bookingMsg)
     console.log(`BOOKING_FLOW → ${phone} stage=${newStage} | Score: ${score} | ${reason}`)
-    return ''  // handoff message saved for sales dashboard, never auto-sent
+    return simulate ? bookingMsg : ''  // saved for sales dashboard, never auto-sent (simulate: return for HTTP inspection)
   }
 
   // Generates one AI reply for an existing conversation without creating a duplicate
