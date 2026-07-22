@@ -58,6 +58,7 @@ model CompanyAIConfig {
   industryData     Json?
 
   isActive         Boolean  @default(true)
+  templates        Json?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
   company          Company  @relation(fields: [companyId], references: [id])

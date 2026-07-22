@@ -72,6 +72,64 @@ export function detectUmrahOverviewIntent(text: string): boolean {
   return /عمرة/.test(text) && /برامج|رحلات|أسعار|اسعار|عندكم|عايز|محتاج|قولي/.test(text)
 }
 
+// Detects Meta CTA button tap ("هل يمكنني الحصول على مزيد من المعلومات") or an
+// ad-referral click with no specific service intent — both deserve the CTA menu reply.
+export function detectCTAMessage(
+  text: string,
+  source?: string,
+  referralData?: any,
+): boolean {
+  // Known CTA button phrase (exact phrase Meta sends on "Get More Info" tap)
+  if (text.includes('هل يمكنني الحصول على مزيد من المعلومات')) return true
+  // Ad referral with no meaningful specific intent
+  const isAdReferral =
+    source === 'ad' ||
+    (referralData && (referralData.source_type === 'ad' || referralData.ctwa_clid))
+  if (!isAdReferral) return false
+  const hasSpecificIntent =
+    /عمرة|حج(?!ز)|يولي[وو]|أغسطس|اغسطس|سبتمبر|أكتوبر|اكتوبر|نوفمبر|سعر|الأسعار|اسعار|فندق|برنامج/.test(text)
+  return !hasSpecificIntent
+}
+
+// Extracts the requested trip duration in days from Arabic text.
+// Handles Arabic-Indic numerals, Western digits, and common word-numbers.
+export function detectDurationDays(text: string): number | null {
+  // Arabic-Indic digits + يوم/أيام
+  const arMatch = text.match(/([٠١٢٣٤٥٦٧٨٩]+)\s*(?:يوم|أيام|ايام)/)
+  if (arMatch) {
+    const n = parseInt(arMatch[1].split('').map(c => '٠١٢٣٤٥٦٧٨٩'.indexOf(c)).join(''))
+    if (n > 0) return n
+  }
+  // Western digits + يوم/أيام
+  const wMatch = text.match(/(\d+)\s*(?:يوم|أيام|ايام)/)
+  if (wMatch) {
+    const n = parseInt(wMatch[1])
+    if (n > 0) return n
+  }
+  // Common word-numbers (longest match first to avoid partial hits)
+  const WORDS: Array<[RegExp, number]> = [
+    [/خمسة?\s*وعشرين|خمسة?\s*وعشرون/, 25],
+    [/واحد\s*وعشرين|واحد\s*وعشرون/, 21],
+    [/عشرين|عشرون/, 20],
+    [/سبعة?\s*عشر|سبعطعش|سبعتعشر/, 17],
+    [/خمسة?\s*عشر|خمسطعش|خمستعشر/, 15],
+    [/أربعة?\s*عشر|اربعة?\s*عشر|أربعطعش|اربعطعش/, 14],
+    [/اتناشر|اتناعشر|اثنا\s*عشر|اثني\s*عشر/, 12],
+    [/عشرة|عشره/, 10],
+    [/اسبوعين|أسبوعين/, 14],
+    [/اسبوع|أسبوع/, 7],
+  ]
+  for (const [re, n] of WORDS) {
+    if (re.test(text)) return n
+  }
+  return null
+}
+
+// Detects price-inquiry intent in any message.
+export function detectPriceIntent(text: string): boolean {
+  return /سعر|السعر|أسعار|الأسعار|اسعار|الاسعار|بكام|بقد\s*ايه|قد\s*ايه|تكلف|كلفة|تكاليف|تمن|ثمن/.test(text)
+}
+
 export function detectNumberReply(text: string): number | null {
   const t = text.trim()
   // Arabic-Indic single digit ١-٩

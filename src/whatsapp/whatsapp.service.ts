@@ -8,7 +8,7 @@ import { applyHajjDateDisclaimer } from './hajj-date-disclaimer'
 import { companionConfirmedInHistory, travelDateConfirmedInHistory } from './lead-fact-guards'
 import { detectOnlinePayment, detectFarFromBranch, detectVisitConfirm } from './booking-stage-detectors'
 import { getGovFromText, branchMessage } from './branch-lookup'
-import { containsFirstMessageQuestion, detectUmrahMonth, detectUmrahLevel, detectFullDetailsIntent, detectContinueResponse, detectHajjOverviewIntent, detectHajjCategoryReply, detectNumberReply, detectUmrahOverviewIntent } from './intent-detectors'
+import { containsFirstMessageQuestion, detectUmrahMonth, detectUmrahLevel, detectFullDetailsIntent, detectContinueResponse, detectHajjOverviewIntent, detectHajjCategoryReply, detectNumberReply, detectUmrahOverviewIntent, detectCTAMessage, detectDurationDays, detectPriceIntent } from './intent-detectors'
 
 import { detectFollowUpIntent, clampToWindow, DEFERRAL_PHRASES } from './follow-up-scheduler'
 import { handleAICreditsExhausted, writeCostRecord } from './ai-cost-helpers'
@@ -313,6 +313,13 @@ export class WhatsAppService {
       return clarify
     }
 
+    // ── CTA handler: Meta CTA button tap or ad-referral click (first message only) ─
+    if (totalMsgCount === 1 && prebuiltCatalog?.ctaReply && detectCTAMessage(text, source, referralData as any)) {
+      await persistReply(conv.id, prebuiltCatalog.ctaReply)
+      console.log(`CTA_HANDLER → ${phone} source=${source}`)
+      return prebuiltCatalog.ctaReply
+    }
+
     // ── Code-driven full-details mode: chunked hajj program delivery ────────────
     // The AI truncates when asked to show all 9 programs at once. This path bypasses
     // the AI entirely and delivers exactly 3 programs per message, code-built.
@@ -453,6 +460,25 @@ export class WhatsAppService {
       }
     }
 
+    // ── Duration handler: customer specifies trip length in days (any message count) ─
+    if (prebuiltCatalog) {
+      const durationDays = detectDurationDays(text)
+      if (durationDays !== null) {
+        if (prebuiltCatalog.umrahDurationMessages[durationDays]) {
+          const msg = prebuiltCatalog.umrahDurationMessages[durationDays]
+          overviewMap.set(conv.id, { orderedDetails: prebuiltCatalog.umrahDurationDetails[durationDays] })
+          await persistReply(conv.id, 'اتفضل يافندم')
+          await persistReply(conv.id, msg)
+          console.log(`DURATION_BYPASS → ${phone} days=${durationDays}`)
+          return ['اتفضل يافندم', msg]
+        } else if (prebuiltCatalog.durationPivotMsg) {
+          await persistReply(conv.id, prebuiltCatalog.durationPivotMsg)
+          console.log(`DURATION_NOT_FOUND → ${phone} days=${durationDays} → pivot`)
+          return prebuiltCatalog.durationPivotMsg
+        }
+      }
+    }
+
     // First-message overview bypass: zero AI calls — intro from code, prebuilt message appended
     if (totalMsgCount === 1 && containsFirstMessageQuestion(text) && prebuiltCatalog) {
       const firstMsgUmrahMonth  = detectUmrahMonth(text)
@@ -514,6 +540,15 @@ export class WhatsAppService {
 
         return parts.length === 1 ? parts[0] : parts
       }
+    }
+
+    // ── Price-pivot handler: price intent without duration or month — pivot to duration question ─
+    if (prebuiltCatalog?.durationPivotMsg && detectPriceIntent(text)
+        && detectDurationDays(text) === null && detectUmrahMonth(text) === null
+        && detectHajjOverviewIntent(text) === null) {
+      await persistReply(conv.id, prebuiltCatalog.durationPivotMsg)
+      console.log(`PRICE_PIVOT → ${phone}`)
+      return prebuiltCatalog.durationPivotMsg
     }
 
     let rawAIReply = AI_ERROR_REPLY

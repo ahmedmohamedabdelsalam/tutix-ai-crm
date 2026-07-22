@@ -763,6 +763,125 @@ const HAJJ_FAQ_STATIC = `## القسم ٣د — أسئلة شائعة واعتر
 س: شفت برنامج اقتصادي تحسين عند حد تاني أرخص بـ ٣٠٬٠٠٠ جنيه ليه؟
 ج: برامجنا ليها مواصفات ومميزات محددة وضحناها. عشان نقارن صح يفضل تبعتلنا تفاصيل البرنامج التاني عشان نراجعه ونقارن المميزات ونرد عليك بشكل وافٍ — مش كل البرامج بتحمل نفس المواصفات يافندم.`
 
+// ── Batch-1 handler builders ─────────────────────────────────────────────────
+
+// Default CTA template — used when CompanyAIConfig.templates.ctaTemplate is not seeded yet.
+const DEFAULT_CTA_TEMPLATE =
+  'السلام عليكم ورحمة الله وبركاته 🤍\n' +
+  'أهلاً بحضرتك في {{COMPANY_NAME}}\n\n' +
+  'ممكن أعرف حضرتك مهتم بالاستفسار عن:\n' +
+  '١• برامج العمرة — متاح {{AVAILABLE_MONTHS}}\n' +
+  '٢• برامج الحج {{HIJRI_YEAR}}هـ\n' +
+  'أم حجز تذاكر طيران؟'
+
+const CTA_MONTH_ORDER = ['يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر']
+const CTA_MONTH_NUM: Record<string, number> = { 'يوليو': 7, 'أغسطس': 8, 'سبتمبر': 9, 'أكتوبر': 10, 'نوفمبر': 11 }
+
+export function buildCTAReply(
+  template: string,
+  companyName: string,
+  rawPrograms: any[],
+  hijriYear: string,
+): string {
+  const monthSet = new Set<number>()
+  for (const p of rawPrograms) {
+    const dep: string = p.departureDate ?? ''
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dep)) monthSet.add(parseInt(dep.slice(5, 7), 10))
+  }
+  const months = CTA_MONTH_ORDER.filter(m => monthSet.has(CTA_MONTH_NUM[m]))
+  return template
+    .replace(/\{\{COMPANY_NAME\}\}/g, companyName)
+    .replace(/\{\{AVAILABLE_MONTHS\}\}/g, months.join(' / '))
+    .replace(/\{\{HIJRI_YEAR\}\}/g, hijriYear)
+}
+
+// Returns sorted list of distinct trip durations (in days) from the catalog.
+export function getAvailableUmrahDurations(rawPrograms: any[]): number[] {
+  const seen = new Set<number>()
+  for (const p of rawPrograms) {
+    const dep: string = p.departureDate ?? ''
+    const ret: string = p.returnDate ?? ''
+    if (!dep || !ret || !/^\d{4}-\d{2}-\d{2}$/.test(dep)) continue
+    const days = Math.round(
+      (new Date(ret + 'T00:00:00Z').getTime() - new Date(dep + 'T00:00:00Z').getTime()) / 86400000
+    ) + 1
+    if (days > 0) seen.add(days)
+  }
+  return [...seen].sort((a, b) => a - b)
+}
+
+export function buildDurationPivotMsg(durations: number[]): string {
+  const durWord = (n: number) => (n >= 3 && n <= 10 ? 'أيام' : 'يوم')
+  const dStr = durations.map(d => `${toArabicIndic(d)} ${durWord(d)}`).join(' / ')
+  return `متاح يافندم برامج ${dStr} — أنهي مدة مناسبة مع حضرتك؟ 🤍`
+}
+
+// Filters catalog programs by trip duration and renders a numbered overview + per-trip details.
+// Same card renderer as buildUmrahMonthMessage — just filtered by days instead of month.
+export function buildUmrahDurationMessage(
+  durationDays: number,
+  rawPrograms: any[],
+): { message: string; orderedDetails: string[] } {
+  const groups = new Map<string, any[]>()
+  for (const p of rawPrograms) {
+    const dep: string = p.departureDate ?? ''
+    const ret: string = p.returnDate ?? ''
+    if (!dep || !ret || !/^\d{4}-\d{2}-\d{2}$/.test(dep)) continue
+    const days = Math.round(
+      (new Date(ret + 'T00:00:00Z').getTime() - new Date(dep + 'T00:00:00Z').getTime()) / 86400000
+    ) + 1
+    if (days !== durationDays) continue
+    const key = `${dep}|${ret}`
+    if (!groups.has(key)) groups.set(key, [])
+    groups.get(key)!.push(p)
+  }
+
+  type TripRow = {
+    depISO: string; retISO: string; duration: number
+    meccaHotel: string; medinaHotel: string; minQuad: number
+    levels: string[]; progs: any[]
+  }
+  const trips: TripRow[] = []
+  for (const [key, progs] of groups) {
+    const [depISO, retISO] = key.split('|')
+    const quadPrices = progs.map((p: any) => p.quadPrice ?? p.priceQuad ?? 0).filter((x: number) => x > 0)
+    if (quadPrices.length === 0) continue
+    const minQuad = Math.min(...quadPrices)
+    const minProg = progs.find((p: any) => (p.quadPrice ?? p.priceQuad ?? 0) === minQuad) ?? progs[0]
+    trips.push({
+      depISO, retISO, duration: durationDays,
+      meccaHotel:  minProg.makkahHotel  ?? minProg.meccaHotel  ?? '',
+      medinaHotel: minProg.madinahHotel ?? minProg.medinaHotel ?? '',
+      minQuad, levels: umrahTripLevels(progs), progs,
+    })
+  }
+  trips.sort((a, b) => a.depISO.localeCompare(b.depISO))
+  if (trips.length === 0) return { message: '', orderedDetails: [] }
+
+  const orderedDetails = trips.map(t => renderUmrahTripDetail(t.depISO, t.retISO, t.duration, t.progs))
+
+  const durWord = durationDays >= 3 && durationDays <= 10 ? 'أيام' : 'يوم'
+  const title = `*رحلات عمرة ${toArabicIndic(durationDays)} ${durWord}*`
+  const parts: string[] = [title]
+  trips.forEach((t, i) => {
+    let levelPrices: Record<string, number> | undefined
+    if (t.levels.length > 1) {
+      levelPrices = {}
+      for (const lvl of t.levels) {
+        const lvlPrices = t.progs
+          .filter((p: any) => umrahProgramLevel(p) === lvl)
+          .map((p: any) => p.quadPrice ?? p.priceQuad ?? 0)
+          .filter((x: number) => x > 0)
+        if (lvlPrices.length > 0) levelPrices[lvl] = Math.min(...lvlPrices)
+      }
+    }
+    parts.push(renderUmrahTripCard(i + 1, t.depISO, t.retISO, t.duration, t.meccaHotel, t.medinaHotel, t.levels, t.minQuad, levelPrices))
+  })
+  parts.push('ابعت رقم الرحلة اللي تناسبك وهبعتلك مستوياتها وأسعارها كاملة 🤍')
+
+  return { message: parts.join('\n\n'), orderedDetails }
+}
+
 // ── Main export ───────────────────────────────────────────────────────────────
 
 export interface IndustryPromptParts {
@@ -784,6 +903,13 @@ export interface IndustryPromptParts {
   umrahMonthLevelMessages: Record<string, Record<string, string>>
   umrahAllMonthsMessage: string
   umrahAllMonthsDetails: string[]
+  // Batch-1 handlers
+  ctaReply: string
+  installmentReply: string
+  umrahDurationMessages: Record<number, string>
+  umrahDurationDetails: Record<number, string[]>
+  availableDurations: number[]
+  durationPivotMsg: string
 }
 
 export function buildIndustryPromptFromDB(
@@ -854,6 +980,23 @@ export function buildIndustryPromptFromDB(
   const { message: umrahAllMonthsMessage, orderedDetails: umrahAllMonthsDetails } =
     buildUmrahAllMonthsOverview(cat.umrahPrograms as any[])
 
+  // ── Batch-1 handler fields ──────────────────────────────────────────────────
+  const tpls = (config.templates ?? {}) as Record<string, string>
+  const hijriYear = '١٤٤٨'
+  const ctaTemplate = tpls['ctaTemplate'] ?? DEFAULT_CTA_TEMPLATE
+  const ctaReply = buildCTAReply(ctaTemplate, companyName, cat.umrahPrograms as any[], hijriYear)
+  const installmentReply = tpls['installmentPolicy'] ?? ''
+
+  const availableDurations = getAvailableUmrahDurations(cat.umrahPrograms as any[])
+  const durationPivotMsg = buildDurationPivotMsg(availableDurations)
+
+  const umrahDurationMessages: Record<number, string> = {}
+  const umrahDurationDetails: Record<number, string[]> = {}
+  for (const d of availableDurations) {
+    const { message, orderedDetails } = buildUmrahDurationMessage(d, cat.umrahPrograms as any[])
+    if (message) { umrahDurationMessages[d] = message; umrahDurationDetails[d] = orderedDetails }
+  }
+
   return {
     identity, catalog, hotels, hotelList, monthOverviews: monthOverview,
     hajjProgramDetails, hajjOverviewMessage, hajjOverviewDetails,
@@ -861,6 +1004,8 @@ export function buildIndustryPromptFromDB(
     hajjFiveStarPrograms, hajjFiveStarDetails,
     umrahMonthMessages, umrahMonthDetails, umrahMonthLevelMessages,
     umrahAllMonthsMessage, umrahAllMonthsDetails,
+    ctaReply, installmentReply,
+    umrahDurationMessages, umrahDurationDetails, availableDurations, durationPivotMsg,
   }
 }
 

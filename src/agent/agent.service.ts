@@ -23,6 +23,13 @@ export interface PrebuiltCatalog {
   umrahMonthLevelMessages: Record<string, Record<string, string>>
   umrahAllMonthsMessage: string
   umrahAllMonthsDetails: string[]
+  // Batch-1 handlers
+  ctaReply: string
+  installmentReply: string
+  umrahDurationMessages: Record<number, string>
+  umrahDurationDetails: Record<number, string[]>
+  availableDurations: number[]
+  durationPivotMsg: string
 }
 
 // Lazy init — created on first use, after NestJS has loaded env vars
