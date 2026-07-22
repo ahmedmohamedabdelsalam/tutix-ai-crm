@@ -334,8 +334,8 @@ export class WhatsAppController {
     try {
       if (!body.convId)    return { error: 'convId required' }
       if (!body.companyId) return { error: 'companyId required' }
-      const { reply, phone, waToken, waPhoneId } = await this.whatsapp.triggerAIReply(body.convId, body.companyId)
-      if (!reply) return { success: false, error: 'no reply generated' }
+      const { reply, phone, waToken, waPhoneId, error } = await this.whatsapp.triggerAIReply(body.convId, body.companyId)
+      if (!reply) return { success: false, error: error ?? 'no reply generated' }
 
       if (waToken && waPhoneId) {
         await sendWhatsAppMessage(waPhoneId, waToken, phone, reply)

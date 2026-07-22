@@ -198,157 +198,8 @@ export class WhatsAppService {
         data: { updatedAt: new Date() },
       })
 
-      // NEEDS_HUMAN = still waiting for a human agent → AI responds normally
-      // (per system prompt: "لو حصل تحويل وبعدين العميل بعت رسالة تانية — جاوبه عادي")
-      if (conv.status === ConvStatus.NEEDS_HUMAN) {
-        // Company-wide AI kill switch — suppress all automated replies while AI is off
-        if (!aiActive) {
-          console.log(`AI_KILL_SWITCH OFF (NEEDS_HUMAN) — ${phone} message saved`)
-          return ''
-        }
-        // ── Booking flow stage handlers ───────────────────────────────────────
-        if (conv.bookingStage === 'AWAITING_GOVERNORATE') {
-          const gov = getGovFromText(text)
-          if (gov) {
-            if (conv.leadId && !lockedByManual.has('governorate')) await this.prisma.lead.update({ where: { id: conv.leadId }, data: { governorate: gov } })
-            const bMsg = `شكراً يافندم! بناءً على موقعك في ${gov} — أقرب فرع ليك هو:\n${branchMessage(gov)}\n\nهتيجي للفرع لإتمام الحجز؟`
-            await this.prisma.conversation.update({ where: { id: conv.id }, data: { bookingStage: 'AWAITING_BRANCH_CONFIRM' } })
-            await saveAssistantMessage(this.prisma, conv.id, bMsg)
-            console.log(`BOOKING_GOV_RESOLVED → ${phone} gov=${gov}`)
-            return bMsg
-          }
-          const ovMonthEsc      = detectUmrahMonth(text)
-          const umrahLevelEsc   = detectUmrahLevel(text)
-          const hajjOvIntentEsc = detectHajjOverviewIntent(text)
-          const isUmrahOvEsc    = ovMonthEsc !== null
-          const isUmrahAllOvEsc = !ovMonthEsc && detectUmrahOverviewIntent(text)
-          const isTopicChange   = hajjOvIntentEsc !== null || isUmrahOvEsc || isUmrahAllOvEsc
-
-          if (isTopicChange) {
-            await this.prisma.conversation.update({ where: { id: conv.id }, data: { bookingStage: 'NONE' } })
-            fullDetailsMap.delete(conv.id)
-            const prebuiltCatalogEsc = await getPrebuiltCatalog(this.prisma, companyId, company.name)
-            if (prebuiltCatalogEsc) {
-              if (hajjOvIntentEsc !== null) {
-                if (hajjOvIntentEsc === 'GENERIC' && prebuiltCatalogEsc.hajjCategoryQuestion) {
-                  categoryQuestionMap.set(conv.id, true)
-                  await saveAssistantMessage(this.prisma, conv.id, prebuiltCatalogEsc.hajjCategoryQuestion)
-                  console.log(`BOOKING_ESC HAJJ_CAT_Q → ${phone}`)
-                  return prebuiltCatalogEsc.hajjCategoryQuestion
-                }
-                const catMsgEsc     = hajjOvIntentEsc === 'ECONOMY' ? prebuiltCatalogEsc.hajjEconomyPrograms : prebuiltCatalogEsc.hajjFiveStarPrograms
-                const catDetailsEsc = hajjOvIntentEsc === 'ECONOMY' ? prebuiltCatalogEsc.hajjEconomyDetails  : prebuiltCatalogEsc.hajjFiveStarDetails
-                if (catMsgEsc) {
-                  overviewMap.set(conv.id, { orderedDetails: catDetailsEsc })
-                  await saveAssistantMessage(this.prisma, conv.id, catMsgEsc)
-                  console.log(`BOOKING_ESC HAJJ_OV → ${phone} cat=${hajjOvIntentEsc} programs=${catDetailsEsc.length}`)
-                  return catMsgEsc
-                }
-              }
-              if (isUmrahOvEsc && ovMonthEsc && prebuiltCatalogEsc.umrahMonthMessages?.[ovMonthEsc]) {
-                const firstName = knownCustomerName?.split(/\s+/)[0]
-                const intro = firstName ? `تمام يا أستاذ ${firstName} اتفضل` : `اتفضل يافندم`
-                await saveAssistantMessage(this.prisma, conv.id, intro)
-                overviewMap.set(conv.id, { orderedDetails: prebuiltCatalogEsc.umrahMonthDetails[ovMonthEsc] })
-                const filteredMsgEsc = umrahLevelEsc ? prebuiltCatalogEsc.umrahMonthLevelMessages?.[ovMonthEsc]?.[umrahLevelEsc] : undefined
-                if (umrahLevelEsc && !filteredMsgEsc) {
-                  const fallback = `مش عندنا برامج ${umrahLevelEsc} في ${ovMonthEsc} — اتفضل كل برامج الشهر:`
-                  const fullMsg = prebuiltCatalogEsc.umrahMonthMessages[ovMonthEsc]
-                  await saveAssistantMessage(this.prisma, conv.id, fallback)
-                  await saveAssistantMessage(this.prisma, conv.id, fullMsg)
-                  console.log(`BOOKING_ESC UMRAH_OV_NO_LEVEL → ${phone} month=${ovMonthEsc} level=${umrahLevelEsc}`)
-                  return [intro, fallback, fullMsg]
-                }
-                const ovMsg = filteredMsgEsc ?? prebuiltCatalogEsc.umrahMonthMessages[ovMonthEsc]
-                await saveAssistantMessage(this.prisma, conv.id, ovMsg)
-                console.log(`BOOKING_ESC UMRAH_OV → ${phone} month=${ovMonthEsc}${umrahLevelEsc ? ` level=${umrahLevelEsc}` : ''}`)
-                return [intro, ovMsg]
-              }
-              if (isUmrahAllOvEsc && prebuiltCatalogEsc.umrahAllMonthsMessage) {
-                const firstName = knownCustomerName?.split(/\s+/)[0]
-                const intro = firstName ? `تمام يا أستاذ ${firstName} اتفضل` : `اتفضل يافندم`
-                await saveAssistantMessage(this.prisma, conv.id, intro)
-                const ovMsg = prebuiltCatalogEsc.umrahAllMonthsMessage
-                overviewMap.set(conv.id, { orderedDetails: prebuiltCatalogEsc.umrahAllMonthsDetails })
-                await saveAssistantMessage(this.prisma, conv.id, ovMsg)
-                console.log(`BOOKING_ESC UMRAH_ALL_OV → ${phone}`)
-                return [intro, ovMsg]
-              }
-            }
-            // prebuiltCatalog unavailable or no bypass path matched → fall through to AI pipeline
-          } else {
-            const askAgain = 'معلش يافندم، مفهمتش — حضرتك من أنهي محافظة بالضبط؟'
-            const recentAsk = await this.prisma.message.findFirst({
-              where: { conversationId: conv.id, role: 'ASSISTANT', content: askAgain, createdAt: { gte: new Date(Date.now() - 10000) } },
-            })
-            if (!recentAsk) await saveAssistantMessage(this.prisma, conv.id, askAgain)
-            return askAgain
-          }
-        }
-
-        if (conv.bookingStage === 'AWAITING_BRANCH_CONFIRM') {
-          if (detectOnlinePayment(text)) {
-            const r = 'تمام يافندم، هنترتبلك مع زميلنا المختص بخصوص طريقة الدفع الأونلاين وسيتواصل معك قريباً إن شاء الله'
-            await completeBookingAlert(this.prisma, conv.id, companyId, phone, 'wants_online_payment', r)
-            return r
-          }
-          if (detectFarFromBranch(text)) {
-            const r = 'تمام يافندم، هنترتبلك أنسب حاجة مع زميلنا المختص وسيتواصل معك قريباً إن شاء الله'
-            await completeBookingAlert(this.prisma, conv.id, companyId, phone, 'far_from_branch', r)
-            return r
-          }
-          if (detectVisitConfirm(text)) {
-            const r = 'ممتاز يافندم! فريقنا هيكون في انتظارك بالفرع إن شاء الله، وأي استفسار أنا هنا'
-            await completeBookingAlert(this.prisma, conv.id, companyId, phone, 'wants_branch_visit', r)
-            return r
-          }
-          const clarify = 'معلش يافندم، هتيجي للفرع؟ أم تفضل يتواصل معك أحد زملائنا؟'
-          await saveAssistantMessage(this.prisma, conv.id, clarify)
-          return clarify
-        }
-
-        // Repeat booking keyword after handoff already sent → short ack, no AI call
-        if (conv.handoffMessageSent && BOOKING_KEYWORDS.some(kw => text.includes(kw))) {
-          const repeatAck = 'تمام يافندم زميلنا هيتواصل معك في أقرب وقت إن شاء الله'
-          await saveAssistantMessage(this.prisma, conv.id, repeatAck)
-          console.log(`REPEAT_BOOKING_ACK → ${phone}`)
-          return repeatAck
-        }
-
-        const freshMsgs = await this.prisma.message.findMany({
-          where: { conversationId: conv.id },
-          orderBy: { createdAt: 'desc' },
-          take: 10,
-        })
-        const historyNH = freshMsgs.reverse().map(m => ({
-          role: m.role === 'USER' ? 'user' : 'assistant',
-          content: m.content,
-        }))
-        const packagesNH = company.packages ?? ''
-        const baseAiPromptNH = company.aiPrompt ?? ''
-        const aiPromptNH = baseAiPromptNH
-          ? `${baseAiPromptNH}\n\n${POST_HANDOFF_NEGOTIATION_INSTR}`
-          : POST_HANDOFF_NEGOTIATION_INSTR
-        // Suppress phone in CTA once handoff message already sent — prevents repeat
-        const waPhoneNH  = conv.handoffMessageSent ? '' : (company.phone ?? company.ownerPhone ?? '')
-        const faqsNH = await getCompanyFAQ(this.prisma, companyId)
-        const prebuiltCatalogNH = await getPrebuiltCatalog(this.prisma, companyId, company.name)
-        let rawNHReply = AI_ERROR_REPLY
-        try {
-          const r = await getAgentReply(historyNH, company.name, packagesNH, aiPromptNH, waPhoneNH, company.industry, undefined, knownCustomerName, faqsNH, knownLeadFacts, prebuiltCatalogNH)
-          rawNHReply = r.reply
-          writeCostRecord(this.prisma, companyId, conv.id, r.costUSD)
-        } catch (err) {
-          if (err instanceof ApiCreditsExhaustedError) await handleAICreditsExhausted(this.prisma, companyId)
-        }
-        const replyNH = applyHajjDateDisclaimer(rawNHReply)
-        await saveAssistantMessage(this.prisma, conv.id, replyNH)
-        console.log(`POST-HANDOFF AI — ${phone}`)
-        return replyNH
-      }
-
-      // Any other status (CLOSED, etc.) = human agent has fully taken over → silence
-      console.log(`HUMAN MODE (${conv.status}) — message saved for ${phone}`)
+      // agentMode=HUMAN: unconditional silence — message saved for sales inbox, no automated reply.
+      console.log(`HUMAN_MODE (${conv.status}) — ${phone} message saved, no reply`)
       return ''
     }
 
@@ -872,12 +723,12 @@ export class WhatsAppService {
   // Generates one AI reply for an existing conversation without creating a duplicate
   // USER message — used by the dashboard "take over with AI reply" flow.
   async triggerAIReply(convId: string, expectedCompanyId: string): Promise<{
-    reply: string; phone: string; waToken: string | null; waPhoneId: string | null
+    reply: string; phone: string; waToken: string | null; waPhoneId: string | null; error?: string
   }> {
     const empty = { reply: '', phone: '', waToken: null, waPhoneId: null }
     const conv = await this.prisma.conversation.findUnique({
       where: { id: convId },
-      select: { id: true, phone: true, companyId: true, leadId: true },
+      select: { id: true, phone: true, companyId: true, leadId: true, agentMode: true },
     })
     if (!conv) return empty
     if (conv.companyId !== expectedCompanyId) {
@@ -890,7 +741,12 @@ export class WhatsAppService {
 
     if (!await isAIConfigActive(this.prisma, conv.companyId)) {
       console.log(`AI_KILL_SWITCH OFF (TRIGGER) — conv=${convId}`)
-      return { ...empty, phone: conv.phone }
+      return { ...empty, phone: conv.phone, error: 'الإيجنت متوقف حالياً' }
+    }
+
+    if (conv.agentMode === 'HUMAN') {
+      console.log(`TRIGGER_AI_REPLY BLOCKED (HUMAN_MODE) — conv=${convId}`)
+      return { ...empty, phone: conv.phone, error: 'الإيجنت متوقف حالياً' }
     }
 
     const freshMessages = await this.prisma.message.findMany({

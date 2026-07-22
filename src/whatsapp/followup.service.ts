@@ -5,6 +5,7 @@ import { FollowUpStatus, ConvStatus, MessageRole } from '@prisma/client'
 import { clampToWindow } from './follow-up-scheduler'
 import { CAIRO_OFFSET_MS } from '../utils/arabic-numerals'
 import { sendWhatsAppMessage } from './send-message'
+import { isAIConfigActive } from './ai-config-cache'
 
 function categorizeDropOff(lastMsg: string, totalMsgCount: number): string {
   if (/غالي|تخفيض|خصم|أرخص/.test(lastMsg)) return 'بعد التعامل مع اعتراض'
@@ -52,11 +53,19 @@ export class FollowUpService {
         continue
       }
 
+      // Gate: no automated follow-ups when AI kill switch is OFF for this company
+      const aiActive = await isAIConfigActive(this.prisma, company.id)
+      if (!aiActive) {
+        this.logger.log(`Follow-up: skipping ${company.name} — AI kill switch OFF`)
+        continue
+      }
+
       const due = await this.prisma.conversation.findMany({
         where: {
           companyId: company.id,
           followUpStatus: FollowUpStatus.SCHEDULED,
           followUpScheduledAt: { lte: now },
+          agentMode: 'AI', // Never send automated follow-ups to HUMAN-mode conversations
         },
         include: {
           lead: { select: { name: true } },
