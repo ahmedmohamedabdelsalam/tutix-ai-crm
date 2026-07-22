@@ -16,6 +16,7 @@ import { saveAssistantMessage, completeBookingAlert } from './message-persistenc
 import { getCompanyFAQ } from './faq-cache'
 import { incrementAIFailure, resetAIFailure } from './ai-failure-tracker'
 import { getPrebuiltCatalog } from './catalog-loader'
+import { isAIConfigActive } from './ai-config-cache'
 import { fullDetailsMap, overviewMap, categoryQuestionMap } from './conversation-state'
 import { HAJJ_OV_DISCLAIMER } from '../agent/prompts/dynamic-catalog-builder'
 
@@ -47,6 +48,10 @@ export class WhatsAppService {
   async handleMessage(companyId: string, phone: string, text: string, source = 'direct', referralData?: object | null): Promise<string | string[]> {
     const company = await this.prisma.company.findUnique({ where: { id: companyId } })
     if (!company || !company.isActive) return ''
+
+    // Company-wide AI kill switch (CompanyAIConfig.isActive). Cached 60s.
+    // Checked AFTER this point so message persistence always runs first.
+    const aiActive = await isAIConfigActive(this.prisma, companyId)
 
     const msgInclude = { messages: { orderBy: { createdAt: 'asc' as const } } }
 
@@ -113,7 +118,7 @@ export class WhatsAppService {
             phone,
             leadId: lead.id,
             status: ConvStatus.AI_HANDLING,
-            agentMode: 'HUMAN', // AI paused — sales handles manually; restore to: hasWonLead ? 'HUMAN' : 'AI'
+            agentMode: (!aiActive || hasWonLead) ? 'HUMAN' : 'AI',
           },
           include: msgInclude,
         })
@@ -122,17 +127,25 @@ export class WhatsAppService {
           await this.prisma.message.create({
             data: { conversationId: conv.id, role: 'USER', content: text },
           })
-          const welcomeBack = 'أهلاً بعودتك يافندم نورتنا تاني سيتواصل معك أحد متخصصينا قريباً إن شاء الله'
-          await saveAssistantMessage(this.prisma, conv.id, welcomeBack)
+          if (aiActive) {
+            const welcomeBack = 'أهلاً بعودتك يافندم نورتنا تاني سيتواصل معك أحد متخصصينا قريباً إن شاء الله'
+            await saveAssistantMessage(this.prisma, conv.id, welcomeBack)
+            await this.prisma.conversation.update({
+              where: { id: conv.id },
+              data: {
+                status: ConvStatus.NEEDS_HUMAN,
+                agentNotes: 'عميل عائد - تسليم فوري للمبيعات',
+              },
+            })
+            console.log(`RETURNING CUSTOMER → ${phone}`)
+            return welcomeBack
+          }
           await this.prisma.conversation.update({
             where: { id: conv.id },
-            data: {
-              status: ConvStatus.NEEDS_HUMAN,
-              agentNotes: 'عميل عائد - تسليم فوري للمبيعات',
-            },
+            data: { status: ConvStatus.NEEDS_HUMAN, agentNotes: 'عميل عائد - تسليم فوري للمبيعات', updatedAt: new Date() },
           })
-          console.log(`RETURNING CUSTOMER → ${phone}`)
-          return welcomeBack
+          console.log(`RETURNING CUSTOMER (AI OFF) → ${phone}`)
+          return ''
         }
       } catch (err) {
         console.error(`DB_ERROR lead/conversation create phone=${phone} companyId=${companyId}`, err)
@@ -188,6 +201,11 @@ export class WhatsAppService {
       // NEEDS_HUMAN = still waiting for a human agent → AI responds normally
       // (per system prompt: "لو حصل تحويل وبعدين العميل بعت رسالة تانية — جاوبه عادي")
       if (conv.status === ConvStatus.NEEDS_HUMAN) {
+        // Company-wide AI kill switch — suppress all automated replies while AI is off
+        if (!aiActive) {
+          console.log(`AI_KILL_SWITCH OFF (NEEDS_HUMAN) — ${phone} message saved`)
+          return ''
+        }
         // ── Booking flow stage handlers ───────────────────────────────────────
         if (conv.bookingStage === 'AWAITING_GOVERNORATE') {
           const gov = getGovFromText(text)
@@ -350,6 +368,16 @@ export class WhatsAppService {
     await this.prisma.message.create({
       data: { conversationId: conv.id, role: 'USER', content: text },
     })
+
+    // Company-wide AI kill switch: message saved for inbox, no automated reply
+    if (!aiActive) {
+      await this.prisma.conversation.update({
+        where: { id: conv.id },
+        data: { updatedAt: new Date() },
+      })
+      console.log(`AI_KILL_SWITCH OFF — ${phone} message saved, no AI reply`)
+      return ''
+    }
 
     // Count total messages for extract-frequency tracking (history.length would be capped at 10
     // after the limit below, causing % 5 to fire on every message once conv exceeds 10 msgs).
@@ -859,6 +887,11 @@ export class WhatsAppService {
 
     const company = await this.prisma.company.findUnique({ where: { id: conv.companyId } })
     if (!company || !company.isActive) return { ...empty, phone: conv.phone }
+
+    if (!await isAIConfigActive(this.prisma, conv.companyId)) {
+      console.log(`AI_KILL_SWITCH OFF (TRIGGER) — conv=${convId}`)
+      return { ...empty, phone: conv.phone }
+    }
 
     const freshMessages = await this.prisma.message.findMany({
       where: { conversationId: convId },

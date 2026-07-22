@@ -153,7 +153,7 @@ export class WhatsAppController {
             },
           })
           const newConv = await this.prisma.conversation.create({
-            data: { companyId: company.id, phone: message.from, leadId: lead.id, status: ConvStatus.AI_HANDLING },
+            data: { companyId: company.id, phone: message.from, leadId: lead.id, status: ConvStatus.AI_HANDLING, agentMode: 'HUMAN' },
           })
           convId = newConv.id
         }
@@ -317,7 +317,7 @@ export class WhatsAppController {
     if (!convId) {
       const lead = await this.prisma.lead.create({ data: { companyId, phone, source: 'whatsapp' } })
       const newConv = await this.prisma.conversation.create({
-        data: { companyId, phone, leadId: lead.id, status: ConvStatus.AI_HANDLING },
+        data: { companyId, phone, leadId: lead.id, status: ConvStatus.AI_HANDLING, agentMode: 'HUMAN' },
       })
       convId = newConv.id
     }
