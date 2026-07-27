@@ -40,6 +40,8 @@ model Company {
   specialtyWeights  UserSpecialtyWeight[]
   activityLogs      ActivityLog[]
   savedReplies      SavedReply[]
+  offeringTypes     OfferingType[]
+  offerings         Offering[]
 }
 
 model CompanyAIConfig {
@@ -518,4 +520,38 @@ model SavedReply {
   company   Company  @relation(fields: [companyId], references: [id])
 
   @@index([companyId, userId])
+}
+
+model OfferingType {
+  id          String     @id @default(cuid())
+  companyId   String
+  name        String
+  icon        String?
+  sortOrder   Int        @default(0)
+  fieldDefs   Json
+  isActive    Boolean    @default(true)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  company     Company    @relation(fields: [companyId], references: [id])
+  offerings   Offering[]
+
+  @@unique([companyId, name])
+  @@index([companyId])
+}
+
+model Offering {
+  id             String       @id @default(cuid())
+  companyId      String
+  offeringTypeId String
+  values         Json
+  isActive       Boolean      @default(true)
+  sortOrder      Int          @default(0)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  company        Company      @relation(fields: [companyId], references: [id])
+  offeringType   OfferingType @relation(fields: [offeringTypeId], references: [id])
+
+  @@index([companyId])
+  @@index([offeringTypeId])
+  @@index([companyId, offeringTypeId])
 }
