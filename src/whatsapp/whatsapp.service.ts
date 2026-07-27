@@ -62,7 +62,7 @@ export class WhatsAppService {
     // Checked AFTER this point so message persistence always runs first.
     const aiActive = await isAIConfigActive(this.prisma, companyId)
 
-    const msgInclude = { messages: { orderBy: { createdAt: 'asc' as const } } }
+    const msgInclude = { messages: { orderBy: { createdAt: 'asc' as const }, take: -30 } }
 
     // Find any open (non-closed) conversation for this phone
     let conv
