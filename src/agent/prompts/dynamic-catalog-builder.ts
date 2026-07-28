@@ -14,6 +14,61 @@ import { toArabicIndic, formatPrice } from '../../utils/arabic-numerals'
 import { UmrahProgram, ProgramType, buildUmrahCatalogTableFromData } from './umrah-packages-2026'
 import { HotelEntry, buildHotelKnowledgeFromData, findHotelInMessageFromData } from './hajj-umrah-hotels'
 
+// ── Offerings bridge — semantic role → raw field value ────────────────────────
+
+export interface FieldDef {
+  key: string
+  label: string
+  role: string | null
+  inputType: string
+  required: boolean
+  showInList: boolean
+}
+
+/** Returns the value for the first field whose role matches, or null. */
+export function extractByRole(
+  values: Record<string, unknown>,
+  fieldDefs: FieldDef[],
+  role: string,
+): unknown {
+  const def = fieldDefs.find(f => f.role === role)
+  if (!def) return null
+  return values[def.key] ?? null
+}
+
+/**
+ * Maps one Offering's values + its type's fieldDefs to the same raw shape as
+ * catalog.umrahPrograms entries.  All downstream builders already accept this
+ * shape — normDbUmrahProgram and the any[] readers both use the field names
+ * produced here (makkahHotel, quadPrice, etc.).
+ */
+export function offeringToRawUmrahProgram(
+  values: Record<string, unknown>,
+  fieldDefs: FieldDef[],
+): Record<string, unknown> {
+  const makkahNights  = (values['makkahNights']  as number) ?? 0
+  const madinahNights = (values['madinahNights'] as number) ?? 0
+  return {
+    id:               values['id']               ?? '',
+    name:             extractByRole(values, fieldDefs, 'title'),
+    departureDate:    extractByRole(values, fieldDefs, 'start-date'),
+    returnDate:       extractByRole(values, fieldDefs, 'end-date'),
+    makkahHotel:      extractByRole(values, fieldDefs, 'location'),
+    madinahHotel:     extractByRole(values, fieldDefs, 'location-2'),
+    quadPrice:        extractByRole(values, fieldDefs, 'price'),
+    triplePrice:      extractByRole(values, fieldDefs, 'price-triple'),
+    doublePrice:      extractByRole(values, fieldDefs, 'price-double'),
+    makkahNights,
+    madinahNights,
+    nights:           makkahNights + madinahNights,
+    makkahBreakfast:  values['makkahBreakfast']  ?? false,
+    madinahBreakfast: values['madinahBreakfast'] ?? false,
+    haramainTrain:    values['haramainTrain']    ?? false,
+    airline:          values['airline']          ?? '',
+    route:            values['route']            ?? '',
+  }
+}
+
 // ── JSON shape definitions (mirrors the migration script + agent data) ────────
 
 interface HajjProgramSection {
@@ -915,9 +970,17 @@ export interface IndustryPromptParts {
 export function buildIndustryPromptFromDB(
   config: CompanyAIConfig,
   companyName: string,
+  offeringsOverride?: Array<{ values: Record<string, unknown>; fieldDefs: FieldDef[] }>,
 ): IndustryPromptParts {
   const cat = config.catalog as unknown as CatalogJson
   const ind = config.industryData as unknown as IndustryDataJson | null
+
+  // Guard: use Offerings table if provided and non-empty; else fall back to catalog.umrahPrograms.
+  // A bad Offerings read (empty array) safely falls through to the old path — no company breaks.
+  const rawUmrahPrograms: any[] =
+    offeringsOverride && offeringsOverride.length > 0
+      ? offeringsOverride.map(o => offeringToRawUmrahProgram(o.values, o.fieldDefs))
+      : (cat.umrahPrograms as any[])
 
   // Identity block
   const identity = ind
@@ -925,13 +988,13 @@ export function buildIndustryPromptFromDB(
     : `## القسم ١ — من أنت\nأنت مستشار حجز عمرة محترف تعمل لصالح "${companyName}"`
 
   // Umrah catalog table — normalise field names from DB schema → UmrahProgram
-  const umrahPrograms = (cat.umrahPrograms as any[]).map(normDbUmrahProgram)
+  const umrahPrograms = rawUmrahPrograms.map(normDbUmrahProgram)
   const umrahCatalog = buildUmrahCatalogTableFromData(
     umrahPrograms,
     cat.hotelBookingLinks ?? {},
   )
 
-  // Hajj catalog rendered from structured JSON
+  // Hajj catalog rendered from structured JSON (unchanged — Hajj still reads catalog.hajjPrograms)
   const hajjCatalog = buildHajjCatalogFromDB(
     cat.hajjPrograms,
     ind?.hajjHijriDates ?? [],
@@ -941,7 +1004,7 @@ export function buildIndustryPromptFromDB(
   const generalKnowledge = HAJJ_GENERAL_KNOWLEDGE_STATIC
   const faq              = HAJJ_FAQ_STATIC
 
-  const monthOverview = buildUmrahMonthOverview(cat.umrahPrograms as any[])
+  const monthOverview = buildUmrahMonthOverview(rawUmrahPrograms)
   const catalog = [umrahCatalog, monthOverview, hajjCatalog, generalKnowledge, faq].filter(Boolean).join('\n\n')
 
   // Hotels section
@@ -962,14 +1025,14 @@ export function buildIndustryPromptFromDB(
   const umrahMonthMessages: Record<string, string> = {}
   const umrahMonthDetails: Record<string, string[]> = {}
   for (const mon of ['يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر']) {
-    const { message, orderedDetails } = buildUmrahMonthMessage(mon, cat.umrahPrograms as any[])
+    const { message, orderedDetails } = buildUmrahMonthMessage(mon, rawUmrahPrograms)
     if (message) { umrahMonthMessages[mon] = message; umrahMonthDetails[mon] = orderedDetails }
   }
 
   const umrahMonthLevelMessages: Record<string, Record<string, string>> = {}
   for (const mon of ['يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر']) {
     for (const lev of UMRAH_LEVEL_ORDER) {
-      const { message } = buildUmrahMonthMessage(mon, cat.umrahPrograms as any[], lev)
+      const { message } = buildUmrahMonthMessage(mon, rawUmrahPrograms, lev)
       if (message) {
         if (!umrahMonthLevelMessages[mon]) umrahMonthLevelMessages[mon] = {}
         umrahMonthLevelMessages[mon][lev] = message
@@ -978,22 +1041,22 @@ export function buildIndustryPromptFromDB(
   }
 
   const { message: umrahAllMonthsMessage, orderedDetails: umrahAllMonthsDetails } =
-    buildUmrahAllMonthsOverview(cat.umrahPrograms as any[])
+    buildUmrahAllMonthsOverview(rawUmrahPrograms)
 
   // ── Batch-1 handler fields ──────────────────────────────────────────────────
   const tpls = (config.templates ?? {}) as Record<string, string>
   const hijriYear = '١٤٤٨'
   const ctaTemplate = tpls['ctaTemplate'] ?? DEFAULT_CTA_TEMPLATE
-  const ctaReply = buildCTAReply(ctaTemplate, companyName, cat.umrahPrograms as any[], hijriYear)
+  const ctaReply = buildCTAReply(ctaTemplate, companyName, rawUmrahPrograms, hijriYear)
   const installmentReply = tpls['installmentPolicy'] ?? ''
 
-  const availableDurations = getAvailableUmrahDurations(cat.umrahPrograms as any[])
+  const availableDurations = getAvailableUmrahDurations(rawUmrahPrograms)
   const durationPivotMsg = buildDurationPivotMsg(availableDurations)
 
   const umrahDurationMessages: Record<number, string> = {}
   const umrahDurationDetails: Record<number, string[]> = {}
   for (const d of availableDurations) {
-    const { message, orderedDetails } = buildUmrahDurationMessage(d, cat.umrahPrograms as any[])
+    const { message, orderedDetails } = buildUmrahDurationMessage(d, rawUmrahPrograms)
     if (message) { umrahDurationMessages[d] = message; umrahDurationDetails[d] = orderedDetails }
   }
 
