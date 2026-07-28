@@ -83,6 +83,10 @@ export function detectInstallmentIntent(text: string): boolean {
   return /تقسيط|أقساط|اقساط|قسط|بالقسط|على\s*أقساط|على\s*اقساط/.test(text)
 }
 
+export function detectHotelDistanceIntent(text: string): boolean {
+  return /المسافة|قريب\s*(?:من)?|بعيد\s*(?:من)?|كام\s*(?:متر|دقيق)|كم\s*(?:متر|دقيق)|مشي\s*(?:كام|كم)|مشياً|من\s*الحرم|من\s*المسجد\b/.test(text)
+}
+
 export function detectUmrahOverviewIntent(text: string): boolean {
   return /عمرة/.test(text) && /برامج|رحلات|أسعار|اسعار|عندكم|عايز|محتاج|قولي/.test(text)
 }

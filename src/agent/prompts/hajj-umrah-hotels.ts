@@ -116,6 +116,17 @@ export function findHotelInMessage(message: string): string | null {
   return findHotelInMessageFromData(message, HOTELS);
 }
 
+// Returns the matched HotelEntry (or null) — used by the hotel-distance handler for direct reply.
+export function lookupHotelEntry(message: string, hotels: HotelEntry[]): HotelEntry | null {
+  const normalized = message.toLowerCase();
+  for (const hotel of hotels) {
+    for (const kw of (hotel.keywords ?? [])) {
+      if (normalized.includes(kw.toLowerCase())) return hotel;
+    }
+  }
+  return null;
+}
+
 export function findHotelInMessageFromData(message: string, hotels: HotelEntry[]): string | null {
   const normalized = message.toLowerCase();
   for (const hotel of hotels) {

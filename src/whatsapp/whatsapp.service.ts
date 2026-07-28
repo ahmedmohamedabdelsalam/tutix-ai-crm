@@ -8,7 +8,7 @@ import { applyHajjDateDisclaimer } from './hajj-date-disclaimer'
 import { companionConfirmedInHistory, travelDateConfirmedInHistory } from './lead-fact-guards'
 import { detectOnlinePayment, detectFarFromBranch, detectVisitConfirm } from './booking-stage-detectors'
 import { getGovFromText, branchMessage } from './branch-lookup'
-import { containsFirstMessageQuestion, detectUmrahMonth, detectUmrahLevel, detectFullDetailsIntent, detectContinueResponse, detectHajjOverviewIntent, detectHajjCategoryReply, detectNumberReply, detectUmrahOverviewIntent, detectCTAMessage, detectDurationDays, detectPriceIntent, detectScheduleIntent, detectFlightIntent, detectInstallmentIntent } from './intent-detectors'
+import { containsFirstMessageQuestion, detectUmrahMonth, detectUmrahLevel, detectFullDetailsIntent, detectContinueResponse, detectHajjOverviewIntent, detectHajjCategoryReply, detectNumberReply, detectUmrahOverviewIntent, detectCTAMessage, detectDurationDays, detectPriceIntent, detectScheduleIntent, detectFlightIntent, detectInstallmentIntent, detectHotelDistanceIntent } from './intent-detectors'
 
 import { detectFollowUpIntent, clampToWindow, DEFERRAL_PHRASES } from './follow-up-scheduler'
 import { handleAICreditsExhausted, writeCostRecord } from './ai-cost-helpers'
@@ -19,6 +19,7 @@ import { getPrebuiltCatalog } from './catalog-loader'
 import { isAIConfigActive } from './ai-config-cache'
 import { fullDetailsMap, overviewMap, categoryQuestionMap } from './conversation-state'
 import { HAJJ_OV_DISCLAIMER, groupUmrahTrips, buildScheduleItinerary, buildFlightReply } from '../agent/prompts/dynamic-catalog-builder'
+import { lookupHotelEntry } from '../agent/prompts/hajj-umrah-hotels'
 import { RawTrip } from './conversation-state'
 
 // Arabic month name → calendar number (used when populating rawTrips on overviewMap)
@@ -600,7 +601,7 @@ export class WhatsAppService {
       if (firstMsgUmrahMonth && !prebuiltCatalog.umrahMonthMessages?.[firstMsgUmrahMonth] && hajjOvIntentFirst === null) {
         const unavailMsg = `برامج ${firstMsgUmrahMonth} لسه بتتجهز — لما تبقى متاحة هنعلمك فوراً إن شاء الله 🤍\nتحب تبعتلنا اسمك ورقم تليفونك عشان نتواصل معك أول ما تتاح البرامج؟`
         if (conv.leadId) {
-          await this.prisma.lead.update({ where: { id: conv.leadId }, data: { travelDate: firstMsgUmrahMonth } })
+          await this.prisma.lead.update({ where: { id: conv.leadId }, data: { notes: `اهتمام: ${firstMsgUmrahMonth}` } })
         }
         await persistReply(conv.id, unavailMsg)
         console.log(`MONTH_UNAVAILABLE_FIRST → ${phone} month=${firstMsgUmrahMonth}`)
@@ -635,6 +636,28 @@ export class WhatsAppService {
       await persistReply(conv.id, prebuiltCatalog.installmentReply)
       console.log(`INSTALLMENT_HANDLER → ${phone}`)
       return prebuiltCatalog.installmentReply
+    }
+
+    // ── Hotel distance handler: reply with stored distance from hotelList; no AI ──
+    if (prebuiltCatalog?.hotelList?.length && detectHotelDistanceIntent(text)) {
+      const hotel = lookupHotelEntry(text, prebuiltCatalog.hotelList)
+      if (hotel) {
+        const starsTag = hotel.stars ? ` (${hotel.stars})` : ''
+        let distReply: string
+        if (hotel.distance) {
+          distReply = `*${hotel.name}*${starsTag}:\n· المسافة: ${hotel.distance}\n· الموقع: ${hotel.location ?? ''}\n\nعندك سؤال تاني عن الفندق؟ 🤍`
+        } else {
+          distReply = `*${hotel.name}*${starsTag}:\n· الموقع: ${hotel.location ?? ''}\n\nللمسافة الدقيقة — تواصل مع الفريق لتأكيد التفاصيل. عندك سؤال تاني؟ 🤍`
+        }
+        await persistReply(conv.id, distReply)
+        console.log(`HOTEL_DIST_HANDLER → ${phone} hotel=${hotel.name} hasDist=${!!hotel.distance}`)
+        return distReply
+      }
+      // Distance intent but no hotel name in message — ask which hotel
+      const askHotel = 'أي فندق بتستفسر عن مسافته؟ ابعت اسم الفندق وهبعتلك التفاصيل 🤍'
+      await persistReply(conv.id, askHotel)
+      console.log(`HOTEL_DIST_ASK → ${phone}`)
+      return askHotel
     }
 
     // ── Price-pivot handler: price intent without duration or month — pivot to duration question ─
