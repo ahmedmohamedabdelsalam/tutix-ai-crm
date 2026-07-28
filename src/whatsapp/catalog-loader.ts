@@ -32,6 +32,11 @@ export async function getPrebuiltCatalog(
 
   // Fetch عمرة OfferingType + its active Offerings.
   // Guard: if none exist, offeringsOverride stays undefined → falls back to catalog.umrahPrograms.
+  // FROZEN LEGACY SAFETY NET (2026-07-28): /admin/catalog was removed in Phase B2.
+  // catalog.umrahPrograms is no longer edited by any UI. For companies that have
+  // migrated to the Offerings table the fallback is never reached. For companies
+  // that have no OfferingType yet, the frozen JSON keeps them from going dark.
+  // Do NOT delete this fallback until every active company has Offerings rows.
   let offeringsOverride: Array<{ values: Record<string, unknown>; fieldDefs: FieldDef[] }> | undefined
 
   const offeringType = await prisma.offeringType.findFirst({

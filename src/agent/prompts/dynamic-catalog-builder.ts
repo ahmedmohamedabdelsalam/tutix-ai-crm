@@ -977,6 +977,9 @@ export function buildIndustryPromptFromDB(
 
   // Guard: use Offerings table if provided and non-empty; else fall back to catalog.umrahPrograms.
   // A bad Offerings read (empty array) safely falls through to the old path — no company breaks.
+  // FROZEN LEGACY SAFETY NET (2026-07-28): catalog.umrahPrograms is no longer edited by any UI
+  // after /admin/catalog was retired in Phase B2. The JSON is intentionally kept as a read-only
+  // fallback for companies that have not yet migrated to the Offerings table.
   const rawUmrahPrograms: any[] =
     offeringsOverride && offeringsOverride.length > 0
       ? offeringsOverride.map(o => offeringToRawUmrahProgram(o.values, o.fieldDefs))
