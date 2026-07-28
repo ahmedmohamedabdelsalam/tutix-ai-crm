@@ -498,7 +498,7 @@ export class WhatsAppService {
       if (ovMonth && !prebuiltCatalog.umrahMonthMessages?.[ovMonth] && detectHajjOverviewIntent(text) === null) {
         const unavailMsg = `برامج ${ovMonth} لسه بتتجهز — لما تبقى متاحة هنعلمك فوراً إن شاء الله 🤍\nتحب تبعتلنا اسمك ورقم تليفونك عشان نتواصل معك أول ما تتاح البرامج؟`
         if (conv.leadId) {
-          await this.prisma.lead.update({ where: { id: conv.leadId }, data: { travelDate: ovMonth } })
+          await this.prisma.lead.update({ where: { id: conv.leadId }, data: { notes: `اهتمام: ${ovMonth}` } })
         }
         await persistReply(conv.id, unavailMsg)
         console.log(`MONTH_UNAVAILABLE → ${phone} month=${ovMonth}`)

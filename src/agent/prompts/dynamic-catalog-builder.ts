@@ -66,6 +66,13 @@ export function offeringToRawUmrahProgram(
     haramainTrain:    values['haramainTrain']    ?? false,
     airline:          values['airline']          ?? '',
     route:            values['route']            ?? '',
+    // flight-included role: boolean when the field exists, null when absent (→ handler falls back)
+    flightIncluded:   (() => {
+      const def = fieldDefs.find(f => f.role === 'flight-included')
+      if (!def) return null
+      const v = values[def.key]
+      return typeof v === 'boolean' ? v : null
+    })(),
   }
 }
 
@@ -1037,8 +1044,15 @@ export function buildScheduleItinerary(depISO: string, retISO: string, progs: an
   return lines.join('\n')
 }
 
-/** Builds a flight-details reply for a specific trip. */
+/** Builds a flight-details reply for a specific trip.
+ *  Reads flightIncluded (boolean) when the field exists on the offering.
+ *  Falls back to showing airline/route + a clarifying question when absent.
+ */
 export function buildFlightReply(depISO: string, retISO: string, progs: any[]): string {
+  // flightIncluded: true/false when the field is configured, null when absent
+  const flightIncluded: boolean | null =
+    progs.map(p => p.flightIncluded as boolean | null).find(v => v !== null) ?? null
+
   const airline  = progs.map(p => (p.airline ?? '') as string).find(a => a) ?? ''
   const route    = progs.map(p => (p.route ?? '') as string).find(r => r) ?? ''
   const hasTrain = progs.some(p => !!(p.haramainTrain))
@@ -1046,12 +1060,29 @@ export function buildFlightReply(depISO: string, retISO: string, progs: any[]): 
   const lines: string[] = [
     `*رحلة ${fmtTripDay(depISO)} — ${fmtTripDay(retISO)}:*`,
   ]
-  if (airline) lines.push(`· الطيران: ${airline}`)
-  if (route)   lines.push(`· المسار: ${route}`)
-  if (hasTrain) lines.push(`· قطار الحرمين: مشمول ✓`)
 
+  if (flightIncluded === true) {
+    lines.push('· الطيران: مشمول في السعر ✓')
+    if (airline) lines.push(`· شركة الطيران: ${airline}`)
+    if (route)   lines.push(`· المسار: ${route}`)
+  } else if (flightIncluded === false) {
+    lines.push('· الطيران: غير مشمول — التذكرة تُحجز بشكل منفصل')
+    if (airline) lines.push(`· شركة الطيران المقترحة: ${airline}`)
+    if (route)   lines.push(`· المسار: ${route}`)
+  } else {
+    // No explicit field → show stored data and ask
+    if (airline) lines.push(`· الطيران: ${airline}`)
+    if (route)   lines.push(`· المسار: ${route}`)
+  }
+
+  if (hasTrain) lines.push(`· قطار الحرمين: مشمول ✓`)
   lines.push('')
-  lines.push('للتأكد من تفاصيل شمول التذكرة في السعر — ابعتلنا رقم الرحلة وهنأكدلك 🤍')
+
+  if (flightIncluded === null) {
+    lines.push('للتأكد من شمول التذكرة في السعر — ابعتلنا رقم الرحلة وهنأكدلك 🤍')
+  } else {
+    lines.push('عندك سؤال تاني عن الرحلة؟ 🤍')
+  }
   return lines.join('\n')
 }
 
