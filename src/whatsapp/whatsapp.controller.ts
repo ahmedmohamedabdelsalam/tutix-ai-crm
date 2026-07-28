@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Query, Res } from '@nestjs/common'
+import { Controller, Get, Post, Body, Query, Res, Headers, ForbiddenException } from '@nestjs/common'
 import type { Response } from 'express'
 import { ConvStatus } from '@prisma/client'
 import { WhatsAppService } from './whatsapp.service'
@@ -8,6 +8,7 @@ import { splitIntoMessages } from './message-splitter'
 import { metaPost, sendWhatsAppMessage } from './send-message'
 import { captureMedia } from './capture-media'
 import { isAIConfigActive } from './ai-config-cache'
+import { invalidateCatalogCache } from './catalog-loader'
 
 const MEDIA_REPLIES: Record<string, { label: string; reply: string }> = {
   audio:    { label: '[رسالة صوتية]',   reply: 'حضرتك بعتلنا رسالة صوتية، للأسف مش بنقدر نسمعها دلوقتي لو ممكن تكتب طلبك يافندم نكون شاكرين' },
@@ -379,5 +380,19 @@ export class WhatsAppController {
   @Post('test-followup')
   async testFollowup() {
     return this.followup.triggerNow()
+  }
+
+  // Internal: dashboard calls this after Offering writes to bust the in-memory catalog cache.
+  // Protected by INTERNAL_CACHE_TOKEN header — only reachable from trusted callers.
+  @Post('internal/cache-bust')
+  cacheBust(
+    @Body() body: { companyId: string },
+    @Headers('x-internal-token') token: string,
+  ) {
+    const expected = process.env.INTERNAL_CACHE_TOKEN
+    if (!expected || token !== expected) throw new ForbiddenException()
+    if (!body.companyId) return { error: 'companyId required' }
+    invalidateCatalogCache(body.companyId)
+    return { ok: true }
   }
 }
