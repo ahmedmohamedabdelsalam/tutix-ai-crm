@@ -9,12 +9,20 @@ export function containsFirstMessageQuestion(text: string): boolean {
 
 // Detects a specific umrah month in the customer message.
 // Returns the Arabic month name as used in the month overview blocks (e.g. 'أغسطس').
+// Covers all 12 months so unavailable-month handler fires for any future request.
 export function detectUmrahMonth(text: string): string | null {
   if (/يولي[وو]|يوليو/.test(text)) return 'يوليو'
   if (/اغسطس|أغسطس/.test(text)) return 'أغسطس'
   if (/سبتمبر/.test(text)) return 'سبتمبر'
   if (/اكتوبر|أكتوبر/.test(text)) return 'أكتوبر'
   if (/نوفمبر/.test(text)) return 'نوفمبر'
+  if (/ديسمبر|دسمبر/.test(text)) return 'ديسمبر'
+  if (/يناير/.test(text)) return 'يناير'
+  if (/فبراير/.test(text)) return 'فبراير'
+  if (/مارس/.test(text)) return 'مارس'
+  if (/ابريل|أبريل/.test(text)) return 'أبريل'
+  if (/مايو/.test(text)) return 'مايو'
+  if (/يونيو|يونيه/.test(text)) return 'يونيو'
   return null
 }
 
@@ -45,27 +53,34 @@ export function detectContinueResponse(text: string): boolean {
 
 export function detectHajjOverviewIntent(text: string): 'ECONOMY' | 'FIVE_STAR' | 'GENERIC' | null {
   // حج(?!ز) matches the pilgrimage noun ("حج", "الحج") but NOT the booking verb ("حجز", "أحجز", "يحجز").
-  // Category word alone + حج is sufficient intent — no program-request keyword needed.
-  if (/حج(?!ز)/.test(text)) {
-    if (/اقتصادي|اقتصادية/.test(text)) return 'ECONOMY'
-    if (/خمس\s*نجوم|٥\s*نجوم|5\s*نجوم|فاخر|فاخرة/.test(text)) return 'FIVE_STAR'
-  }
-  const isHajj =
-    /برامج\s*الحج|أسعار\s*الحج|اسعار\s*الحج|برامج\s*حج|عن\s*برامج\s*الحج/.test(text) ||
-    (/حج/.test(text) && /برامج|اسعار|أسعار|قولي|اعرض|عايز\s*اعرف/.test(text))
-  if (!isHajj) return null
+  // Any match routes to the Hajj category question — no additional keyword required.
+  if (!/حج(?!ز)/.test(text)) return null
   if (/اقتصادي|اقتصادية/.test(text)) return 'ECONOMY'
   if (/خمس\s*نجوم|٥\s*نجوم|5\s*نجوم|فاخر|فاخرة/.test(text)) return 'FIVE_STAR'
   return 'GENERIC'
 }
 
-export function detectHajjCategoryReply(text: string): 'ECONOMY' | 'FIVE_STAR' | null {
+export function detectHajjCategoryReply(text: string): 'ECONOMY' | 'FIVE_STAR' | 'KADAN' | null {
   const t = text.trim()
   if (/^[١1]$/.test(t)) return 'ECONOMY'
   if (/^[٢2]$/.test(t)) return 'FIVE_STAR'
+  if (/^[٣3]$/.test(t)) return 'KADAN'
   if (/اقتصادي|اقتصادية/.test(t)) return 'ECONOMY'
   if (/خمس\s*نجوم|٥\s*نجوم|5\s*نجوم|فاخر|فاخرة/.test(t)) return 'FIVE_STAR'
+  if (/كدانة/.test(t)) return 'KADAN'
   return null
+}
+
+export function detectScheduleIntent(text: string): boolean {
+  return /مواعيد|جدول\s*الرحلة|برنامج\s*الرحلة|تفاصيل\s*الرحلة|تفاصيل\s*البرنامج|بتمشوا\s*امتى|موعد\s*السفر|الجدول\s*الزمني/.test(text)
+}
+
+export function detectFlightIntent(text: string): boolean {
+  return /طيران|تذكرة\s*(?:ال)?طيران|الطيران|شامل[ةه]?\s*طيران|يشمل\s*(?:ال)?طيران|بتذكرة|بدون\s*طيران|الطيارة/.test(text)
+}
+
+export function detectInstallmentIntent(text: string): boolean {
+  return /تقسيط|أقساط|اقساط|قسط|بالقسط|على\s*أقساط|على\s*اقساط/.test(text)
 }
 
 export function detectUmrahOverviewIntent(text: string): boolean {

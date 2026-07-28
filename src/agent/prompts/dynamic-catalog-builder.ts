@@ -362,14 +362,35 @@ export function buildHajjOverviewMessage(hajjPrograms: HajjProgram[]): HajjOverv
 export const HAJJ_OV_DISCLAIMER =
   'ملاحظة: التواريخ الهجرية لبرامج الحج ١٤٤٨هـ تقديرية بناءً على الحساب الفلكي وسيُعلن الرسمي منها بعد رؤية الهلال قبل الموسم بأسابيع'
 
-export function buildHajjCategoryQuestion(): string {
-  return `*برامج الحج ١٤٤٨هـ — مايو ٢٠٢٧م*
+export function buildHajjCategoryQuestion(hajjPrograms: HajjProgram[]): string {
+  const is5Star  = (p: HajjProgram) =>
+    p.name.startsWith('برنامج ٥ نجوم') || p.name.startsWith('٥ نجوم') || p.name.includes('خمس نجوم')
+  const isKadan  = (p: HajjProgram) => p.name.includes('كدانة')
+  const hasPrice = (p: HajjProgram) => !!p.pricePerPerson
 
-عندنا نوعين من البرامج:
-١• *البرامج الاقتصادية* — أفضل الأسعار مع مواصفات متميزة
-٢• *برامج خمس نجوم* — أعلى مستوى من الراحة والفخامة
+  const hasEconomy = hajjPrograms.some(p => hasPrice(p) && !is5Star(p) && !isKadan(p))
+  const has5Star   = hajjPrograms.some(p => hasPrice(p) && is5Star(p))
+  const hasKadan   = hajjPrograms.some(p => hasPrice(p) && isKadan(p))
 
-إيه اللي يناسبك يافندم — اقتصادي ولا خمس نجوم؟`
+  const lines: string[] = ['*برامج الحج ١٤٤٨هـ — مايو ٢٠٢٧م*', '']
+  let n = 0
+  if (hasEconomy) lines.push(`${toArabicIndic(++n)}• *البرامج الاقتصادية* — أفضل الأسعار مع مواصفات متميزة`)
+  if (has5Star)   lines.push(`${toArabicIndic(++n)}• *برامج خمس نجوم* — أعلى مستوى من الراحة والفخامة`)
+  if (hasKadan)   lines.push(`${toArabicIndic(++n)}• *أبراج كدانة* — أبراج فندقية في منى`)
+
+  const cats: string[] = []
+  if (hasEconomy) cats.push('اقتصادي')
+  if (has5Star)   cats.push('خمس نجوم')
+  if (hasKadan)   cats.push('كدانة')
+
+  lines.push('')
+  if (cats.length > 1) {
+    lines.push(`إيه اللي يناسبك يافندم — ${cats.join(' ولا ')}؟`)
+  } else {
+    lines.push('تحب أعرفك على تفاصيل البرامج المتاحة؟ 🤍')
+  }
+
+  return lines.join('\n')
 }
 
 function renderHajjProgramValueFirst(p: HajjProgram, num: number): string {
@@ -414,7 +435,7 @@ function renderHajjProgramValueFirst(p: HajjProgram, num: number): string {
 }
 
 export function buildHajjCategoryPrograms(
-  category: 'ECONOMY' | 'FIVE_STAR',
+  category: 'ECONOMY' | 'FIVE_STAR' | 'KADAN',
   hajjPrograms: HajjProgram[],
   disclaimer: string,
 ): { message: string; orderedDetails: string[] } {
@@ -430,6 +451,9 @@ export function buildHajjCategoryPrograms(
   if (category === 'FIVE_STAR') {
     programs = hajjPrograms.filter(p => hasPrice(p) && is5Star(p)).sort(sortByPrice)
     header = `*برامج خمس نجوم — الحج ١٤٤٨هـ*`
+  } else if (category === 'KADAN') {
+    programs = hajjPrograms.filter(p => hasPrice(p) && isKadan(p)).sort(sortByPrice)
+    header = `*أبراج كدانة — الحج ١٤٤٨هـ*`
   } else {
     programs = hajjPrograms.filter(p => hasPrice(p) && !is5Star(p) && !isKadan(p)).sort(sortByPrice)
     header = `*البرامج الاقتصادية — الحج ١٤٤٨هـ*`
@@ -937,6 +961,100 @@ export function buildUmrahDurationMessage(
   return { message: parts.join('\n\n'), orderedDetails }
 }
 
+// ── Batch-2 helpers: trip grouping, schedule, flight ─────────────────────────
+
+/** Groups raw umrah programs into trips (same dep+ret date pair), sorted by depISO. */
+export function groupUmrahTrips(
+  rawPrograms: any[],
+  filter?: { month?: number; durationDays?: number },
+): Array<{ depISO: string; retISO: string; progs: any[] }> {
+  const groups = new Map<string, any[]>()
+  for (const p of rawPrograms) {
+    const dep = (p.departureDate ?? p.departureDateISO ?? '') as string
+    const ret = (p.returnDate    ?? p.returnDateISO    ?? '') as string
+    if (!dep || !ret || !/^\d{4}-\d{2}-\d{2}$/.test(dep)) continue
+    if (filter?.month !== undefined && parseInt(dep.slice(5, 7), 10) !== filter.month) continue
+    if (filter?.durationDays !== undefined) {
+      const days = Math.round(
+        (new Date(ret + 'T00:00:00Z').getTime() - new Date(dep + 'T00:00:00Z').getTime()) / 86400000,
+      ) + 1
+      if (days !== filter.durationDays) continue
+    }
+    const key = `${dep}|${ret}`
+    if (!groups.has(key)) groups.set(key, [])
+    groups.get(key)!.push(p)
+  }
+  return [...groups.entries()]
+    .map(([key, progs]) => { const [depISO, retISO] = key.split('|'); return { depISO, retISO, progs } })
+    .sort((a, b) => a.depISO.localeCompare(b.depISO))
+}
+
+const OV_MONTH_NAMES: Record<number, string> = {
+  1: 'يناير', 2: 'فبراير', 3: 'مارس', 4: 'أبريل', 5: 'مايو', 6: 'يونيو',
+  7: 'يوليو', 8: 'أغسطس', 9: 'سبتمبر', 10: 'أكتوبر', 11: 'نوفمبر', 12: 'ديسمبر',
+}
+
+function fmtTripDay(iso: string): string {
+  const d = parseInt(iso.slice(8), 10)
+  const m = parseInt(iso.slice(5, 7), 10)
+  return `${toArabicIndic(d)} ${OV_MONTH_NAMES[m] ?? iso.slice(5, 7)}`
+}
+
+/** Builds a schedule itinerary message for a specific trip (dep/ret dates + all programs). */
+export function buildScheduleItinerary(depISO: string, retISO: string, progs: any[]): string {
+  const depMs = new Date(depISO + 'T00:00:00Z').getTime()
+  const retMs = new Date(retISO + 'T00:00:00Z').getTime()
+  const totalDays = Math.round((retMs - depMs) / 86400000) + 1
+  const durWord = totalDays === 1 ? 'يوم' : totalDays <= 10 ? 'أيام' : 'يوم'
+
+  const makkahNights  = progs[0]?.makkahNights  ?? progs[0]?.meccaNights  ?? 0
+  const madinahNights = progs[0]?.madinahNights ?? progs[0]?.medinaNights ?? 0
+  const hasTrain = progs.some(p => !!(p.haramainTrain))
+  const airline  = progs.map(p => (p.airline ?? '') as string).find(a => a) ?? ''
+  const route    = progs.map(p => (p.route ?? '') as string).find(r => r) ?? ''
+
+  const lines: string[] = [
+    `*رحلة ${fmtTripDay(depISO)} — ${fmtTripDay(retISO)} (${toArabicIndic(totalDays)} ${durWord})*`,
+    '',
+  ]
+  if (madinahNights > 0) lines.push(`· المدينة المنورة: ${toArabicIndic(madinahNights)} ليالي`)
+  if (makkahNights  > 0) lines.push(`· مكة المكرمة: ${toArabicIndic(makkahNights)} ليالي`)
+  if (hasTrain)          lines.push(`· قطار الحرمين: مشمول ✓`)
+  if (airline)           lines.push(`· الطيران: ${airline}${route ? ` (${route})` : ''}`)
+
+  if (progs.length > 1) {
+    lines.push('')
+    lines.push('*المستويات المتاحة لهذه الرحلة:*')
+    for (const p of progs) {
+      const name: string = (p.name ?? '') as string
+      const quad = (p.quadPrice ?? p.priceQuad ?? 0) as number
+      if (name && quad) lines.push(`· ${name}: يبدأ من ${toArabicIndic(quad)} جنيه/فرد`)
+    }
+  }
+
+  lines.push('')
+  lines.push('عندك أي استفسار تاني عن الرحلة؟ 🤍')
+  return lines.join('\n')
+}
+
+/** Builds a flight-details reply for a specific trip. */
+export function buildFlightReply(depISO: string, retISO: string, progs: any[]): string {
+  const airline  = progs.map(p => (p.airline ?? '') as string).find(a => a) ?? ''
+  const route    = progs.map(p => (p.route ?? '') as string).find(r => r) ?? ''
+  const hasTrain = progs.some(p => !!(p.haramainTrain))
+
+  const lines: string[] = [
+    `*رحلة ${fmtTripDay(depISO)} — ${fmtTripDay(retISO)}:*`,
+  ]
+  if (airline) lines.push(`· الطيران: ${airline}`)
+  if (route)   lines.push(`· المسار: ${route}`)
+  if (hasTrain) lines.push(`· قطار الحرمين: مشمول ✓`)
+
+  lines.push('')
+  lines.push('للتأكد من تفاصيل شمول التذكرة في السعر — ابعتلنا رقم الرحلة وهنأكدلك 🤍')
+  return lines.join('\n')
+}
+
 // ── Main export ───────────────────────────────────────────────────────────────
 
 export interface IndustryPromptParts {
@@ -953,6 +1071,9 @@ export interface IndustryPromptParts {
   hajjEconomyDetails: string[]
   hajjFiveStarPrograms: string
   hajjFiveStarDetails: string[]
+  hajjKadanPrograms: string
+  hajjKadanDetails: string[]
+  rawUmrahPrograms: any[]
   umrahMonthMessages: Record<string, string>
   umrahMonthDetails: Record<string, string[]>
   umrahMonthLevelMessages: Record<string, Record<string, string>>
@@ -1019,11 +1140,13 @@ export function buildIndustryPromptFromDB(
   const { message: hajjOverviewMessage, orderedDetails: hajjOverviewDetails } =
     buildHajjOverviewMessage(cat.hajjPrograms)
 
-  const hajjCategoryQuestion = buildHajjCategoryQuestion()
+  const hajjCategoryQuestion = buildHajjCategoryQuestion(cat.hajjPrograms)
   const { message: hajjEconomyPrograms, orderedDetails: hajjEconomyDetails } =
     buildHajjCategoryPrograms('ECONOMY', cat.hajjPrograms, HAJJ_OV_DISCLAIMER)
   const { message: hajjFiveStarPrograms, orderedDetails: hajjFiveStarDetails } =
     buildHajjCategoryPrograms('FIVE_STAR', cat.hajjPrograms, HAJJ_OV_DISCLAIMER)
+  const { message: hajjKadanPrograms, orderedDetails: hajjKadanDetails } =
+    buildHajjCategoryPrograms('KADAN', cat.hajjPrograms, HAJJ_OV_DISCLAIMER)
 
   const umrahMonthMessages: Record<string, string> = {}
   const umrahMonthDetails: Record<string, string[]> = {}
@@ -1067,11 +1190,12 @@ export function buildIndustryPromptFromDB(
     identity, catalog, hotels, hotelList, monthOverviews: monthOverview,
     hajjProgramDetails, hajjOverviewMessage, hajjOverviewDetails,
     hajjCategoryQuestion, hajjEconomyPrograms, hajjEconomyDetails,
-    hajjFiveStarPrograms, hajjFiveStarDetails,
+    hajjFiveStarPrograms, hajjFiveStarDetails, hajjKadanPrograms, hajjKadanDetails,
     umrahMonthMessages, umrahMonthDetails, umrahMonthLevelMessages,
     umrahAllMonthsMessage, umrahAllMonthsDetails,
     ctaReply, installmentReply,
     umrahDurationMessages, umrahDurationDetails, availableDurations, durationPivotMsg,
+    rawUmrahPrograms,
   }
 }
 
