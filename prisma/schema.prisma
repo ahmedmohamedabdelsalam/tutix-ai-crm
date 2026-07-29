@@ -374,12 +374,29 @@ model CompanyFAQ {
   companyId String
   question  String
   answer    String
+  keywords  Json?    // string[] — Arabic trigger words for code-based matching; null = no match, falls through to AI
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   company   Company  @relation(fields: [companyId], references: [id])
 
   @@index([companyId])
+}
+
+model HandoffLog {
+  id              String   @id @default(cuid())
+  companyId       String
+  conversationId  String
+  phone           String
+  customerMessage String   @db.Text
+  reason          String   // 'no_handler' | 'blocked_category' | 'output_guard' | 'repeat_failure'
+  category        String?  // blocked category name when reason='blocked_category'
+  blockedOutput   String?  @db.Text // AI text snippet that triggered output_guard
+  createdAt       DateTime @default(now())
+
+  @@index([companyId])
+  @@index([companyId, reason])
+  @@index([companyId, createdAt])
 }
 
 model DailyTask {
