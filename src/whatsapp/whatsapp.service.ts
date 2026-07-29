@@ -8,7 +8,7 @@ import { applyHajjDateDisclaimer } from './hajj-date-disclaimer'
 import { companionConfirmedInHistory, travelDateConfirmedInHistory } from './lead-fact-guards'
 import { detectOnlinePayment, detectFarFromBranch, detectVisitConfirm } from './booking-stage-detectors'
 import { getGovFromText, branchMessage } from './branch-lookup'
-import { containsFirstMessageQuestion, detectUmrahMonth, detectUmrahLevel, detectFullDetailsIntent, detectContinueResponse, detectHajjOverviewIntent, detectHajjCategoryReply, detectNumberReply, detectUmrahOverviewIntent, detectCTAMessage, detectDurationDays, detectPriceIntent, detectScheduleIntent, detectFlightIntent, detectInstallmentIntent, detectHotelDistanceIntent, detectNearestTripIntent, detectHotelContentIntent } from './intent-detectors'
+import { containsFirstMessageQuestion, detectUmrahMonth, detectUmrahLevel, detectFullDetailsIntent, detectContinueResponse, detectHajjOverviewIntent, detectHajjCategoryReply, detectNumberReply, detectUmrahOverviewIntent, detectCTAMessage, detectDurationDays, detectPriceIntent, detectScheduleIntent, detectFlightIntent, detectInstallmentIntent, detectHotelDistanceIntent, detectNearestTripIntent, detectHotelContentIntent, detectGreetingOnly, detectReligiousPhrase, extractNameFromText, extractPhoneNumber, detectFullCatalogIntent } from './intent-detectors'
 
 import { detectFollowUpIntent, clampToWindow, DEFERRAL_PHRASES } from './follow-up-scheduler'
 import { handleAICreditsExhausted, writeCostRecord } from './ai-cost-helpers'
@@ -630,6 +630,16 @@ export class WhatsAppService {
       return handoffMsg
     }
 
+    // ── Full-catalog request: "كل البرامج / ياريت تفاصيل" → all-months umrah overview ─
+    // Fires at any message count; no "عمرة" keyword required (broader than detectUmrahOverviewIntent).
+    if (prebuiltCatalog?.umrahAllMonthsMessage && detectFullCatalogIntent(text)) {
+      const rawTrips = groupUmrahTrips(prebuiltCatalog.rawUmrahPrograms)
+      overviewMap.set(conv.id, { orderedDetails: prebuiltCatalog.umrahAllMonthsDetails, rawTrips })
+      await persistReply(conv.id, prebuiltCatalog.umrahAllMonthsMessage)
+      console.log(`FULL_CATALOG_HANDLER → ${phone}`)
+      return prebuiltCatalog.umrahAllMonthsMessage
+    }
+
     // First-message overview bypass: zero AI calls — intro from code, prebuilt message appended
     if (totalMsgCount === 1 && containsFirstMessageQuestion(text) && prebuiltCatalog) {
       const firstMsgUmrahMonth  = detectUmrahMonth(text)
@@ -828,6 +838,54 @@ export class WhatsAppService {
       await persistReply(conv.id, prebuiltCatalog.durationPivotMsg)
       console.log(`PRICE_PIVOT → ${phone}`)
       return prebuiltCatalog.durationPivotMsg
+    }
+
+    // ── Deterministic greeting / name-capture / phone-number handler ─────────────────
+    // Fires AFTER all service-content handlers. Eliminates model calls for pure greetings,
+    // bare name replies, and customer-provided phone numbers (470 of the 716 AI fallthroughs).
+    // Also breaks the repeat-failure streak so a greeting never accidentally triggers handoff.
+
+    // Sub-case A: phone number given by the customer → save to Lead.notes + continue flow
+    const capturedPhone = extractPhoneNumber(text)
+    if (capturedPhone) {
+      if (conv.leadId && !simulate) {
+        const existing = await this.prisma.lead.findUnique({ where: { id: conv.leadId }, select: { notes: true } }).then(r => r?.notes ?? '')
+        const newNotes = existing ? `${existing}\nرقم إضافي: ${capturedPhone}` : `رقم إضافي: ${capturedPhone}`
+        await this.prisma.lead.update({ where: { id: conv.leadId }, data: { notes: newNotes } })
+      }
+      const phoneAck = knownCustomerName
+        ? `شكراً ${knownCustomerName} — سجلنا رقمك وهيتواصل معك فريقنا قريباً 🤍\nبتستفسر عن إيه بالتحديد؟`
+        : `شكراً — سجلنا رقمك 🤍\nتشرفنا باسم حضرتك؟`
+      await persistReply(conv.id, phoneAck)
+      console.log(`PHONE_NUMBER_HANDLER → ${phone} captured=${capturedPhone}`)
+      return phoneAck
+    }
+
+    // Sub-case B: name-only reply when no name is known yet
+    if (!knownCustomerName) {
+      const capturedName = extractNameFromText(text, (conv.messages as any[]) ?? [])
+      if (capturedName) {
+        if (conv.leadId && !simulate) {
+          await this.prisma.lead.update({ where: { id: conv.leadId }, data: { name: capturedName } })
+        }
+        const nameAck = knownLeadFacts?.packageType
+          ? `شكراً ${capturedName} — نورت! بتستفسر عن إيه بالتحديد؟ 🤍`
+          : `شكراً ${capturedName} — بتستفسر عن عمرة ولا حج؟ 🤍`
+        await persistReply(conv.id, nameAck)
+        console.log(`NAME_CAPTURE_HANDLER → ${phone} name="${capturedName}"`)
+        return nameAck
+      }
+    }
+
+    // Sub-case C: pure greeting / religious phrase / punctuation-only
+    const isPunctOnly = text.trim().length > 0 && /^[.،؟!…]+$/.test(text.trim())
+    if (detectGreetingOnly(text) || detectReligiousPhrase(text) || isPunctOnly) {
+      const greetingReply = knownCustomerName
+        ? `أهلاً ${knownCustomerName} 🤍 — بتستفسر عن إيه؟`
+        : `أهلاً بيك في ${company.name} 🤍\nتشرفنا باسم حضرتك؟`
+      await persistReply(conv.id, greetingReply)
+      console.log(`GREETING_HANDLER → ${phone} type=${isPunctOnly ? 'punct' : detectGreetingOnly(text) ? 'greeting' : 'religious'} hasName=${!!knownCustomerName}`)
+      return greetingReply
     }
 
     // ── Route 4b: repeat failure — 2 consecutive no-handler/no-FAQ messages ────

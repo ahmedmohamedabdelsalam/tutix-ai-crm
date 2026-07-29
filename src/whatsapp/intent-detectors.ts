@@ -23,6 +23,15 @@ export function detectUmrahMonth(text: string): string | null {
   if (/ابريل|أبريل/.test(text)) return 'أبريل'
   if (/مايو/.test(text)) return 'مايو'
   if (/يونيو|يونيه/.test(text)) return 'يونيو'
+  // Numeric month: "شهر ٨" / "شهر 8" — Arabic-Indic and Western digits, months 1–12
+  const numericMatch = text.match(/شهر\s*([٠-٩0-9]{1,2})/)
+  if (numericMatch) {
+    const raw = numericMatch[1]
+    const digit = parseInt(raw.replace(/[٠١٢٣٤٥٦٧٨٩]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d))))
+    const MONTH_NAMES = ['', 'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
+                             'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر']
+    if (digit >= 1 && digit <= 12) return MONTH_NAMES[digit]
+  }
   return null
 }
 
@@ -186,4 +195,81 @@ export function detectNumberReply(text: string): number | null {
     if (t.includes(word)) return n
   }
   return null
+}
+
+// Pure greeting with no service content.
+// Returns false if ANY service/trip keyword is present so service handlers take priority.
+export function detectGreetingOnly(text: string): boolean {
+  const t = text.trim()
+  if (/عايز|محتاج|سعر|فندق|حجز|عمرة|عمره|حج(?!ز)|برامج|رحلات|أسعار|اسعار|عروض|باقات|تفاصيل|مواعيد|طيران|تقسيط/.test(t)) return false
+  return /^(السلام|وعليكم|أهلاً|اهلاً|اهلا|أهلا|مرحبا|مرحباً|صباح|مساء|هاي|هلو|ألو|الو|كيف|تمام\s*إيه|بخير)/.test(t)
+    || (t.length <= 50 && /السلام|وعليكم|أهلاً|اهلاً|مرحبا/.test(t))
+}
+
+// Standalone Islamic phrase used as conversation filler (بسم الله, الحمد لله, etc.).
+// Only fires when there are no service keywords in the same message.
+export function detectReligiousPhrase(text: string): boolean {
+  const t = text.trim()
+  if (/عايز|محتاج|سعر|فندق|حجز|عمرة|عمره|حج(?!ز)|برامج/.test(t)) return false
+  return t.length < 80
+    && /^(بسم\s*الله|اللهم\s*صل|الحمد\s*لله|سبحان\s*الله|الله\s*أكبر|جزاك\s*الله|ربنا\s*يبارك|بارك\s*الله|آمين|أمين|ماشاء\s*الله|تبارك\s*الله|اللهم\s*بارك)/.test(t)
+}
+
+// Extracts a customer name from a message. Fires only when:
+//   a) The text explicitly introduces a name ("أنا X" / "اسمي X"), OR
+//   b) The previous assistant message asked for a name AND the reply is short, pure Arabic.
+// Pass conv.messages (or any []) as the second argument for context-aware detection.
+export function extractNameFromText(
+  text: string,
+  history: { role: string; content: string }[],
+): string | null {
+  const t = text.trim()
+  if (t.length < 2 || t.length > 40) return null
+  // Must be only Arabic letters and spaces — no digits, punctuation, or Latin
+  if (!/^[؀-ۿ\s]+$/.test(t)) return null
+  // Service/filler words → not a name
+  if (/عايز|محتاج|سعر|فندق|حجز|عمرة|عمره|حج|برامج|رحلات|أسعار|عروض|باقات|تفاصيل|مواعيد|طيران|تقسيط|ممكن|عندكم|قولي|شكرا|شكراً|تمام|ماشي|حاضر|أيوه|ايوه|نعم|لأ|معلش|عادي|ممتاز|رائع|جميل|كويس|يعني|طيب|مافيش|صح|بالطبع|حبيبي|يسطا|ربنا|اللهم|سبحان|الحمد|إن\s*شاء|ماشاء/.test(t)) return null
+  // Explicit introduction: "أنا / اسمي / مع حضرتك X"
+  const intro = t.match(/^(?:أنا|انا|معك|مع\s*حضرتك|اسمي|اسمى|اسم\s*حضرتي)\s+([؀-ۿ\s]{2,25})$/)
+  if (intro) return intro[1].trim()
+  // Context-aware: previous assistant message asked for name → any short Arabic reply is a name
+  const lastAsst = [...history].reverse().find(m => m.role === 'ASSISTANT' || m.role === 'assistant')
+  const wasAskedForName = !!lastAsst
+    && ['تشرفنا باسم', 'اسم حضرتك', 'باسم حضرتك', 'ممكن اعرف اسم', 'تقولي اسمك'].some(p => ((lastAsst as any).content ?? '').includes(p))
+  if (wasAskedForName) {
+    const words = t.split(/\s+/)
+    if (words.length >= 1 && words.length <= 4 && words.every(w => w.length >= 2)) return t
+  }
+  return null
+}
+
+// Extracts an Egyptian or Gulf mobile number from text.
+// Normalizes Arabic-Indic digits. Returns the number string or null.
+export function extractPhoneNumber(text: string): string | null {
+  const normalized = text.trim()
+    .replace(/[٠١٢٣٤٥٦٧٨٩]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
+    .replace(/[\s\-]/g, '')
+  // Egyptian 11-digit: 01xxxxxxxxxx
+  let m = normalized.match(/(?:^|[^0-9])(01[0-9]{9})(?:[^0-9]|$)/)
+  if (m) return m[1]
+  // International Egyptian: +20 or 0020 prefix
+  m = normalized.match(/(?:^|[^0-9])(?:\+|00)?20(1[0-9]{9})(?:[^0-9]|$)/)
+  if (m) return '0' + m[1]
+  // Saudi 10-digit: 05xxxxxxxx
+  m = normalized.match(/(?:^|[^0-9])(05[0-9]{8})(?:[^0-9]|$)/)
+  if (m) return m[1]
+  // Saudi with +966
+  m = normalized.match(/(?:^|[^0-9])(?:\+|00)?966(5[0-9]{8})(?:[^0-9]|$)/)
+  if (m) return '0' + m[1]
+  return null
+}
+
+// Detects a generic "show me all programs" request (no specific month or duration).
+// Returns false for Hajj requests so they stay with the Hajj handler.
+export function detectFullCatalogIntent(text: string): boolean {
+  if (/حج(?!ز)/.test(text)) return false
+  if (/كل\s*(?:ال)?برامج|كل\s*(?:ال)?رحلات|البرامج\s*كلها|الرحلات\s*كلها/.test(text)) return true
+  if (/تفاصيل/.test(text) && /جميع/.test(text)) return true
+  if (/ياريت\s*(?:ال)?تفاصيل/.test(text) && !/شهر|[٠-٩0-9]+\s*(?:يوم|أيام)/.test(text)) return true
+  return false
 }

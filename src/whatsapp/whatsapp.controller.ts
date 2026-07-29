@@ -7,7 +7,9 @@ import { PrismaService } from '../prisma/prisma.service'
 import { splitIntoMessages } from './message-splitter'
 import { metaPost, sendWhatsAppMessage } from './send-message'
 import { captureMedia } from './capture-media'
-import { isAIConfigActive } from './ai-config-cache'
+import { isAIConfigActive, getAIConfigTemplates } from './ai-config-cache'
+import { buildHandoffMessage } from './confidence-router'
+import { logHandoff } from './handoff-log'
 import { invalidateCatalogCache } from './catalog-loader'
 
 const MEDIA_REPLIES: Record<string, { label: string; reply: string }> = {
@@ -201,14 +203,29 @@ export class WhatsAppController {
           return
         }
 
-        // AI mode with both locks clear: send the canned reply
-        if (company.waToken && company.waPhoneId) {
-          await sendWhatsAppMessage(company.waPhoneId, company.waToken, message.from, media.reply)
+        // AI mode with both locks clear.
+        // Audio and image: route to human — AI cannot process these safely.
+        // Other types (sticker, video, document): send canned "please type" reply.
+        if (['audio', 'image'].includes(mediaType)) {
+          const aiTemplates = await getAIConfigTemplates(this.prisma, company.id)
+          const handoffMsg = buildHandoffMessage(aiTemplates)
+          if (company.waToken && company.waPhoneId) {
+            await sendWhatsAppMessage(company.waPhoneId, company.waToken, message.from, handoffMsg)
+          }
+          await this.prisma.message.create({ data: { conversationId: convId, role: 'ASSISTANT', content: handoffMsg } })
+          await this.prisma.conversation.update({
+            where: { id: convId },
+            data: { status: ConvStatus.NEEDS_HUMAN, handoffMessageSent: true },
+          })
+          logHandoff(this.prisma, { companyId: company.id, conversationId: convId, phone: message.from, customerMessage: media.label, reason: 'no_handler', category: `media:${mediaType}` })
+          console.log(`MEDIA_HANDOFF (${mediaType}) → ${message.from}`)
+        } else {
+          if (company.waToken && company.waPhoneId) {
+            await sendWhatsAppMessage(company.waPhoneId, company.waToken, message.from, media.reply)
+          }
+          await this.prisma.message.create({ data: { conversationId: convId, role: 'ASSISTANT', content: media.reply } })
+          console.log(`MEDIA REPLY (${mediaType}) sent to ${message.from}`)
         }
-        await this.prisma.message.create({
-          data: { conversationId: convId, role: 'ASSISTANT', content: media.reply },
-        })
-        console.log(`MEDIA REPLY (${mediaType}) sent to ${message.from}`)
         return
       }
 
