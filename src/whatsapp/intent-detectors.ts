@@ -96,6 +96,15 @@ export function detectNearestTripIntent(text: string): boolean {
   return /أقرب|اقرب|القادمة|القادم|الجاي|أول\s*رحلة|اول\s*رحلة/.test(text) && /عمرة|عمره|رحلة|سفر/.test(text)
 }
 
+// Hotel name/content query ("الفنادق ايه", "اسماء الفنادق", "فندق ايه ٥ نجوم").
+// Must NOT fire on distance questions — hotel_dist handler owns those and is checked first.
+// The exclusion here is a safety net; code ordering is the primary guard.
+export function detectHotelContentIntent(text: string): boolean {
+  if (/من\s*(?:الحرم|المسجد)|المسافة|كام\s*متر|كم\s*متر|مشياً/.test(text)) return false
+  return /فنادق/.test(text)
+    || /فندق/.test(text) && /اسم|أسماء|ايه|إيه|نجوم|اللي|بتاع|هي|ما\s*هي|كام|عندكم/.test(text)
+}
+
 // Detects Meta CTA button tap ("هل يمكنني الحصول على مزيد من المعلومات") or an
 // ad-referral click with no specific service intent — both deserve the CTA menu reply.
 export function detectCTAMessage(

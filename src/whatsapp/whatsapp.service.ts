@@ -8,7 +8,7 @@ import { applyHajjDateDisclaimer } from './hajj-date-disclaimer'
 import { companionConfirmedInHistory, travelDateConfirmedInHistory } from './lead-fact-guards'
 import { detectOnlinePayment, detectFarFromBranch, detectVisitConfirm } from './booking-stage-detectors'
 import { getGovFromText, branchMessage } from './branch-lookup'
-import { containsFirstMessageQuestion, detectUmrahMonth, detectUmrahLevel, detectFullDetailsIntent, detectContinueResponse, detectHajjOverviewIntent, detectHajjCategoryReply, detectNumberReply, detectUmrahOverviewIntent, detectCTAMessage, detectDurationDays, detectPriceIntent, detectScheduleIntent, detectFlightIntent, detectInstallmentIntent, detectHotelDistanceIntent, detectNearestTripIntent } from './intent-detectors'
+import { containsFirstMessageQuestion, detectUmrahMonth, detectUmrahLevel, detectFullDetailsIntent, detectContinueResponse, detectHajjOverviewIntent, detectHajjCategoryReply, detectNumberReply, detectUmrahOverviewIntent, detectCTAMessage, detectDurationDays, detectPriceIntent, detectScheduleIntent, detectFlightIntent, detectInstallmentIntent, detectHotelDistanceIntent, detectNearestTripIntent, detectHotelContentIntent } from './intent-detectors'
 
 import { detectFollowUpIntent, clampToWindow, DEFERRAL_PHRASES } from './follow-up-scheduler'
 import { handleAICreditsExhausted, writeCostRecord } from './ai-cost-helpers'
@@ -16,8 +16,11 @@ import { saveAssistantMessage, completeBookingAlert } from './message-persistenc
 import { getCompanyFAQ } from './faq-cache'
 import { incrementAIFailure, resetAIFailure } from './ai-failure-tracker'
 import { getPrebuiltCatalog } from './catalog-loader'
-import { isAIConfigActive } from './ai-config-cache'
-import { fullDetailsMap, overviewMap, categoryQuestionMap } from './conversation-state'
+import { isAIConfigActive, getAIConfigTemplates } from './ai-config-cache'
+import { fullDetailsMap, overviewMap, categoryQuestionMap, noMatchMap } from './conversation-state'
+import { scanModelOutput, buildEntityBlocklist } from './output-guard'
+import { logHandoff } from './handoff-log'
+import { matchFAQ, detectBlockedCategory, buildHandoffMessage } from './confidence-router'
 import { HAJJ_OV_DISCLAIMER, groupUmrahTrips, buildScheduleItinerary, buildFlightReply } from '../agent/prompts/dynamic-catalog-builder'
 import { lookupHotelEntry } from '../agent/prompts/hajj-umrah-hotels'
 import { RawTrip } from './conversation-state'
@@ -35,6 +38,49 @@ const POST_HANDOFF_NEGOTIATION_INSTR =
   'لا تقتبس سعراً منخفضاً ولا توعد بأي خصم. ' +
   'قل فقط: "زميلنا المختص هيتواصل معك قريباً ويقدملك أحسن عرض إن شاء الله." ' +
   'الأسعار الرسمية والأسئلة العادية — جاوب عليها بشكل طبيعي.'
+
+// Builds a hotel-names reply from rawUmrahPrograms (location / location-2 role values).
+// Returns null if the catalog has no hotel data — caller routes to handoff in that case.
+function buildHotelNamesReply(rawUmrahPrograms: any[], requestedLevel: string | null): string | null {
+  if (!rawUmrahPrograms?.length) return null
+
+  const meccaByLevel  = new Map<string, Set<string>>()
+  const medinaByLevel = new Map<string, Set<string>>()
+
+  for (const p of rawUmrahPrograms) {
+    // Derive programType from name (rawUmrahPrograms has no programType field — same logic as normDbUmrahProgram)
+    const rawName: string = p.name ?? ''
+    const level: string = p.programType
+      ?? (rawName.includes('خمس نجوم') || rawName.includes('فاخر') ? 'خمس نجوم'
+         : rawName.includes('اقتصادي متميز') ? 'اقتصادي متميز'
+         : rawName.includes('اقتصادي') ? 'اقتصادي'
+         : 'اقتصادي')
+    const mh: string   = p.makkahHotel ?? p.meccaHotel  ?? ''
+    const dh: string   = p.madinahHotel ?? p.medinaHotel ?? ''
+    if (mh) { if (!meccaByLevel.has(level))  meccaByLevel.set(level,  new Set()); meccaByLevel.get(level)!.add(mh)  }
+    if (dh) { if (!medinaByLevel.has(level)) medinaByLevel.set(level, new Set()); medinaByLevel.get(level)!.add(dh) }
+  }
+
+  const LEVEL_ORDER = ['خمس نجوم', 'اقتصادي متميز', 'اقتصادي']
+  const levels = requestedLevel
+    ? LEVEL_ORDER.filter(l => l === requestedLevel && (meccaByLevel.has(l) || medinaByLevel.has(l)))
+    : LEVEL_ORDER.filter(l => meccaByLevel.has(l) || medinaByLevel.has(l))
+
+  if (levels.length === 0) return null
+
+  const lines: string[] = ['فنادق الإقامة في برامجنا 🏨']
+  for (const level of levels) {
+    const mh = meccaByLevel.get(level)
+    const dh = medinaByLevel.get(level)
+    if (!mh?.size && !dh?.size) continue
+    lines.push(`\n*${level}*`)
+    if (mh?.size) lines.push(`• مكة المكرمة: ${[...mh].join('، ')}`)
+    if (dh?.size) lines.push(`• المدينة المنورة: ${[...dh].join('، ')}`)
+  }
+
+  lines.push('\nعندك سؤال تاني عن البرامج؟ 🤍')
+  return lines.join('\n')
+}
 
 function countNameAsksInHistory(messages: any[]): number {
   const patterns = ['تشرفنا باسم', 'اسم حضرتك', 'باسم حضرتك', 'ممكن اعرف اسم']
@@ -296,8 +342,16 @@ export class WhatsAppService {
     const aiPrompt = company.aiPrompt ?? ''
     const waPhone  = company.phone ?? company.ownerPhone ?? ''
 
-    const companyFAQs = await getCompanyFAQ(this.prisma, companyId)
+    const companyFAQs    = await getCompanyFAQ(this.prisma, companyId)
     const prebuiltCatalog = await getPrebuiltCatalog(this.prisma, companyId, company.name)
+    const entityBlocklist = buildEntityBlocklist(prebuiltCatalog)
+    const aiTemplates    = await getAIConfigTemplates(this.prisma, companyId)
+
+    // Repeat-failure tracker: save the previous no-match count, then reset for this message.
+    // If a deterministic handler or FAQ fires and returns, the map stays at 0 (reset).
+    // Only the AI-fallthrough path will restore prevNoMatch+1 into the map.
+    const prevNoMatch = noMatchMap.get(conv.id) ?? 0
+    noMatchMap.set(conv.id, 0)
 
     // Name-ask ceiling: stop asking for name after 2 asks or if customer complained
     const nameAsks = countNameAsksInHistory((conv.messages as any[]) ?? [])
@@ -552,6 +606,30 @@ export class WhatsAppService {
       }
     }
 
+    // ── Route 2 (early): FAQ keyword match — fires before any overview bypass ──────
+    const faqAnswer = matchFAQ(text, companyFAQs)
+    if (faqAnswer) {
+      await persistReply(conv.id, faqAnswer)
+      console.log(`FAQ_MATCH → ${phone}`)
+      return faqAnswer
+    }
+
+    // ── Route 4a (early): blocked category — fires before any overview bypass ────
+    const { matched: isBlocked, category: blockedCat } = detectBlockedCategory(text, aiTemplates?.blockedCategories)
+    if (isBlocked) {
+      const handoffMsg = buildHandoffMessage(aiTemplates)
+      await persistReply(conv.id, handoffMsg)
+      logHandoff(this.prisma, { companyId, conversationId: conv.id, phone, customerMessage: text, reason: 'blocked_category', category: blockedCat })
+      if (!simulate) {
+        await this.prisma.conversation.update({
+          where: { id: conv.id },
+          data:  { status: ConvStatus.NEEDS_HUMAN, handoffMessageSent: true },
+        })
+      }
+      console.log(`BLOCKED_CATEGORY → ${phone} cat=${blockedCat}`)
+      return handoffMsg
+    }
+
     // First-message overview bypass: zero AI calls — intro from code, prebuilt message appended
     if (totalMsgCount === 1 && containsFirstMessageQuestion(text) && prebuiltCatalog) {
       const firstMsgUmrahMonth  = detectUmrahMonth(text)
@@ -723,6 +801,26 @@ export class WhatsAppService {
       return askHotel
     }
 
+    // ── Hotel content handler: hotel name/type questions → deterministic from catalog ─
+    if (prebuiltCatalog && detectHotelContentIntent(text)) {
+      const requestedLevel = detectUmrahLevel(text)
+      const hotelReply = buildHotelNamesReply(prebuiltCatalog.rawUmrahPrograms, requestedLevel)
+      if (hotelReply) {
+        await persistReply(conv.id, hotelReply)
+        console.log(`HOTEL_CONTENT_HANDLER → ${phone} level=${requestedLevel ?? 'all'}`)
+        return hotelReply
+      }
+      // No catalog data — safe handoff rather than letting AI name hotels
+      const handoffMsg = buildHandoffMessage(aiTemplates)
+      await persistReply(conv.id, handoffMsg)
+      logHandoff(this.prisma, { companyId, conversationId: conv.id, phone, customerMessage: text, reason: 'no_handler', category: 'hotel_names_no_catalog' })
+      if (!simulate) {
+        await this.prisma.conversation.update({ where: { id: conv.id }, data: { status: ConvStatus.NEEDS_HUMAN, handoffMessageSent: true } })
+      }
+      console.log(`HOTEL_CONTENT_NO_CATALOG → ${phone} → handoff`)
+      return handoffMsg
+    }
+
     // ── Price-pivot handler: price intent without duration or month — pivot to duration question ─
     if (prebuiltCatalog?.durationPivotMsg && detectPriceIntent(text)
         && detectDurationDays(text) === null && detectUmrahMonth(text) === null
@@ -732,6 +830,25 @@ export class WhatsAppService {
       return prebuiltCatalog.durationPivotMsg
     }
 
+    // ── Route 4b: repeat failure — 2 consecutive no-handler/no-FAQ messages ────
+    const newNoMatch = prevNoMatch + 1
+    noMatchMap.set(conv.id, newNoMatch)
+    if (newNoMatch >= 2) {
+      noMatchMap.set(conv.id, 0) // reset after triggering
+      const handoffMsg = buildHandoffMessage(aiTemplates)
+      await persistReply(conv.id, handoffMsg)
+      logHandoff(this.prisma, { companyId, conversationId: conv.id, phone, customerMessage: text, reason: 'repeat_failure' })
+      if (!simulate) {
+        await this.prisma.conversation.update({
+          where: { id: conv.id },
+          data:  { status: ConvStatus.NEEDS_HUMAN, handoffMessageSent: true },
+        })
+      }
+      console.log(`REPEAT_FAILURE → ${phone} (${newNoMatch} consecutive no-handler messages)`)
+      return handoffMsg
+    }
+
+    // ── AI call (Route 4 fallback if output guard fires) ────────────────────────
     let rawAIReply = AI_ERROR_REPLY
     let aiCostUSD = 0
     try {
@@ -760,6 +877,25 @@ export class WhatsAppService {
 
     resetAIFailure(conv.id)
     writeCostRecord(this.prisma, companyId, conv.id, aiCostUSD)
+
+    // ── Output guard: discard model output if it contains any fact-shaped content ─
+    // The model may only produce social language at this point; digits or month names
+    // mean it tried to state a fact it doesn't own — route to human instead.
+    const guardTrigger = scanModelOutput(rawAIReply, entityBlocklist)
+    if (guardTrigger) {
+      const handoffMsg = buildHandoffMessage(aiTemplates)
+      await persistReply(conv.id, handoffMsg)
+      logHandoff(this.prisma, { companyId, conversationId: conv.id, phone, customerMessage: text, reason: 'output_guard', blockedOutput: rawAIReply })
+      if (!simulate) {
+        await this.prisma.conversation.update({
+          where: { id: conv.id },
+          data:  { status: ConvStatus.NEEDS_HUMAN, handoffMessageSent: true },
+        })
+      }
+      console.log(`OUTPUT_GUARD_BLOCK → ${phone} trigger=${guardTrigger} discarded="${rawAIReply.substring(0, 60)}"`)
+      return handoffMsg
+    }
+
     const reply = applyHajjDateDisclaimer(rawAIReply)
 
     await persistReply(conv.id,reply)
@@ -879,30 +1015,22 @@ export class WhatsAppService {
           return [reply, ovMsg]
         }
 
-        // ── Generic overview: second AI call for other service/price questions ────
-        const secondHistory = [
-          { role: 'user' as const, content: text },
-          { role: 'assistant' as const, content: reply },
-          { role: 'user' as const, content: `اعرضلي نظرة عامة مختصرة على كل البرامج المتاحة — اسم البرنامج والسعر للفرد في سطر واحد لكل برنامج — بدون تفاصيل زيادة` },
-        ]
-        const overviewInstr = '[تعليمات إلزامية: اعرض الآن نظرة عامة مختصرة على كل البرامج المتاحة — اسم البرنامج + السعر للفرد في سطر واحد — ممنوع تأجيل العرض أو طلب اسم أو عدد — البرامج ذات السعر الخاص تُدرج حرفاً بـ"سعر خاص — للتواصل مع المبيعات" ولا تُحذف — اجمعهم بشكل طبيعي بعد العرض — اختم بـ: "تحب تفاصيل برنامج معين ولا أعرضلك تفاصيل كل البرامج؟"]'
-        const secondAiPrompt = effectiveAiPrompt ? `${effectiveAiPrompt}\n\n${overviewInstr}` : overviewInstr
-        let secondReply = ''
-        let secondCost = 0
-        try {
-          const r2 = await getAgentReply(secondHistory, company.name, packages, secondAiPrompt, waPhone, company.industry, returningCustomer, knownCustomerName, companyFAQs, knownLeadFacts, prebuiltCatalog)
-          secondReply = r2.reply
-          secondCost = r2.costUSD
-        } catch (err) {
-          if (err instanceof ApiCreditsExhaustedError) await handleAICreditsExhausted(this.prisma, companyId)
+        // ── Route 3 (CLARIFIER): duration clarifier replaces the fact-emitting second AI call ──
+        // The previous path asked the model to list programs with prices — a policy violation.
+        // Serve the code-built duration pivot question instead; if unavailable, route to human.
+        if (prebuiltCatalog?.durationPivotMsg) {
+          await persistReply(conv.id, prebuiltCatalog.durationPivotMsg)
+          console.log(`DURATION_CLARIFIER_FIRST → ${phone}`)
+          return [reply, prebuiltCatalog.durationPivotMsg]
         }
-        if (secondReply && secondReply !== AI_ERROR_REPLY) {
-          const secondCleaned = applyHajjDateDisclaimer(secondReply)
-          await persistReply(conv.id,secondCleaned)
-          writeCostRecord(this.prisma, companyId, conv.id, secondCost)
-          console.log(`FIRST_MSG_QUESTION_ANSWER → ${phone}`)
-          return [reply, secondCleaned]
+        const clarifierHandoffMsg = buildHandoffMessage(aiTemplates)
+        await persistReply(conv.id, clarifierHandoffMsg)
+        logHandoff(this.prisma, { companyId, conversationId: conv.id, phone, customerMessage: text, reason: 'no_handler' })
+        if (!simulate) {
+          await this.prisma.conversation.update({ where: { id: conv.id }, data: { status: ConvStatus.NEEDS_HUMAN, handoffMessageSent: true } })
         }
+        console.log(`NO_CATALOG_CLARIFIER_FIRST → ${phone} routed to human`)
+        return [reply, clarifierHandoffMsg]
       }
 
       return reply
@@ -1022,6 +1150,9 @@ export class WhatsAppService {
     const waPhone  = company.phone ?? company.ownerPhone ?? ''
     const faqs = await getCompanyFAQ(this.prisma, conv.companyId)
     const prebuiltCatalogTrigger = await getPrebuiltCatalog(this.prisma, conv.companyId, company.name)
+    const triggerEntityBlocklist = buildEntityBlocklist(prebuiltCatalogTrigger)
+
+    const triggerTemplates = await getAIConfigTemplates(this.prisma, conv.companyId)
 
     let rawTriggerReply = AI_ERROR_REPLY
     try {
@@ -1031,6 +1162,18 @@ export class WhatsAppService {
     } catch (err) {
       if (err instanceof ApiCreditsExhaustedError) await handleAICreditsExhausted(this.prisma, conv.companyId)
     }
+
+    // ── Output guard (trigger path) ───────────────────────────────────────────
+    const triggerGuard = scanModelOutput(rawTriggerReply, triggerEntityBlocklist)
+    if (triggerGuard) {
+      const triggerHandoff = buildHandoffMessage(triggerTemplates)
+      await saveAssistantMessage(this.prisma, convId, triggerHandoff)
+      const lastUserMsg = freshMessages.filter(m => m.role === 'USER').at(-1)?.content ?? ''
+      logHandoff(this.prisma, { companyId: conv.companyId, conversationId: convId, phone: conv.phone, customerMessage: lastUserMsg, reason: 'output_guard', blockedOutput: rawTriggerReply })
+      console.log(`OUTPUT_GUARD_BLOCK(TRIGGER) → conv=${convId} trigger=${triggerGuard}`)
+      return { reply: triggerHandoff, phone: conv.phone, waToken: company.waToken, waPhoneId: company.waPhoneId }
+    }
+
     const reply = applyHajjDateDisclaimer(rawTriggerReply)
 
     await saveAssistantMessage(this.prisma, convId, reply)
