@@ -2,6 +2,19 @@ import { PrismaService } from '../prisma/prisma.service'
 import { PrebuiltCatalog } from '../agent/agent.service'
 import { buildIndustryPromptFromDB, FieldDef } from '../agent/prompts/dynamic-catalog-builder'
 
+// Accepts true / "true" / 'true' / TRUE / 1 / yes — any surrounding quotes or casing variant.
+// Guards against Railway (and similar platforms) that store flag vars as `"true"` with literal quotes.
+function resolveFlag(raw: string | undefined): boolean {
+  if (!raw) return false
+  const n = raw.replace(/^["']|["']$/g, '').trim().toLowerCase()
+  return n === 'true' || n === '1' || n === 'yes'
+}
+
+const USE_DB_CATALOG_RESOLVED = resolveFlag(process.env.USE_DB_CATALOG)
+console.log(
+  `[STARTUP] USE_DB_CATALOG raw="${process.env.USE_DB_CATALOG ?? ''}" → resolved=${USE_DB_CATALOG_RESOLVED}`,
+)
+
 // In-memory per-company catalog cache.  TTL = 5 minutes.
 // Invalidated explicitly by invalidateCatalogCache() — call this wherever
 // Offering or OfferingType rows are written so the next request rebuilds.
@@ -18,7 +31,7 @@ export async function getPrebuiltCatalog(
   companyId: string,
   companyName: string,
 ): Promise<PrebuiltCatalog | undefined> {
-  if (process.env.USE_DB_CATALOG !== 'true') return undefined
+  if (!USE_DB_CATALOG_RESOLVED) return undefined
 
   const now = Date.now()
   const cached = cache.get(companyId)
