@@ -2,7 +2,7 @@
 // so the AI can send an immediate answer after the welcome instead of waiting for a name.
 // "هل" uses a lookbehind to avoid matching inside greetings like "أهلاً".
 export function containsFirstMessageQuestion(text: string): boolean {
-  const QUESTION_SIGNALS = /عايز|محتاج|قولي|ممكن|أريد|اريد|كام|بكام|عندكم|فيه|ينفع|إيه|ايه|ما هو|(?<![ء-ي])هل|متى|فين|أسعار|اسعار|برامج|رحلة|رحلات/
+  const QUESTION_SIGNALS = /عايز|محتاج|قولي|ممكن|أريد|اريد|كام|بكام|عندكم|فيه|ينفع|إيه|ايه|ما هو|(?<![ء-ي])هل|متى|فين|أسعار|اسعار|برامج|رحلة|رحلات|عروض|باقات/
   const SERVICE_SIGNALS  = /عمرة|حج|يوليو|أغسطس|سبتمبر|سعر|فندق|برنامج/
   return QUESTION_SIGNALS.test(text) || SERVICE_SIGNALS.test(text)
 }
