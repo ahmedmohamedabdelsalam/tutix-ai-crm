@@ -88,7 +88,12 @@ export function detectHotelDistanceIntent(text: string): boolean {
 }
 
 export function detectUmrahOverviewIntent(text: string): boolean {
-  return /عمرة/.test(text) && /برامج|رحلات|أسعار|اسعار|عندكم|عايز|محتاج|قولي/.test(text)
+  return /عمرة|عمره/.test(text) && /برامج|رحلات|أسعار|اسعار|عروض|باقات|عندكم|عايز|محتاج|قولي/.test(text)
+}
+
+// Detects "nearest / next trip" queries: "أقرب رحلة عمرة امتى", "أول رحلة عمرة", "القادمة امتى"
+export function detectNearestTripIntent(text: string): boolean {
+  return /أقرب|اقرب|القادمة|القادم|الجاي|أول\s*رحلة|اول\s*رحلة/.test(text) && /عمرة|عمره|رحلة|سفر/.test(text)
 }
 
 // Detects Meta CTA button tap ("هل يمكنني الحصول على مزيد من المعلومات") or an

@@ -8,7 +8,7 @@ import { applyHajjDateDisclaimer } from './hajj-date-disclaimer'
 import { companionConfirmedInHistory, travelDateConfirmedInHistory } from './lead-fact-guards'
 import { detectOnlinePayment, detectFarFromBranch, detectVisitConfirm } from './booking-stage-detectors'
 import { getGovFromText, branchMessage } from './branch-lookup'
-import { containsFirstMessageQuestion, detectUmrahMonth, detectUmrahLevel, detectFullDetailsIntent, detectContinueResponse, detectHajjOverviewIntent, detectHajjCategoryReply, detectNumberReply, detectUmrahOverviewIntent, detectCTAMessage, detectDurationDays, detectPriceIntent, detectScheduleIntent, detectFlightIntent, detectInstallmentIntent, detectHotelDistanceIntent } from './intent-detectors'
+import { containsFirstMessageQuestion, detectUmrahMonth, detectUmrahLevel, detectFullDetailsIntent, detectContinueResponse, detectHajjOverviewIntent, detectHajjCategoryReply, detectNumberReply, detectUmrahOverviewIntent, detectCTAMessage, detectDurationDays, detectPriceIntent, detectScheduleIntent, detectFlightIntent, detectInstallmentIntent, detectHotelDistanceIntent, detectNearestTripIntent } from './intent-detectors'
 
 import { detectFollowUpIntent, clampToWindow, DEFERRAL_PHRASES } from './follow-up-scheduler'
 import { handleAICreditsExhausted, writeCostRecord } from './ai-cost-helpers'
@@ -431,7 +431,7 @@ export class WhatsAppService {
       const umrahLevel   = detectUmrahLevel(text)
       const hajjOvIntent = detectHajjOverviewIntent(text)
       const isUmrahOv    = !!ovMonth && !!prebuiltCatalog.umrahMonthMessages?.[ovMonth]
-      const isUmrahAllOv = !ovMonth && detectUmrahOverviewIntent(text) && !!prebuiltCatalog.umrahAllMonthsMessage
+      const isUmrahAllOv = !ovMonth && detectUmrahOverviewIntent(text) && !!prebuiltCatalog.umrahAllMonthsMessage && !detectHotelDistanceIntent(text)
 
       // Hajj category-aware bypass — handled separately (no intro message)
       // Flight queries pass through so the flight handler can answer per-program.
@@ -512,12 +512,37 @@ export class WhatsAppService {
       const durationDays = detectDurationDays(text)
       if (durationDays !== null) {
         if (prebuiltCatalog.umrahDurationMessages[durationDays]) {
-          const msg = prebuiltCatalog.umrahDurationMessages[durationDays]
+          const requestedLevel = detectUmrahLevel(text)
           const rawTrips = groupUmrahTrips(prebuiltCatalog.rawUmrahPrograms, { durationDays })
+
+          // W1: if customer requested a specific level, check if it exists for this duration
+          let levelMismatch = ''
+          if (requestedLevel && prebuiltCatalog.rawUmrahPrograms) {
+            const levelExists = prebuiltCatalog.rawUmrahPrograms.some(p => {
+              const dep: string = p.departureDate ?? ''
+              const ret: string = p.returnDate ?? ''
+              if (!dep || !ret || !/^\d{4}-\d{2}-\d{2}$/.test(dep)) return false
+              const days = Math.round(
+                (new Date(ret + 'T00:00:00Z').getTime() - new Date(dep + 'T00:00:00Z').getTime()) / 86400000,
+              ) + 1
+              if (days !== durationDays) return false
+              const name: string = p.name ?? ''
+              if (requestedLevel === 'خمس نجوم') return name.includes('خمس نجوم') || name.includes('فاخر')
+              if (requestedLevel === 'اقتصادي متميز') return name.includes('اقتصادي متميز')
+              if (requestedLevel === 'اقتصادي') return name.includes('اقتصادي') && !name.includes('اقتصادي متميز')
+              return false
+            })
+            if (!levelExists) {
+              const durWord = durationDays >= 3 && durationDays <= 10 ? 'أيام' : 'يوم'
+              levelMismatch = `مش عندنا برامج ${requestedLevel} لمدة ${toArabicIndic(durationDays)} ${durWord} — اتفضل المتاح:\n\n`
+            }
+          }
+
+          const msg = levelMismatch + prebuiltCatalog.umrahDurationMessages[durationDays]
           overviewMap.set(conv.id, { orderedDetails: prebuiltCatalog.umrahDurationDetails[durationDays], rawTrips })
           await persistReply(conv.id, 'اتفضل يافندم')
           await persistReply(conv.id, msg)
-          console.log(`DURATION_BYPASS → ${phone} days=${durationDays}`)
+          console.log(`DURATION_BYPASS → ${phone} days=${durationDays}${requestedLevel ? ` level=${requestedLevel} mismatch=${!!levelMismatch}` : ''}`)
           return ['اتفضل يافندم', msg]
         } else if (prebuiltCatalog.durationPivotMsg) {
           await persistReply(conv.id, prebuiltCatalog.durationPivotMsg)
@@ -533,7 +558,7 @@ export class WhatsAppService {
       const firstMsgUmrahLevel  = detectUmrahLevel(text)
       const hajjOvIntentFirst   = detectHajjOverviewIntent(text)
       const isUmrahOvFirst      = !!firstMsgUmrahMonth && !!prebuiltCatalog.umrahMonthMessages?.[firstMsgUmrahMonth]
-      const isUmrahAllOvFirst   = !firstMsgUmrahMonth && detectUmrahOverviewIntent(text) && !!prebuiltCatalog.umrahAllMonthsMessage
+      const isUmrahAllOvFirst   = !firstMsgUmrahMonth && detectUmrahOverviewIntent(text) && !!prebuiltCatalog.umrahAllMonthsMessage && !detectHotelDistanceIntent(text)
 
       // Hajj category-aware bypass — no intro, no AI
       // Flight queries pass through so the flight handler can answer per-program.
@@ -609,25 +634,48 @@ export class WhatsAppService {
       }
     }
 
-    // ── Schedule handler (standalone): no trip number in context → ask for it ───
+    // ── Schedule handler: if overview was already shown → ask for trip number
+    //                       if no overview shown yet → show overview first (B2)
     if (prebuiltCatalog && detectScheduleIntent(text) && detectHajjOverviewIntent(text) === null) {
+      if (!overviewMap.has(conv.id) && prebuiltCatalog.umrahAllMonthsMessage) {
+        const rawTrips = groupUmrahTrips(prebuiltCatalog.rawUmrahPrograms)
+        overviewMap.set(conv.id, { orderedDetails: prebuiltCatalog.umrahAllMonthsDetails, rawTrips })
+        const schedAsk = 'ابعت رقم الرحلة اللي يناسبك وهبعتلك الجدول كامل 🤍'
+        await persistReply(conv.id, 'اتفضل يافندم')
+        await persistReply(conv.id, prebuiltCatalog.umrahAllMonthsMessage)
+        await persistReply(conv.id, schedAsk)
+        console.log(`SCHEDULE_SHOW_OV → ${phone}`)
+        return ['اتفضل يافندم', prebuiltCatalog.umrahAllMonthsMessage, schedAsk]
+      }
       const noCtxMsg = 'ابعت رقم البرنامج اللي حضرتك مهتم بيه وهبعتلك الجدول الكامل 🤍'
       await persistReply(conv.id, noCtxMsg)
       console.log(`SCHEDULE_NO_CTX → ${phone}`)
       return noCtxMsg
     }
 
-    // ── Flight handler: per-program from context, or ask for trip number ────────
+    // ── Flight handler: if overview was already shown → ask for trip number
+    //                     if no overview shown yet → show overview first (B2)
     if (prebuiltCatalog && detectFlightIntent(text)) {
       const isHajjQ = detectHajjOverviewIntent(text) !== null
-      let flightMsg: string
       if (isHajjQ) {
-        flightMsg = 'يافندم برامج الحج بتاعتنا الأسعار بدون تذكرة الطيران أو العبّارة — التذكرة بتُحسب منفصلة حسب توفرها وقت الحجز.\n\nعندك سؤال تاني عن برامج الحج؟ 🤍'
-      } else {
-        flightMsg = 'ابعت رقم الرحلة المحددة اللي بتستفسر عنها وهبعتلك تفاصيل الطيران بتاعها 🤍'
+        const hajjFlightMsg = 'يافندم برامج الحج بتاعتنا الأسعار بدون تذكرة الطيران أو العبّارة — التذكرة بتُحسب منفصلة حسب توفرها وقت الحجز.\n\nعندك سؤال تاني عن برامج الحج؟ 🤍'
+        await persistReply(conv.id, hajjFlightMsg)
+        console.log(`FLIGHT_HANDLER → ${phone} hajj=true`)
+        return hajjFlightMsg
       }
+      if (!overviewMap.has(conv.id) && prebuiltCatalog.umrahAllMonthsMessage) {
+        const rawTrips = groupUmrahTrips(prebuiltCatalog.rawUmrahPrograms)
+        overviewMap.set(conv.id, { orderedDetails: prebuiltCatalog.umrahAllMonthsDetails, rawTrips })
+        const flightAsk = 'ابعت رقم الرحلة اللي بتستفسر عنها وهبعتلك تفاصيل الطيران 🤍'
+        await persistReply(conv.id, 'اتفضل يافندم')
+        await persistReply(conv.id, prebuiltCatalog.umrahAllMonthsMessage)
+        await persistReply(conv.id, flightAsk)
+        console.log(`FLIGHT_SHOW_OV → ${phone}`)
+        return ['اتفضل يافندم', prebuiltCatalog.umrahAllMonthsMessage, flightAsk]
+      }
+      const flightMsg = 'ابعت رقم الرحلة المحددة اللي بتستفسر عنها وهبعتلك تفاصيل الطيران بتاعها 🤍'
       await persistReply(conv.id, flightMsg)
-      console.log(`FLIGHT_HANDLER → ${phone} hajj=${isHajjQ}`)
+      console.log(`FLIGHT_HANDLER → ${phone} hajj=false`)
       return flightMsg
     }
 
@@ -636,6 +684,21 @@ export class WhatsAppService {
       await persistReply(conv.id, prebuiltCatalog.installmentReply)
       console.log(`INSTALLMENT_HANDLER → ${phone}`)
       return prebuiltCatalog.installmentReply
+    }
+
+    // ── Nearest trip handler: "أقرب رحلة عمرة امتى" → earliest departure from catalog ─
+    if (prebuiltCatalog && detectNearestTripIntent(text) && prebuiltCatalog.rawUmrahPrograms?.length) {
+      const trips = groupUmrahTrips(prebuiltCatalog.rawUmrahPrograms)
+      if (trips.length > 0 && prebuiltCatalog.umrahAllMonthsDetails?.length > 0) {
+        const nearest = trips[0]
+        const detail = prebuiltCatalog.umrahAllMonthsDetails[0]
+        overviewMap.set(conv.id, { orderedDetails: prebuiltCatalog.umrahAllMonthsDetails, rawTrips: trips })
+        const closingQ = '\n\nعندك سؤال تاني عن الرحلة؟ 🤍'
+        await persistReply(conv.id, 'اتفضل يافندم — أقرب رحلة عمرة عندنا:')
+        await persistReply(conv.id, detail + closingQ)
+        console.log(`NEAREST_TRIP_HANDLER → ${phone} dep=${nearest.depISO}`)
+        return ['اتفضل يافندم — أقرب رحلة عمرة عندنا:', detail + closingQ]
+      }
     }
 
     // ── Hotel distance handler: reply with stored distance from hotelList; no AI ──
