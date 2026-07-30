@@ -1,0 +1,30 @@
+#!/bin/sh
+# Pre-push guard: prevents the "Railway builds break but local builds pass" pattern.
+#
+# Root cause: a .ts file is created locally and immediately imported by committed
+# source code, but the file itself is never staged. Local incremental builds pass
+# (the file exists on disk); Railway clean-checkout builds fail (file missing).
+#
+# This hook catches two classes of error:
+#   1. Untracked .ts files in src/ — would be absent from Railway's clean checkout.
+#   2. TypeScript errors masked by the local incremental build cache.
+
+set -e
+
+# ── 1. Block uncommitted .ts files in src/ ────────────────────────────────────
+UNTRACKED=$(git ls-files --others --exclude-standard -- 'src/' 2>/dev/null | grep '\.ts$' || true)
+if [ -n "$UNTRACKED" ]; then
+  printf '\n[pre-push] BLOCKED — untracked .ts files found in src/:\n'
+  printf '%s\n' "$UNTRACKED" | sed 's/^/  /'
+  printf '\nThese files will be absent from Railway'"'"'s clean checkout and break the build.\n'
+  printf 'Fix: git add <file(s)> then retry push.\n\n'
+  exit 1
+fi
+
+# ── 2. Incremental-cache check ────────────────────────────────────────────────
+# Run npm run build.  This reuses the local incremental cache (fast) and catches
+# newly introduced TypeScript errors.  For a full clean-checkout simulation run:
+#   npm run build:clean
+printf '[pre-push] running build check...\n'
+npm run build
+printf '[pre-push] OK — safe to push\n'

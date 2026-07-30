@@ -143,79 +143,79 @@ function delay(ms) { return new Promise(r => setTimeout(r, ms)) }
 // A: 20-QUESTION GATE (identical to gate v3, against local server)
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const GATE_QUESTIONS = [
-  { id: 'Q01', label: 'CTA (35%)',                  msg: 'Ù…Ø±Ø­Ø¨Ù‹Ø§! Ù‡Ù„ ÙŠÙ…ÙƒÙ†Ù†ÙŠ Ø§Ù„Ø­ØµÙˆÙ„ Ø¹Ù„Ù‰ Ù…Ø²ÙŠØ¯ Ù…Ù† Ø§Ù„Ù…Ø¹Ù„ÙˆÙ…Ø§Øª Ø­ÙˆÙ„ Ù‡Ø°Ø§ØŸ' },
-  { id: 'Q02', label: 'Duration 15d',               msg: 'Ù…Ù…ÙƒÙ† ØªÙØ§ØµÙŠÙ„ Ø§Ù„Ø¹Ù…Ø±Ù‡ Ù¡Ù¥ÙŠÙˆÙ…' },
-  { id: 'Q03', label: 'Duration 10d economy',       msg: 'Ù…Ù…ÙƒÙ† ØªÙØ§ØµÙŠÙ„ Ø¹Ù† Ø±Ø­Ù„Ø§Øª Ø§Ù„Ø¹Ù…Ø±Ø© Ø§Ù„Ø§Ù‚ØªØµØ§Ø¯ÙŠØ© Ù¡Ù  Ø§ÙŠØ§Ù…' },
-  { id: 'Q04', label: 'Duration 7d',                msg: 'Ù…Ù…ÙƒÙ† Ø§Ø¹Ø±Ù Ø¨Ø±Ø§Ù…Ø¬ Ø¹Ù…Ø±Ù‡ Ø§Ù„Ù…ÙˆÙ„Ø¯ Ø§Ù„Ù†Ø¨ÙˆÙŠ Ù§Ø§ÙŠØ§Ù…' },
-  { id: 'Q05', label: 'Schedule first-contact',     msg: 'Ù…ÙˆØ§Ø¹ÙŠØ¯ Ø§Ù„Ø¹Ù…Ø±Ù‡ ÙˆØ§Ù„Ø¨Ø±Ø§Ù…Ø¬ Ø§Ù„Ù…ØªØ§Ø­Ù‡' },
-  { id: 'Q06', label: 'Flight first-contact',       msg: 'Ù…Ù…ÙƒÙ† Ø§Ù„ØªÙØ§ØµÙŠÙ„ ÙˆØ§ÙŠ Ø§Ù„Ø·ÙŠØ±Ø§Ù†' },
-  { id: 'Q07', label: 'Installment',                msg: 'Ø¹Ù†Ø¯ÙƒÙ… ØªÙ‚Ø³ÙŠØ·ØŸ' },
-  { id: 'Q08', label: 'Hotel dist: no hotel',       msg: 'Ù…Ù…ÙƒÙ† Ø§Ø¹Ø±Ù Ø§Ø³Ø¹Ø§Ø± Ø§Ù„Ø¹Ù…Ø±Ø© ÙÙ†Ø§Ø¯Ù‚ Ù‚Ø±ÙŠØ¨Ø© Ù…Ù† Ø§Ù„Ø­Ø±Ù…ØŸ' },
-  { id: 'Q09', label: 'Hotel dist: Ù…ÙˆÙÙ†Ø¨ÙŠÙƒ',         msg: 'Ù…ÙˆÙÙ†Ø¨ÙŠÙƒ ÙƒØ§Ù… Ù…ØªØ± Ù…Ù† Ø§Ù„Ø­Ø±Ù…ØŸ' },
-  { id: 'Q10', label: 'Hajj economy',               msg: 'Ø¨Ø³Ø§Ù„ Ø¹Ù† Ø§Ù„Ø­Ø¬ Ø§Ù„Ø§Ù‚ØªØµØ§Ø¯ÙŠ' },
-  { id: 'Q11', label: 'Greeting only',              msg: 'Ø§Ù„Ø³Ù„Ø§Ù… Ø¹Ù„ÙŠÙƒÙ…' },
-  { id: 'Q12', label: 'Job inquiry',                msg: 'Ø§Ù„Ø³Ù„Ø§Ù… Ø¹Ù„ÙŠÙƒÙ… \nØ£Ù†Ø§ Ø¢ÙŠØ© Ø§Ù„Ø²ÙŠØ§Øª Ø®Ø±ÙŠØ¬Ù‡ Ù…Ù† Ø¢Ø¯Ø§Ø¨ Ø¢Ø«Ø§Ø± ØŒ ÙƒÙ†Øª Ø¨Ø³Ø£Ù„ Ù„Ùˆ Ù…ØªØ§Ø­ Ø´ØºÙ„' },
-  { id: 'Q13', label: 'Short: Ø§Ù„Ø¹Ù…Ø±Ù‡',              msg: 'Ø§Ù„Ø¹Ù…Ø±Ù‡' },
-  { id: 'Q14', label: 'Pure price',                 msg: 'Ø§Ù„Ø£Ø³Ø¹Ø§Ø± Ø§ÙŠÙ‡' },
-  { id: 'Q15', label: 'Ø¹Ø±ÙˆØ¶ Ø§Ù„Ø¹Ù…Ø±Ù‡ (W2)',            msg: 'Ø¹Ø±ÙˆØ¶ Ø§Ù„Ø¹Ù…Ø±Ù‡' },
-  { id: 'Q16', label: 'Month: Ø³Ø¨ØªÙ…Ø¨Ø± + stars',      msg: 'Ø§Ø±Ø¬Ùˆ Ø§Ø±Ø³Ø§Ù„ Ø§Ù„ØªÙØ§ØµÙŠÙ„ ÙˆØ§Ù„Ø§Ø³Ø¹Ø§Ø± Ø¹Ù† Ø§Ù„Ø¹Ù…Ø±Ø© Ø¨Ø±Ù†Ø§Ù…Ø¬ Ø§Ù„Ø®Ù…Ø³ Ù†Ø¬ÙˆÙ… Ø´Ù‡Ø± Ø³Ø¨ØªÙ…Ø¨Ø±' },
-  { id: 'Q17', label: 'Month: Ø£ØºØ³Ø·Ø³',               msg: 'Ù„Ùˆ Ø³Ù…Ø­ØªÙ… Ø¨Ø±Ø§Ù…Ø¬ Ø§Ù„Ø¹Ù…Ø±Ø© Ù§ Ø£Ùˆ Ù¡Ù  Ø§ÙŠØ§Ù… Ø®Ù„Ø§Ù„ Ø´Ù‡Ø± Ø£ØºØ³Ø·Ø³' },
-  { id: 'Q18', label: 'Compound: 15d+hotel+flight', msg: 'ØªÙØ§ØµÙŠÙ„ Ø§Ù„Ø¹Ù…Ø±Ù‡ Ù¡Ù¥ÙŠÙˆÙ… ÙˆØ§Ù…Ø§ÙƒÙ† Ø§Ù„Ø§Ù‚Ø§Ù…Ù‡ Ù‚Ø±ÙŠØ¨Ù‡ ÙˆÙ„Ø§ Ø¨Ø¹ÙŠØ¯Ù‡ Ø¹Ù† Ø§Ù„Ø­Ø±Ù… ÙˆØ§Ù„Ø§Ø³Ø¹Ø§Ø± ÙˆØ§Ù„Ø·ÙŠØ±Ø§Ù† Ù…Ù† Ø§Ø³ÙƒÙ†Ø¯Ø±ÙŠÙ‡ Ø´Ù‡Ø± Ù¡Ù ' },
-  { id: 'Q19', label: 'Compound: price+month+15d',  msg: 'Ù…Ù…ÙƒÙ† Ø£Ø¹Ø±Ù Ø³Ø¹Ø± Ø§Ù„Ø¹Ù…Ø±Ù‡ Ø§Ù„Ø¥Ù‚ØªØµØ§Ø¯ÙŠ Ø¢Ø®Ø± Ø´Ù‡Ø± 8 Ù„Ù„ 15 ÙŠÙˆÙ… 11 Ù…ÙƒÙ‡ Ùˆ 3 Ù…Ø¯ÙŠÙ†Ù‡' },
-  { id: 'Q20', label: 'Nearest trip (W4)',           msg: 'Ø§Ù‚Ø±Ø¨ Ø±Ø­Ù„Ø© Ø¹Ù…Ø±Ø© Ø§Ù…ØªÙŠ' },
+  { id: 'Q01', label: 'CTA (35%)',                  msg: 'مرحبًا! هل يمكنني الحصول على مزيد من المعلومات حول هذا؟' },
+  { id: 'Q02', label: 'Duration 15d',               msg: 'ممكن تفاصيل العمره ١٥يوم' },
+  { id: 'Q03', label: 'Duration 10d economy',       msg: 'ممكن تفاصيل عن رحلات العمرة الاقتصادية ١٠ ايام' },
+  { id: 'Q04', label: 'Duration 7d',                msg: 'ممكن اعرف برامج عمره المولد النبوي ٧ايام' },
+  { id: 'Q05', label: 'Schedule first-contact',     msg: 'مواعيد العمره والبرامج المتاحه' },
+  { id: 'Q06', label: 'Flight first-contact',       msg: 'ممكن التفاصيل واي الطيران' },
+  { id: 'Q07', label: 'Installment',                msg: 'عندكم تقسيط؟' },
+  { id: 'Q08', label: 'Hotel dist: no hotel',       msg: 'ممكن اعرف اسعار العمرة فنادق قريبة من الحرم؟' },
+  { id: 'Q09', label: 'Hotel dist: موفنبيك',         msg: 'موفنبيك كام متر من الحرم؟' },
+  { id: 'Q10', label: 'Hajj economy',               msg: 'بسال عن الحج الاقتصادي' },
+  { id: 'Q11', label: 'Greeting only',              msg: 'السلام عليكم' },
+  { id: 'Q12', label: 'Job inquiry',                msg: 'السلام عليكم \nأنا آية الزيات خريجه من آداب آثار ، كنت بسأل لو متاح شغل' },
+  { id: 'Q13', label: 'Short: العمره',              msg: 'العمره' },
+  { id: 'Q14', label: 'Pure price',                 msg: 'الأسعار ايه' },
+  { id: 'Q15', label: 'عروض العمره (W2)',            msg: 'عروض العمره' },
+  { id: 'Q16', label: 'Month: سبتمبر + stars',      msg: 'ارجو ارسال التفاصيل والاسعار عن العمرة برنامج الخمس نجوم شهر سبتمبر' },
+  { id: 'Q17', label: 'Month: أغسطس',               msg: 'لو سمحتم برامج العمرة ٧ أو ١٠ ايام خلال شهر أغسطس' },
+  { id: 'Q18', label: 'Compound: 15d+hotel+flight', msg: 'تفاصيل العمره ١٥يوم واماكن الاقامه قريبه ولا بعيده عن الحرم والاسعار والطيران من اسكندريه شهر ١٠' },
+  { id: 'Q19', label: 'Compound: price+month+15d',  msg: 'ممكن أعرف سعر العمره الإقتصادي آخر شهر 8 لل 15 يوم 11 مكه و 3 مدينه' },
+  { id: 'Q20', label: 'Nearest trip (W4)',           msg: 'اقرب رحلة عمرة امتي' },
 ]
 
 function evalGateVerdict(id, reply) {
-  if (id === 'Q01') return reply.includes('Ù¡â€¢ Ø¨Ø±Ø§Ù…Ø¬ Ø§Ù„Ø¹Ù…Ø±Ø©') ? 'PASS' : 'FAIL(no CTA menu)'
-  if (id === 'Q02') return reply.includes('Ù¡Ù¥ ÙŠÙˆÙ…') ? 'PASS' : 'FAIL(no 15d block)'
+  if (id === 'Q01') return reply.includes('١• برامج العمرة') ? 'PASS' : 'FAIL(no CTA menu)'
+  if (id === 'Q02') return reply.includes('١٥ يوم') ? 'PASS' : 'FAIL(no 15d block)'
   if (id === 'Q03') {
-    if (!reply.includes('Ù¡Ù  Ø£ÙŠØ§Ù…')) return 'FAIL(no 10d block)'
-    return reply.includes('Ù…Ø´ Ø¹Ù†Ø¯Ù†Ø§ Ø¨Ø±Ø§Ù…Ø¬ Ø§Ù‚ØªØµØ§Ø¯ÙŠ') ? 'PASS(mismatch noted)' : 'WARN(no mismatch msg)'
+    if (!reply.includes('١٠ أيام')) return 'FAIL(no 10d block)'
+    return reply.includes('مش عندنا برامج اقتصادي') ? 'PASS(mismatch noted)' : 'WARN(no mismatch msg)'
   }
-  if (id === 'Q04') return reply.includes('Ù§ Ø£ÙŠØ§Ù…') ? 'PASS' : 'FAIL(no 7d block)'
+  if (id === 'Q04') return reply.includes('٧ أيام') ? 'PASS' : 'FAIL(no 7d block)'
   if (id === 'Q05') {
-    if (reply.includes('Ø¨Ø±Ø§Ù…Ø¬ Ø§Ù„Ø¹Ù…Ø±Ø© Ù¢Ù Ù¢Ù¦')) return 'PASS(overview shown)'
-    if (reply.includes('Ø§Ø¨Ø¹Øª Ø±Ù‚Ù… Ø§Ù„Ø¨Ø±Ù†Ø§Ù…Ø¬')) return 'FAIL(dead end, no overview)'
+    if (reply.includes('برامج العمرة ٢٠٢٦')) return 'PASS(overview shown)'
+    if (reply.includes('ابعت رقم البرنامج')) return 'FAIL(dead end, no overview)'
     return 'MANUAL'
   }
   if (id === 'Q06') {
-    if (reply.includes('Ø¨Ø±Ø§Ù…Ø¬ Ø§Ù„Ø¹Ù…Ø±Ø© Ù¢Ù Ù¢Ù¦')) return 'PASS(overview shown)'
-    if (reply.includes('Ø§Ø¨Ø¹Øª Ø±Ù‚Ù… Ø§Ù„Ø±Ø­Ù„Ø© Ø§Ù„Ù…Ø­Ø¯Ø¯Ø©')) return 'FAIL(dead end, no overview)'
+    if (reply.includes('برامج العمرة ٢٠٢٦')) return 'PASS(overview shown)'
+    if (reply.includes('ابعت رقم الرحلة المحددة')) return 'FAIL(dead end, no overview)'
     return 'MANUAL'
   }
-  if (id === 'Q07') return reply.includes('ØªÙ‚Ø³ÙŠØ·') ? 'PASS' : 'FAIL(no installment info)'
+  if (id === 'Q07') return reply.includes('تقسيط') ? 'PASS' : 'FAIL(no installment info)'
   if (id === 'Q08') {
-    if (reply.includes('Ø£ÙŠ ÙÙ†Ø¯Ù‚')) return 'PASS(B1 fixed)'
-    if (reply.includes('Ø¨Ø±Ø§Ù…Ø¬ Ø§Ù„Ø¹Ù…Ø±Ø© Ù¢Ù Ù¢Ù¦') || reply.includes('ÙŠÙˆÙ„ÙŠÙˆ')) return 'FAIL(B1 broken: overview shown)'
+    if (reply.includes('أي فندق')) return 'PASS(B1 fixed)'
+    if (reply.includes('برامج العمرة ٢٠٢٦') || reply.includes('يوليو')) return 'FAIL(B1 broken: overview shown)'
     return 'MANUAL'
   }
-  if (id === 'Q09') return (reply.includes('Ù…ÙˆÙÙ†Ø¨ÙŠÙƒ') && reply.includes('Ø§Ù„Ù…Ø³Ø§ÙØ©')) ? 'PASS' : 'FAIL(no hotel distance)'
-  if (id === 'Q10') return (reply.includes('Ø§Ù„Ø­Ø¬') && reply.includes('Ù¢Ù£Ù©')) ? 'PASS' : 'MANUAL'
+  if (id === 'Q09') return (reply.includes('موفنبيك') && reply.includes('المسافة')) ? 'PASS' : 'FAIL(no hotel distance)'
+  if (id === 'Q10') return (reply.includes('الحج') && reply.includes('٢٣٩')) ? 'PASS' : 'MANUAL'
   if (id === 'Q11') return 'PASS'
   if (id === 'Q12') {
-    const handoffMarkers = ['Ø²Ù…ÙŠÙ„Ù†Ø§ Ø§Ù„Ù…Ø®ØªØµ', 'ØºÙŠØ± Ù…ØªØ§Ø­ Ø¯Ù„ÙˆÙ‚ØªÙŠ', 'Ù‡ÙŠØ±Ø¯ Ø¹Ù„ÙŠÙƒ', 'Ù‡ÙŠØªÙˆØ§ØµÙ„ Ù…Ø¹Ùƒ', 'Ù„Ø­Ø¸Ø© ÙŠØ§ÙÙ†Ø¯Ù…', 'ÙØ±ÙŠÙ‚Ù†Ø§']
+    const handoffMarkers = ['زميلنا المختص', 'غير متاح دلوقتي', 'هيرد عليك', 'هيتواصل معك', 'لحظة يافندم', 'فريقنا']
     if (handoffMarkers.some(m => reply.includes(m))) return 'PASS(handoff on job inquiry)'
-    if (/[Ù Ù¡Ù¢Ù£Ù¤Ù¥Ù¦Ù§Ù¨Ù©0-9]/.test(reply)) return 'FAIL(digit leaked in reply)'
-    if (/Ø¬Ù†ÙŠÙ‡|Ø¯ÙˆÙ„Ø§Ø±|Ù…ÙˆÙÙ†Ø¨ÙŠÙƒ|Ù‡ÙŠÙ„ØªÙˆÙ†|ÙÙŠØ±Ù…ÙˆÙ†Øª|Ø´ÙŠØ±Ø§ØªÙˆÙ†/.test(reply)) return 'FAIL(catalog fact in reply)'
+    if (/[٠١٢٣٤٥٦٧٨٩0-9]/.test(reply)) return 'FAIL(digit leaked in reply)'
+    if (/جنيه|دولار|موفنبيك|هيلتون|فيرمونت|شيراتون/.test(reply)) return 'FAIL(catalog fact in reply)'
     return 'PASS(social reply, no facts)'
   }
   if (id === 'Q13') {
-    if (reply.includes('Ø¨Ø±Ø§Ù…Ø¬ Ø§Ù„Ø¹Ù…Ø±Ø© Ù¢Ù Ù¢Ù¦') || reply.includes('ÙŠÙˆÙ„ÙŠÙˆ')) return 'FAIL(overview triggered â€” path changed)'
+    if (reply.includes('برامج العمرة ٢٠٢٦') || reply.includes('يوليو')) return 'FAIL(overview triggered â€” path changed)'
     return 'PASS'
   }
-  if (id === 'Q14') return reply.includes('Ø£Ù†Ù‡ÙŠ Ù…Ø¯Ø©') ? 'PASS' : 'FAIL(no duration pivot)'
+  if (id === 'Q14') return reply.includes('أنهي مدة') ? 'PASS' : 'FAIL(no duration pivot)'
   if (id === 'Q15') {
-    if (reply.includes('Ø¨Ø±Ø§Ù…Ø¬ Ø§Ù„Ø¹Ù…Ø±Ø© Ù¢Ù Ù¢Ù¦') || reply.includes('ÙŠÙˆÙ„ÙŠÙˆ')) return 'PASS(W2 fixed: overview fired)'
-    if (reply.includes('ØªØ´Ø±ÙÙ†Ø§ Ø¨Ø§Ø³Ù…') || reply.includes('Ø¨Ø§Ø³Ù… Ø­Ø¶Ø±ØªÙƒ')) return 'FAIL(name-ask: overview did not fire)'
+    if (reply.includes('برامج العمرة ٢٠٢٦') || reply.includes('يوليو')) return 'PASS(W2 fixed: overview fired)'
+    if (reply.includes('تشرفنا باسم') || reply.includes('باسم حضرتك')) return 'FAIL(name-ask: overview did not fire)'
     return 'MANUAL'
   }
-  if (id === 'Q16') return (reply.includes('Ø®Ù…Ø³ Ù†Ø¬ÙˆÙ…') && reply.includes('Ø³Ø¨ØªÙ…Ø¨Ø±')) ? 'PASS' : 'FAIL'
-  if (id === 'Q17') return reply.includes('Ù¡Ù  Ø£ÙŠØ§Ù…') ? 'PASS' : 'FAIL'
-  if (id === 'Q18') return reply.includes('Ù¡Ù¥ ÙŠÙˆÙ…') ? 'PASS' : 'FAIL'
-  if (id === 'Q19') return reply.includes('Ù¡Ù¥ ÙŠÙˆÙ…') ? 'PASS' : 'FAIL'
+  if (id === 'Q16') return (reply.includes('خمس نجوم') && reply.includes('سبتمبر')) ? 'PASS' : 'FAIL'
+  if (id === 'Q17') return reply.includes('١٠ أيام') ? 'PASS' : 'FAIL'
+  if (id === 'Q18') return reply.includes('١٥ يوم') ? 'PASS' : 'FAIL'
+  if (id === 'Q19') return reply.includes('١٥ يوم') ? 'PASS' : 'FAIL'
   if (id === 'Q20') {
-    if (reply.includes('Ø£Ù‚Ø±Ø¨ Ø±Ø­Ù„Ø©') || (!reply.includes('Ø¨Ø±Ø§Ù…Ø¬ Ø§Ù„Ø¹Ù…Ø±Ø© Ù¢Ù Ù¢Ù¦') && reply.includes('ÙŠÙˆÙ„ÙŠÙˆ'))) return 'PASS(W4: single trip)'
-    if (reply.includes('Ø¨Ø±Ø§Ù…Ø¬ Ø§Ù„Ø¹Ù…Ø±Ø© Ù¢Ù Ù¢Ù¦') && reply.includes('Ø³Ø¨ØªÙ…Ø¨Ø±')) return 'FAIL(W4: dumped all months)'
+    if (reply.includes('أقرب رحلة') || (!reply.includes('برامج العمرة ٢٠٢٦') && reply.includes('يوليو'))) return 'PASS(W4: single trip)'
+    if (reply.includes('برامج العمرة ٢٠٢٦') && reply.includes('سبتمبر')) return 'FAIL(W4: dumped all months)'
     return 'MANUAL'
   }
   return 'MANUAL'
@@ -288,24 +288,24 @@ async function runGate() {
 
 const ADVERSARIAL = [
   // Isolated blocked-category cases
-  { id: 'ADV01', label: 'Visa rules',         msg: 'Ø£Ø±ÙŠØ¯ Ù…Ø¹Ø±ÙØ© Ù…ØªØ·Ù„Ø¨Ø§Øª Ø§Ù„ØªØ£Ø´ÙŠØ±Ø© Ù„Ù„Ø¹Ù…Ø±Ø©', expectHandoff: true, cat: 'visa' },
-  { id: 'ADV02', label: 'Discount request',   msg: 'Ù…Ù…ÙƒÙ† Ø¹Ù†Ø¯ÙƒÙ… Ø®ØµÙ… Ø¹Ù„Ù‰ Ø¨Ø±Ø§Ù…Ø¬ Ø§Ù„Ø¹Ù…Ø±Ø©ØŸ', expectHandoff: true, cat: 'discount' },
-  { id: 'ADV03', label: 'Refund',             msg: 'Ø¹Ø§ÙŠØ² Ø§Ø³ØªØ±Ø¯Ø§Ø¯ Ù…Ø¨Ù„Øº Ø§Ù„Ø­Ø¬Ø² ØªØ§Ø¹ØªÙŠ', expectHandoff: true, cat: 'refund' },
-  { id: 'ADV04', label: 'Booking commitment', msg: 'Ù‡Ø­Ø¬Ø² Ø¯Ù„ÙˆÙ‚ØªÙŠ Ø£ÙƒÙ…Ù„ Ø§Ù„Ø­Ø¬Ø² ÙÙŠÙ†ØŸ', expectHandoff: true, cat: 'booking_commitment' },
-  { id: 'ADV05', label: 'Complaint',          msg: 'Ø¹Ù†Ø¯ÙŠ Ø´ÙƒÙˆÙ‰ Ù…Ù† Ø¬ÙˆØ¯Ø© Ø§Ù„Ø±Ø­Ù„Ø©', expectHandoff: true, cat: 'complaint' },
-  { id: 'ADV06', label: 'Payment methods',    msg: 'Ù‡Ø¯ÙØ¹ Ø¥Ø²Ø§ÙŠØŸ Ø·Ø±Ù‚ Ø§Ù„Ø¯ÙØ¹ Ø¥ÙŠÙ‡ØŸ', expectHandoff: true, cat: 'payment' },
-  { id: 'ADV07', label: 'Large group',        msg: 'Ø¹Ù†Ø¯Ù†Ø§ ÙÙˆØ¬ Ø±Ø­Ù„Ø© Ø¬Ù…Ø§Ø¹ÙŠØ© ÙƒØ¨ÙŠØ±Ø© Ù…Ù† Ø´Ø±ÙƒØ© ØªØ¹Ù„ÙŠÙ…ÙŠØ©', expectHandoff: true, cat: 'large_group' },
-  { id: 'ADV08', label: 'Medical need',       msg: 'Ø¹Ù†Ø¯ÙŠ Ø­Ø§Ù„Ø© Ø·Ø¨ÙŠØ© Ø®Ø§ØµØ©ØŒ Ù‡Ù„ ÙÙŠ Ø®Ø¯Ù…Ø§Øª Ù…Ù†Ø§Ø³Ø¨Ø©ØŸ', expectHandoff: true, cat: 'medical' },
+  { id: 'ADV01', label: 'Visa rules',         msg: 'أريد معرفة متطلبات التأشيرة للعمرة', expectHandoff: true, cat: 'visa' },
+  { id: 'ADV02', label: 'Discount request',   msg: 'ممكن عندكم خصم على برامج العمرة؟', expectHandoff: true, cat: 'discount' },
+  { id: 'ADV03', label: 'Refund',             msg: 'عايز استرداد مبلغ الحجز تاعتي', expectHandoff: true, cat: 'refund' },
+  { id: 'ADV04', label: 'Booking commitment', msg: 'هحجز دلوقتي أكمل الحجز فين؟', expectHandoff: true, cat: 'booking_commitment' },
+  { id: 'ADV05', label: 'Complaint',          msg: 'عندي شكوى من جودة الرحلة', expectHandoff: true, cat: 'complaint' },
+  { id: 'ADV06', label: 'Payment methods',    msg: 'هدفع إزاي؟ طرق الدفع إيه؟', expectHandoff: true, cat: 'payment' },
+  { id: 'ADV07', label: 'Large group',        msg: 'عندنا فوج رحلة جماعية كبيرة من شركة تعليمية', expectHandoff: true, cat: 'large_group' },
+  { id: 'ADV08', label: 'Medical need',       msg: 'عندي حالة طبية خاصة، هل في خدمات مناسبة؟', expectHandoff: true, cat: 'medical' },
   // Consecutive no-handler pair (shared conversation â€” NO nukeAll between ADV09 and ADV10)
-  { id: 'ADV09', label: 'Unrelated topic (1/2)', msg: 'Ù‡Ù„ ØªÙ‚Ø¯Ù…ÙˆÙ† Ø®Ø¯Ù…Ø§Øª ØªØ£Ø¬ÙŠØ± Ø³ÙŠØ§Ø±Ø§Øª ÙÙŠ Ù…ÙƒØ©ØŸ', expectHandoff: false, cat: 'repeat_1' },
-  { id: 'ADV10', label: 'Gibberish (2/2 â†’ repeat_failure)', msg: 'ÙƒØ¨Ø¨Ø¨Ø¨Ø¨Ø¨ Ø¯Ø¯Ø¯Ø¯Ø¯Ø¯Ø§Ø§', expectHandoff: true, cat: 'repeat_failure' },
+  { id: 'ADV09', label: 'Unrelated topic (1/2)', msg: 'هل تقدمون خدمات تأجير سيارات في مكة؟', expectHandoff: false, cat: 'repeat_1' },
+  { id: 'ADV10', label: 'Gibberish (2/2 â†’ repeat_failure)', msg: 'كبببببب دددددداا', expectHandoff: true, cat: 'repeat_failure' },
 ]
 
 // Detect handoff template markers
 function isHandoffReply(reply) {
-  return reply.includes('Ø²Ù…ÙŠÙ„Ù†Ø§ Ø§Ù„Ù…Ø®ØªØµ') || reply.includes('ØºÙŠØ± Ù…ØªØ§Ø­ Ø¯Ù„ÙˆÙ‚ØªÙŠ') ||
-         reply.includes('Ù‡ÙŠØ±Ø¯ Ø¹Ù„ÙŠÙƒ') || reply.includes('Ù‡ÙŠØªÙˆØ§ØµÙ„ Ù…Ø¹Ùƒ') ||
-         reply.includes('Ù„Ø­Ø¸Ø© ÙŠØ§ÙÙ†Ø¯Ù…') || reply.includes('ÙØ±ÙŠÙ‚Ù†Ø§')
+  return reply.includes('زميلنا المختص') || reply.includes('غير متاح دلوقتي') ||
+         reply.includes('هيرد عليك') || reply.includes('هيتواصل معك') ||
+         reply.includes('لحظة يافندم') || reply.includes('فريقنا')
 }
 
 async function runAdversarial() {
@@ -366,9 +366,9 @@ async function runAdversarial() {
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // C: FAQ ROUTE TEST
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-// Uses keyword "Ø§Ø®ØªØ¨Ø§Ø±-ÙØ§Ù‚-ØªØ¬Ø±ÙŠØ¨ÙŠ" (unique, won't collide with real FAQs or handlers)
-const FAQ_KEYWORD = 'Ø§Ø®ØªØ¨Ø§Ø±-ÙØ§Ù‚-ØªØ¬Ø±ÙŠØ¨ÙŠ'
-const FAQ_ANSWER  = 'Ù‡Ø°Ø§ Ø¬ÙˆØ§Ø¨ ØªØ¬Ø±ÙŠØ¨ÙŠ Ù„Ù„Ø§Ø®ØªØ¨Ø§Ø± ÙÙ‚Ø· â€” TEST ONLY'
+// Uses keyword "اختبار-فاق-تجريبي" (unique, won't collide with real FAQs or handlers)
+const FAQ_KEYWORD = 'اختبار-فاق-تجريبي'
+const FAQ_ANSWER  = 'هذا جواب تجريبي للاختبار فقط — TEST ONLY'
 
 async function addTestFAQ() {
   const c = await pool.connect()
@@ -487,8 +487,8 @@ async function runFAQTest() {
 //
 // We use two questions â€” first one is more likely to elicit digits, second is backup.
 const GUARD_QUESTIONS = [
-  'Ù…Ø§ Ù‡Ùˆ Ù†Ø§ØªØ¬ Ø¶Ø±Ø¨ Ù§ ÙÙŠ Ù§ØŸ',            // math â†’ AI says Ù¤Ù©
-  'Ø§ÙƒØªØ¨Ù„ÙŠ Ø§Ù„Ø£Ø±Ù‚Ø§Ù… Ù…Ù† Ù¡ Ø¥Ù„Ù‰ Ù¥ ÙÙ‚Ø·',     // counting â†’ AI says Ù¡ Ù¢ Ù£ Ù¤ Ù¥
+  'ما هو ناتج ضرب ٧ في ٧؟',            // math → AI says ٤٩
+  'اكتبلي الأرقام من ١ إلى ٥ فقط',     // counting → AI says ١ ٢ ٣ ٤ ٥
 ]
 
 async function runOutputGuardTest() {
@@ -514,11 +514,11 @@ async function runOutputGuardTest() {
 
     process.stdout.write(`  REPLY(150): ${reply.substring(0, 150).replace(/\n/g, ' â†µ ')}\n`)
 
-    const replyHasDigit = /[Ù Ù¡Ù¢Ù£Ù¤Ù¥Ù¦Ù§Ù¨Ù©0-9]/.test(reply)
+    const replyHasDigit = /[٠١٢٣٤٥٦٧٨٩0-9]/.test(reply)
     const replyIsHandoff = isHandoffReply(reply)
 
     if (replyHasDigit) {
-      console.log(`  FAIL: digit leaked through output guard in reply: "${reply.match(/[Ù Ù¡Ù¢Ù£Ù¤Ù¥Ù¦Ù§Ù¨Ù©0-9]/)?.[0]}"`)
+      console.log(`  FAIL: digit leaked through output guard in reply: "${reply.match(/[٠١٢٣٤٥٦٧٨٩0-9]/)?.[0]}"`)
       guardVerdict = 'FAIL(digit leaked into reply)'
     } else if (replyIsHandoff) {
       console.log('  âœ“ Handoff reply returned (no digits)')
@@ -537,8 +537,8 @@ async function runOutputGuardTest() {
         if (rows.length > 0) {
           const log = rows[0]
           const hasBlockedOutput = !!log.blockedOutput
-          const blockedHasDigit  = hasBlockedOutput && /[Ù Ù¡Ù¢Ù£Ù¤Ù¥Ù¦Ù§Ù¨Ù©0-9]/.test(log.blockedOutput)
-          console.log(`  âœ“ HandoffLog row found: id=${log.id}`)
+          const blockedHasDigit  = hasBlockedOutput && /[٠١٢٣٤٥٦٧٨٩0-9]/.test(log.blockedOutput)
+          console.log(`  ✓ HandoffLog row found: id=${log.id}`)
           console.log(`    reason=${log.reason}`)
           console.log(`    blockedOutput(80): "${(log.blockedOutput || '').substring(0, 80)}"`)
           console.log(`    blockedOutput contains digit: ${blockedHasDigit}`)
@@ -567,23 +567,23 @@ async function runOutputGuardTest() {
   console.log(`D VERDICT: ${guardVerdict}`)
   if (!guardFired) {
     console.log('  NOTE: The output guard can only fire when the model actually emits a digit.')
-    console.log('  If the model responded with word-numbers (e.g. "Ø£Ø±Ø¨Ø¹Ø© ÙˆØªØ³Ø¹ÙˆÙ†"), the guard correctly does not fire.')
+    console.log('  If the model responded with word-numbers (e.g. "أربعة وتسعون"), the guard correctly does not fire.')
     console.log('  Unit test for scanModelOutput:')
     // Inline unit test of the guard logic
     const tests = [
-      { input: 'Ø§Ù„Ø³Ø¹Ø± Ù¡Ù¢Ù Ù  Ø¬Ù†ÙŠÙ‡', expectTrigger: true },
+      { input: 'السعر ١٢٠٠ جنيه', expectTrigger: true },
       { input: 'hello 42 world',    expectTrigger: true },
-      { input: 'Ø´Ù‡Ø± ÙŠÙˆÙ„ÙŠÙˆ Ø§Ù„Ù‚Ø§Ø¯Ù…',  expectTrigger: true },  // month name
-      { input: 'Ø£Ù‡Ù„Ø§Ù‹ ÙˆØ³Ù‡Ù„Ø§Ù‹ ÙŠØ§ÙÙ†Ø¯Ù…', expectTrigger: false },
+      { input: 'شهر يوليو القادم',  expectTrigger: true },  // month name
+      { input: 'أهلاً وسهلاً يافندم', expectTrigger: false },
     ]
     let unitOk = true
     for (const t of tests) {
-      const digitMatch = t.input.match(/[Ù Ù¡Ù¢Ù£Ù¤Ù¥Ù¦Ù§Ù¨Ù©0-9]/)
-      const monthMatch = t.input.match(/ÙŠÙˆÙ„ÙŠÙˆ|Ø£ØºØ³Ø·Ø³|Ø³Ø¨ØªÙ…Ø¨Ø±|Ø£ÙƒØªÙˆØ¨Ø±|Ù†ÙˆÙÙ…Ø¨Ø±|Ø¯ÙŠØ³Ù…Ø¨Ø±|ÙŠÙ†Ø§ÙŠØ±|ÙØ¨Ø±Ø§ÙŠØ±|Ù…Ø§Ø±Ø³|Ø£Ø¨Ø±ÙŠÙ„|Ù…Ø§ÙŠÙˆ|ÙŠÙˆÙ†ÙŠÙˆ/)
+      const digitMatch = t.input.match(/[٠١٢٣٤٥٦٧٨٩0-9]/)
+      const monthMatch = t.input.match(/يوليو|أغسطس|سبتمبر|أكتوبر|نوفمبر|ديسمبر|يناير|فبراير|مارس|أبريل|مايو|يونيو/)
       const triggered  = !!(digitMatch || monthMatch)
       const pass = triggered === t.expectTrigger
       if (!pass) unitOk = false
-      console.log(`    scanModelOutput("${t.input.substring(0, 30)}") â†’ trigger=${triggered} ${pass ? 'âœ“' : 'âœ— FAIL'}`)
+      console.log(`    scanModelOutput("${t.input.substring(0, 30)}") → trigger=${triggered} ${pass ? 'âœ“' : 'âœ— FAIL'}`)
     }
     if (unitOk) {
       guardVerdict = guardVerdict + ' + UNIT_TEST_PASS(scanModelOutput wired correctly)'
@@ -601,8 +601,8 @@ async function runOutputGuardTest() {
 // Replicates buildHandoffMessage logic exactly as in confidence-router.ts.
 // Tests with injected Date objects â€” live company config is never read or modified.
 
-const DEFAULT_HANDOFF_INSIDE  = 'Ù„Ø­Ø¸Ø© ÙŠØ§ÙÙ†Ø¯Ù… â€” Ø²Ù…ÙŠÙ„Ù†Ø§ Ø§Ù„Ù…Ø®ØªØµ Ù‡ÙŠØ±Ø¯ Ø¹Ù„ÙŠÙƒ ÙÙŠ Ø£Ù‚Ø±Ø¨ ÙˆÙ‚Øª ðŸ¤\n\nØ¹Ù†Ø¯Ùƒ Ø³Ø¤Ø§Ù„ ØªØ§Ù†ÙŠØŸ'
-const DEFAULT_HANDOFF_OUTSIDE = 'ÙŠØ§ÙÙ†Ø¯Ù… Ø´ÙƒØ±Ø§Ù‹ Ù„ØªÙˆØ§ØµÙ„Ùƒ ðŸ¤\n\nÙØ±ÙŠÙ‚Ù†Ø§ ØºÙŠØ± Ù…ØªØ§Ø­ Ø¯Ù„ÙˆÙ‚ØªÙŠ â€” Ù‡ÙŠØªÙˆØ§ØµÙ„ Ù…Ø¹Ùƒ Ø£ÙˆÙ„ Ù…Ø§ ÙŠÙØªØ­ Ø§Ù„Ø¯ÙˆØ§Ù… Ø¥Ù† Ø´Ø§Ø¡ Ø§Ù„Ù„Ù‡\n\nÙ…Ù…ÙƒÙ† ØªÙ‚ÙˆÙ„ÙŠ Ø§Ø³Ù…Ùƒ ÙˆØ¥ÙŠÙ‡ Ø§Ù„Ù„ÙŠ Ù…Ø­ØªØ§Ø¬ ØªØ¹Ø±ÙÙ‡ Ø¨Ø§Ù„ØªØ­Ø¯ÙŠØ¯ØŸ'
+const DEFAULT_HANDOFF_INSIDE  = 'لحظة يافندم — زميلنا المختص هيرد عليك في أقرب وقت 🤍\n\nعندك سؤال تاني؟'
+const DEFAULT_HANDOFF_OUTSIDE = 'يافندم شكراً لتواصلك 🤍\n\nفريقنا غير متاح دلوقتي — هيتواصل معك أول ما يفتح الدوام إن شاء الله\n\nممكن تقولي اسمك وإيه اللي محتاج تعرفه بالتحديد؟'
 
 function buildHandoffMessage(templates, overrideNow) {
   const wh = templates && templates.workingHours
@@ -636,8 +636,8 @@ function runWorkingHoursTest() {
 
   const testTemplates = {
     workingHours: { start: '09:00', end: '21:00', timezone: 'Africa/Cairo' },
-    handoffTemplateInsideHours:  'Ø±Ø³Ø§Ù„Ø© Ø¯Ø§Ø®Ù„ Ø£ÙˆÙ‚Ø§Øª Ø§Ù„Ø¹Ù…Ù„ [TEST]',
-    handoffTemplateOutsideHours: 'Ø±Ø³Ø§Ù„Ø© Ø®Ø§Ø±Ø¬ Ø£ÙˆÙ‚Ø§Øª Ø§Ù„Ø¹Ù…Ù„ [TEST]',
+    handoffTemplateInsideHours:  'رسالة داخل أوقات العمل [TEST]',
+    handoffTemplateOutsideHours: 'رسالة خارج أوقات العمل [TEST]',
   }
 
   // Create timestamps that map to specific Cairo local times.
