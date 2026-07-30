@@ -5,8 +5,10 @@ const templatesCache = new Map<string, { data: any; expiresAt: number }>()
 const TTL_MS         = 60_000
 const TMPL_TTL_MS    = 5 * 60_000
 
-// Returns true (AI allowed) if the company has no CompanyAIConfig — absence of config
-// means the company never configured the AI kill switch, not that it's been turned off.
+// Returns false (AI blocked) if the company has no CompanyAIConfig row.
+// Fail-closed: a tenant with no config has no catalog, no templates, and no gate run —
+// allowing AI replies there would be a misconfigured-path leak, not a working agent.
+// Only an explicit isActive=true on an existing row permits AI to reply.
 export async function isAIConfigActive(
   prisma: PrismaService,
   companyId: string,
@@ -18,7 +20,7 @@ export async function isAIConfigActive(
     where: { companyId },
     select: { isActive: true },
   })
-  const active = config?.isActive ?? true
+  const active = config?.isActive ?? false
   activeCache.set(companyId, { isActive: active, expiresAt: Date.now() + TTL_MS })
   console.log(`AI_CONFIG_CACHE MISS — companyId=${companyId} isActive=${active}`)
   return active
