@@ -10,6 +10,9 @@ async function bootstrap() {
   console.log(`PORT env value: ${process.env.PORT}`)
   console.log(`DEFAULT_COMPANY_ID: ${process.env.DEFAULT_COMPANY_ID}`)
   console.log(`DATABASE_URL set: ${!!process.env.DATABASE_URL}`)
+  const rawFlag = process.env.USE_DB_CATALOG ?? ''
+  const resolvedFlag = ['true', '1', 'yes'].includes(rawFlag.replace(/^["']|["']$/g, '').trim().toLowerCase())
+  console.log(`[STARTUP] USE_DB_CATALOG raw="${rawFlag}" → resolved=${resolvedFlag}`)
 }
 
 bootstrap()
