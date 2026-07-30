@@ -102,12 +102,10 @@ export class WhatsAppService {
   async handleMessage(companyId: string, phone: string, text: string, source = 'direct', referralData?: object | null, simulate = false): Promise<string | string[]> {
     // simulate=true: accepted ONLY from /webhook/test — never passed by the real Meta webhook path.
     // Gates are bypassed so catalog bypasses can be tested while AI stays fully locked.
-    // Assistant replies are NOT persisted to DB in this mode (prevents watchdog false-alarms
-    // and keeps the test conversation clean). sendWhatsAppMessage is structurally unreachable
-    // from handleMessage; the /webhook/test endpoint never calls it either.
-    const persistReply = simulate
-      ? async (_convId: string, _content: string): Promise<any> => {}
-      : (convId: string, content: string) => saveAssistantMessage(this.prisma, convId, content)
+    // Assistant replies ARE persisted to DB even in simulate mode so that multi-turn test
+    // conversations have full history context for the AI fallback path (Cluster-C fix).
+    // WhatsApp sending is impossible here regardless — sendWhatsAppMessage is never called.
+    const persistReply = (convId: string, content: string) => saveAssistantMessage(this.prisma, convId, content)
 
     const company = await this.prisma.company.findUnique({ where: { id: companyId } })
     if (!company || !company.isActive) return ''
@@ -304,6 +302,11 @@ export class WhatsAppService {
     // Count total messages for extract-frequency tracking (history.length would be capped at 10
     // after the limit below, causing % 5 to fire on every message once conv exceeds 10 msgs).
     const totalMsgCount = await this.prisma.message.count({ where: { conversationId: conv.id } })
+    // User-only count for shouldHandoff threshold: catalog overviews create 15-18 ASSISTANT DB
+    // records per turn, inflating totalMsgCount to 30+ within 4 turns and triggering the
+    // "long conversation" threshold prematurely. The threshold should reflect customer engagement,
+    // not the number of catalog message parts stored.
+    const userMsgCount  = await this.prisma.message.count({ where: { conversationId: conv.id, role: 'USER' } })
 
     // Reload from DB — limit to last 10 messages to cap input tokens.
     // Customer name is preserved via knownCustomerName (from Lead record), not message history.
@@ -475,6 +478,49 @@ export class WhatsAppService {
       categoryQuestionMap.delete(conv.id)
     }
 
+    // ══════════════════════════════════════════════════════════════════════════
+    // DISPATCH TIER 1 — SAFETY GATES
+    // These run before any overview bypass or content handler. Rationale:
+    //   • A booking-commitment message that also names a month ("هنحجز ... سبتمبر")
+    //     MUST reach a human — the month must not divert it to a catalog dump.
+    //   • A known-answer FAQ must return before any model call or catalog path.
+    // ══════════════════════════════════════════════════════════════════════════
+
+    // Route 2: FAQ keyword match — verbatim admin answer, no model involvement
+    const faqAnswer = matchFAQ(text, companyFAQs)
+    if (faqAnswer) {
+      await persistReply(conv.id, faqAnswer)
+      console.log(`FAQ_MATCH → ${phone}`)
+      return faqAnswer
+    }
+
+    // Route 4a: blocked category → immediate human handoff, highest priority.
+    // booking_commitment pattern catches "هنحجز", "تمام اتفقنا", "هكمل الحجز" etc.
+    // so a customer ready to buy never hits the catalog-overview path below.
+    const { matched: isBlocked, category: blockedCat } = detectBlockedCategory(text, aiTemplates?.blockedCategories)
+    if (isBlocked) {
+      const handoffMsg = buildHandoffMessage(aiTemplates)
+      await persistReply(conv.id, handoffMsg)
+      logHandoff(this.prisma, { companyId, conversationId: conv.id, phone, customerMessage: text, reason: 'blocked_category', category: blockedCat })
+      if (!simulate) {
+        await this.prisma.conversation.update({
+          where: { id: conv.id },
+          data:  { status: ConvStatus.NEEDS_HUMAN, handoffMessageSent: true },
+        })
+      }
+      console.log(`BLOCKED_CATEGORY → ${phone} cat=${blockedCat}`)
+      return handoffMsg
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // DISPATCH TIER 2 — CATALOG OVERVIEW FALLBACK (non-first-message)
+    // Month/duration words are MODIFIERS, not primary intent.
+    // These only fire when Tier 3 (specific-intent handlers below) did not match.
+    // The SPECIFICITY GUARD (hasSpecificHandlerIntent) is applied to the Umrah
+    // bypass so a "flight for August" or "installment in September" question
+    // routes to the correct specific handler rather than getting a catalog dump.
+    // ══════════════════════════════════════════════════════════════════════════
+
     // ── Overview bypass: non-first-message hajj/umrah overview request ───────────
     // For first messages, the bypass runs inside the firstMessageQuestion block below.
     // Here we handle subsequent messages asking for an overview, so the AI never
@@ -511,8 +557,22 @@ export class WhatsAppService {
         }
       }
 
+      // SPECIFICITY GUARD: a month word is a modifier, not the primary intent.
+      // If the message also expresses a specific handler's domain (flight, installment,
+      // hotel distance, schedule, nearest trip, hotel content), that handler (in Tier 3
+      // below) answers — the month should FILTER that answer, not preempt it with an
+      // overview dump. Price queries with a month are intentionally excluded: the overview
+      // → trip-selection → detail flow is the correct price path for month+price combos.
+      const hasSpecificHandlerIntent =
+        detectFlightIntent(text) ||
+        detectInstallmentIntent(text) ||
+        detectHotelDistanceIntent(text) ||
+        detectScheduleIntent(text) ||
+        detectNearestTripIntent(text) ||
+        detectHotelContentIntent(text)
+
       // Umrah overviews — rawTrips populated for schedule/flight handlers
-      if (isUmrahOv || isUmrahAllOv) {
+      if ((isUmrahOv || isUmrahAllOv) && !hasSpecificHandlerIntent) {
         fullDetailsMap.delete(conv.id)
         const firstName = knownCustomerName?.split(/\s+/)[0]
         const intro = firstName ? `تمام يا أستاذ ${firstName} اتفضل` : `اتفضل يافندم`
@@ -549,8 +609,9 @@ export class WhatsAppService {
         return parts.length === 1 ? parts[0] : parts
       }
 
-      // Month unavailable: a specific month was detected but has no programs
-      if (ovMonth && !prebuiltCatalog.umrahMonthMessages?.[ovMonth] && detectHajjOverviewIntent(text) === null) {
+      // Month unavailable: a specific month was detected but has no programs.
+      // Skip if a specific handler intent is present — that handler takes priority.
+      if (ovMonth && !prebuiltCatalog.umrahMonthMessages?.[ovMonth] && detectHajjOverviewIntent(text) === null && !hasSpecificHandlerIntent) {
         const unavailMsg = `برامج ${ovMonth} لسه بتتجهز — لما تبقى متاحة هنعلمك فوراً إن شاء الله 🤍\nتحب تبعتلنا اسمك ورقم تليفونك عشان نتواصل معك أول ما تتاح البرامج؟`
         if (conv.leadId) {
           await this.prisma.lead.update({ where: { id: conv.leadId }, data: { notes: `اهتمام: ${ovMonth}` } })
@@ -562,7 +623,14 @@ export class WhatsAppService {
     }
 
     // ── Duration handler: customer specifies trip length in days (any message count) ─
-    if (prebuiltCatalog) {
+    // SPECIFICITY GUARD: questions that explicitly measure hotel distance AND mention days
+    // (e.g. "موفنبيك في سبتمبر ١٠ أيام كام متر من الحرم؟") must route to the HOTEL_DISTANCE
+    // handler in Tier 3, not here. We use a tight pattern (meters/minutes/walking) rather than
+    // detectHotelDistanceIntent because that function also matches proximity ADJECTIVES like
+    // "قريبه" which appear in compound overview queries (Q18) that legitimately need the duration
+    // catalog — e.g. "تفاصيل العمرة ١٥يوم واماكن الاقامه قريبه ولا بعيده عن الحرم".
+    const isExplicitDistanceQuery = /كام\s*(?:متر|دقيق)|كم\s*(?:متر|دقيق)|مشياً|مشي\s*(?:كام|كم)|من\s*الحرم|المسافة/.test(text)
+    if (prebuiltCatalog && !isExplicitDistanceQuery) {
       const durationDays = detectDurationDays(text)
       if (durationDays !== null) {
         if (prebuiltCatalog.umrahDurationMessages[durationDays]) {
@@ -604,30 +672,6 @@ export class WhatsAppService {
           return prebuiltCatalog.durationPivotMsg
         }
       }
-    }
-
-    // ── Route 2 (early): FAQ keyword match — fires before any overview bypass ──────
-    const faqAnswer = matchFAQ(text, companyFAQs)
-    if (faqAnswer) {
-      await persistReply(conv.id, faqAnswer)
-      console.log(`FAQ_MATCH → ${phone}`)
-      return faqAnswer
-    }
-
-    // ── Route 4a (early): blocked category — fires before any overview bypass ────
-    const { matched: isBlocked, category: blockedCat } = detectBlockedCategory(text, aiTemplates?.blockedCategories)
-    if (isBlocked) {
-      const handoffMsg = buildHandoffMessage(aiTemplates)
-      await persistReply(conv.id, handoffMsg)
-      logHandoff(this.prisma, { companyId, conversationId: conv.id, phone, customerMessage: text, reason: 'blocked_category', category: blockedCat })
-      if (!simulate) {
-        await this.prisma.conversation.update({
-          where: { id: conv.id },
-          data:  { status: ConvStatus.NEEDS_HUMAN, handoffMessageSent: true },
-        })
-      }
-      console.log(`BLOCKED_CATEGORY → ${phone} cat=${blockedCat}`)
-      return handoffMsg
     }
 
     // ── Full-catalog request: "كل البرامج / ياريت تفاصيل" → all-months umrah overview ─
@@ -1002,7 +1046,7 @@ export class WhatsAppService {
       }
     }
 
-    const { yes, reason } = shouldHandoff(score, totalMsgCount, extracted, text)
+    const { yes, reason } = shouldHandoff(score, userMsgCount, extracted, text)
 
     if (!yes) {
       // Guard: if the AI self-triggered the handoff CTA (should not happen but prompt is non-deterministic),

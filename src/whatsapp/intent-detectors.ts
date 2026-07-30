@@ -168,8 +168,10 @@ export function detectDurationDays(text: string): number | null {
 }
 
 // Detects price-inquiry intent in any message.
+// أرخص/الأرخص included: "cheapest program" is a price-comparison question (routed to price-pivot),
+// not a discount request (that path was removed from the discount blocked-category).
 export function detectPriceIntent(text: string): boolean {
-  return /سعر|السعر|أسعار|الأسعار|اسعار|الاسعار|بكام|بقد\s*ايه|قد\s*ايه|تكلف|كلفة|تكاليف|تمن|ثمن/.test(text)
+  return /سعر|السعر|أسعار|الأسعار|اسعار|الاسعار|بكام|بقد\s*ايه|قد\s*ايه|تكلف|كلفة|تكاليف|تمن|ثمن|أرخص|الأرخص/.test(text)
 }
 
 export function detectNumberReply(text: string): number | null {

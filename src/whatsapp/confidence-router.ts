@@ -9,13 +9,21 @@
 // CompanyAIConfig.templates.blockedCategories (string[]).
 // If blockedCategories is absent or empty, ALL categories are active (safe default).
 const CATEGORY_PATTERNS: Record<string, RegExp> = {
-  discount:          /خصم|أرخص|تنزيل|أقل\s*سعر|آخر\s*سعر|ممكن\s*تنزّل|ينفع\s*أقل|تخفيض/,
+  // "أرخص" removed — cheapest-program is a price-comparison question, not discount-seeking.
+  // Keep only explicit negotiation/discount-request patterns.
+  discount:          /خصم|تنزيل|ممكن\s*تنزّل|ممكن\s*تنزيل|ينفع\s*أقل|(?:آخر|اخر)\s*سعر|تخفيض/,
   complaint:         /شكوى|شكاوى|(?:مشكلة|مشاكل)\s*(?:في|مع|كبيرة)|زعلان\s*من|غلط\s*في\s*(?:الحجز|الرحلة)/,
   refund:            /استرداد|فلوس\s*راجعة|استرجاع\s*(?:المبلغ|الفلوس)|إلغاء\s*الحجز|كنسلة|فسخ\s*الحجز/,
   payment:           /طرق\s*الدفع|بيدفع\s*إزاي|هدفع\s*إزاي|كريدت\s*كارد|بطاقة\s*ائتمانية|أوني\s*لاين\s*أدفع/,
   visa:              /تأشيرة|الفيزا\s*(?:المطلوبة|حجها|ليه|مدتها)|إجراءات\s*السفر|اوراق\s*الفيزا|مستندات\s*السفر/,
   medical:           /حالة\s*طبية|معاق|إعاقة|مريض\s*(?:بـ|ب)|أمراض\s*مزمنة|احتياجات\s*خاصة|وضع\s*صحي/,
-  booking_commitment:/هحجز\s*دلوقتي|عايز\s*أحجز\s*الآن|خلاص\s*اتفقنا\s*على|ابعتلي\s*عقد|أكمل\s*الحجز/,
+  // Extended to catch natural booking-commitment phrases that include a month name or hotel:
+  //   "هنحجز في برنامج الصفوة سبتمبر", "تمام اتفقنا، هحجز في موفنبيك سبتمبر", "هكمل الحجز"
+  // These MUST be intercepted before the month-overview bypass fires.
+  // NOTE: \b is NOT used after Arabic text — Arabic characters are \W in JavaScript's \w/\b
+  //       model, so \b between two Arabic chars or between Arabic and space is never a boundary.
+  //       These verb forms are specific enough not to need a word-boundary guard.
+  booking_commitment:/هحجز\s*(?:دلوقتي|الآن)|هنحجز|عايز\s*أحجز\s*(?:الآن|دلوقتي)|(?:خلاص|تمام)\s+(?:اتفقنا|هنحجز)|ابعتلي\s*عقد|(?:أكمل|هكمل|هأكمل|نكمل)\s*(?:ال)?حجز/,
   large_group:       /(?:فوج|رحلة\s*جماعية)\s*(?:كبيرة?\s*)?(?:من|ل)?\s*(?:شركة|مدرسة|جهة)/,
 }
 
