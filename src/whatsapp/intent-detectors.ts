@@ -93,7 +93,8 @@ export function detectInstallmentIntent(text: string): boolean {
 }
 
 export function detectHotelDistanceIntent(text: string): boolean {
-  return /المسافة|قريب\s*(?:من)?|بعيد\s*(?:من)?|كام\s*(?:متر|دقيق)|كم\s*(?:متر|دقيق)|مشي\s*(?:كام|كم)|مشياً|من\s*الحرم|من\s*المسجد\b/.test(text)
+  // NOTE: \b is NOT used — Arabic chars are \W in JS, so \b after Arabic text is always dead.
+  return /المسافة|قريب\s*(?:من)?|بعيد\s*(?:من)?|كام\s*(?:متر|دقيق)|كم\s*(?:متر|دقيق)|مشي\s*(?:كام|كم)|مشياً|من\s*الحرم|من\s*المسجد/.test(text)
 }
 
 export function detectUmrahOverviewIntent(text: string): boolean {

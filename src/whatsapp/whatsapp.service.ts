@@ -327,7 +327,7 @@ export class WhatsAppService {
       const userText = history.filter(m => m.role === 'user').map(m => m.content).join(' ')
       if (/عمرة|عمره/.test(userText)) {
         knownLeadFacts = { ...knownLeadFacts, packageType: 'عمرة' }
-      } else if (/\bحج\b/.test(userText)) {
+      } else if (/حج(?!ز)/.test(userText)) {
         knownLeadFacts = { ...knownLeadFacts, packageType: 'حج' }
       }
     }

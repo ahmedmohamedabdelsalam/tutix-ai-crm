@@ -110,7 +110,7 @@ function cleanAgentResponse(text: string): string {
   // Strip any lines that are purely "للعمرة" (model preamble) and remove leading blank lines
   let t = text
     .split('\n')
-    .filter(line => !/^للعمرة[\s\W]*$/.test(line.trim()))
+    .filter(line => !/^للعمرة[^؀-ۿ]*$/.test(line.trim()))
     .join('\n')
     .replace(/^\n+/, '');
 
