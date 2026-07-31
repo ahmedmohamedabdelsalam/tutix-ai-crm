@@ -220,6 +220,13 @@ export class WhatsAppService {
       }
     }
 
+    // Stamp isTest before any persistReply call so the AI-leak watchdog never sees this
+    // conversation. The controller also stamps it after the call, but doing it here
+    // eliminates the race window between conversation creation and the first ASSISTANT write.
+    if (simulate) {
+      await this.prisma.conversation.update({ where: { id: conv.id }, data: { isTest: true } })
+    }
+
     // Resolve customer name and confirmed facts from the Lead record so the AI never re-asks
     // for info already captured — even when early messages fall outside the 10-msg history window.
     //

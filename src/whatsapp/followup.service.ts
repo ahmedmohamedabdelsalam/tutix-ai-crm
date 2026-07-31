@@ -183,6 +183,7 @@ export class FollowUpService {
         const leakyConvs = await this.prisma.conversation.findMany({
           where: {
             companyId: company.id,
+            isTest: false,   // exclude /webhook/test conversations — simulate mode persists for multi-turn history
             ...(aiActive ? { agentMode: 'HUMAN' } : {}),
             messages: {
               some: {
