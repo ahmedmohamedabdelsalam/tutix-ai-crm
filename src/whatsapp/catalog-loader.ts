@@ -2,6 +2,17 @@ import { PrismaService } from '../prisma/prisma.service'
 import { PrebuiltCatalog } from '../agent/agent.service'
 import { buildIndustryPromptFromDB, FieldDef } from '../agent/prompts/dynamic-catalog-builder'
 
+function getCompanyDateISO(tz: string): string {
+  try {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: tz,
+      year: 'numeric', month: '2-digit', day: '2-digit',
+    }).format(new Date())
+  } catch {
+    return new Date().toISOString().slice(0, 10)
+  }
+}
+
 // Accepts true / "true" / 'true' / TRUE / 1 / yes — any surrounding quotes or casing variant.
 // Guards against Railway (and similar platforms) that store flag vars as `"true"` with literal quotes.
 function resolveFlag(raw: string | undefined): boolean {
@@ -57,20 +68,35 @@ export async function getPrebuiltCatalog(
   })
 
   if (offeringType) {
-    const offerings = await prisma.offering.findMany({
+    const templates = (config?.templates ?? {}) as Record<string, any>
+    const tz: string = (templates?.workingHours?.timezone as string | undefined) ?? 'Africa/Cairo'
+    const todayISO = getCompanyDateISO(tz)
+
+    const allOfferings = await prisma.offering.findMany({
       where: { companyId, offeringTypeId: offeringType.id, isActive: true },
       orderBy: { sortOrder: 'asc' },
     })
-    if (offerings.length > 0) {
-      const fieldDefs = offeringType.fieldDefs as unknown as FieldDef[]
-      offeringsOverride = offerings.map(o => ({
-        values:    o.values    as Record<string, unknown>,
-        fieldDefs,
-      }))
-      console.log(`DB_CATALOG: Offerings path — ${offerings.length} offerings for companyId=${companyId}`)
-    } else {
-      console.log(`DB_CATALOG: OfferingType "عمرة" exists but has 0 active offerings — falling back to catalog.umrahPrograms`)
-    }
+
+    const fieldDefs = offeringType.fieldDefs as unknown as FieldDef[]
+    const startDateDef = fieldDefs.find((f: FieldDef) => f.role === 'start-date')
+
+    // Keep offerings departing today or in the future. Offerings with no start-date are included.
+    const futureOfferings = startDateDef
+      ? allOfferings.filter(o => {
+          const v = (o.values as Record<string, unknown>)[startDateDef.key]
+          return typeof v !== 'string' || v >= todayISO
+        })
+      : allOfferings
+
+    // Always set offeringsOverride when OfferingType exists (even to []).
+    // undefined → no OfferingType → builder falls back to legacy JSON catalog.
+    // []        → OfferingType exists but all offerings expired → hasFutureOfferings=false.
+    offeringsOverride = futureOfferings.map(o => ({
+      values:    o.values as Record<string, unknown>,
+      fieldDefs,
+    }))
+
+    console.log(`DB_CATALOG: Offerings path — ${allOfferings.length} total, ${futureOfferings.length} future for companyId=${companyId} (today=${todayISO} tz=${tz})`)
   }
 
   console.log(`DB_CATALOG: building catalog for config id=${config.id} company=${companyName}`)

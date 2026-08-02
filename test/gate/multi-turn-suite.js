@@ -186,6 +186,12 @@ const K = {
     cheapestQuad: '٤١٬٠٠٠',
     airline: 'رحلة خاصة',
   },
+  aug15d: {
+    makkahHotels: ['سنود الريان', 'رمادا الفائزين'],
+    madinahHotel: 'أوديست',
+    cheapest: '٤٦٬٠٠٠',
+    airline: 'رحلة خاصة',
+  },
   aug11d: {
     makkahHotels: ['إعمار المنار', 'رمادا الفائزين'],
     madinahHotel: 'أوديست',
@@ -416,7 +422,7 @@ const SCENARIOS = [
   // Verifies: price-pivot flow; context carry from price → duration → hotel; accumulate score
   {
     id: 'MT03',
-    name: 'Budget Hunter — Jul 15d cheapest → سنود الريان → installment → booking',
+    name: 'Budget Hunter — Aug 15d cheapest → سنود الريان → installment → booking',
     turns: [
       {
         msg: 'ايه أرخص برنامج عندكم للعمرة؟',
@@ -428,19 +434,19 @@ const SCENARIOS = [
         },
       },
       {
-        msg: '١٥ يوم يوليو',
-        hint: 'CATALOG_FILTERED(Jul 15d)',
+        msg: '١٥ يوم أغسطس',
+        hint: 'CATALOG_FILTERED(Aug 15d)',
         check: r => {
-          const hasJul    = r.includes('يوليو')
+          const hasAug    = r.includes('أغسطس')
           // "١٥ يوم" / "١٥ أيام" may appear as "١٤ يوم" in catalog text (departure–return day count),
           // or duration may not appear explicitly if the heading carries it — relax to hotel OR price.
           const has15d    = r.includes('١٥ يوم') || r.includes('١٥ أيام') || r.includes('١٤ يوم') || r.includes('١٤ أيام')
-          const hasPrice  = r.includes(K.jul15d.cheapestQuad) // ٤١٬٠٠٠
-          const hasHotel  = containsHotel(r, K.jul15d.makkahHotels) // سنود الريان or إعمار المنار
-          const ok = hasJul && (has15d || hasHotel || hasPrice)
+          const hasPrice  = r.includes(K.aug15d.cheapest) // ٤٦٬٠٠٠
+          const hasHotel  = containsHotel(r, K.aug15d.makkahHotels) // سنود الريان or رمادا الفائزين
+          const ok = hasAug && (has15d || hasHotel || hasPrice)
           return { pass: ok, note: ok
-            ? `Jul 15d: jul=${hasJul} dur=${has15d} hotel=${hasHotel} price=${hasPrice}`
-            : `FAIL: jul=${hasJul} 15d=${has15d} price=${hasPrice} hotel=${hasHotel}` }
+            ? `Aug 15d: aug=${hasAug} dur=${has15d} hotel=${hasHotel} price=${hasPrice}`
+            : `FAIL: aug=${hasAug} 15d=${has15d} price=${hasPrice} hotel=${hasHotel}` }
         },
       },
       {
@@ -448,7 +454,7 @@ const SCENARIOS = [
         hint: 'AI_OR_CATALOG(hotel for cheapest)',
         check: r => {
           if (isHandoffReply(r)) return { pass: false, note: 'FAIL: unexpected handoff' }
-          // Jul 15d cheapest (quad 41,000) → Makkah hotel: سنود الريان
+          // Aug 15d cheapest (economy 46,000) → Makkah hotel: سنود الريان
           const hasHotel = r.includes('سنود الريان')
           return { pass: hasHotel, note: hasHotel
             ? 'سنود الريان correctly identified as cheapest Makkah hotel'

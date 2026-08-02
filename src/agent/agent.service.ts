@@ -33,6 +33,7 @@ export interface PrebuiltCatalog {
   umrahDurationDetails: Record<number, string[]>
   availableDurations: number[]
   durationPivotMsg: string
+  hasFutureOfferings: boolean
 }
 
 // Lazy init — created on first use, after NestJS has loaded env vars

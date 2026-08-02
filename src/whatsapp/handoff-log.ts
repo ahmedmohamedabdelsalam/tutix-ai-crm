@@ -1,6 +1,6 @@
 import { PrismaService } from '../prisma/prisma.service'
 
-export type HandoffReason = 'no_handler' | 'blocked_category' | 'output_guard' | 'repeat_failure'
+export type HandoffReason = 'no_handler' | 'blocked_category' | 'output_guard' | 'repeat_failure' | 'freshness_gate'
 
 // Non-blocking write. Caller does not await — failures are logged, never thrown.
 export function logHandoff(

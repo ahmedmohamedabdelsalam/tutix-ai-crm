@@ -1117,6 +1117,7 @@ export interface IndustryPromptParts {
   umrahDurationDetails: Record<number, string[]>
   availableDurations: number[]
   durationPivotMsg: string
+  hasFutureOfferings: boolean
 }
 
 export function buildIndustryPromptFromDB(
@@ -1127,15 +1128,17 @@ export function buildIndustryPromptFromDB(
   const cat = config.catalog as unknown as CatalogJson
   const ind = config.industryData as unknown as IndustryDataJson | null
 
-  // Guard: use Offerings table if provided and non-empty; else fall back to catalog.umrahPrograms.
-  // A bad Offerings read (empty array) safely falls through to the old path — no company breaks.
+  // Use Offerings table if provided (even empty); fall back to catalog.umrahPrograms only
+  // when no OfferingType exists (offeringsOverride === undefined).
   // FROZEN LEGACY SAFETY NET (2026-07-28): catalog.umrahPrograms is no longer edited by any UI
   // after /admin/catalog was retired in Phase B2. The JSON is intentionally kept as a read-only
   // fallback for companies that have not yet migrated to the Offerings table.
-  const rawUmrahPrograms: any[] =
-    offeringsOverride && offeringsOverride.length > 0
-      ? offeringsOverride.map(o => offeringToRawUmrahProgram(o.values, o.fieldDefs))
-      : (cat.umrahPrograms as any[])
+  const usingOfferings = offeringsOverride !== undefined
+  const rawUmrahPrograms: any[] = usingOfferings
+    ? offeringsOverride!.map(o => offeringToRawUmrahProgram(o.values, o.fieldDefs))
+    : (cat.umrahPrograms as any[])
+  // false only when company is on the Offerings path and every offering has departed.
+  const hasFutureOfferings = !usingOfferings || rawUmrahPrograms.length > 0
 
   // Identity block
   const identity = ind
@@ -1226,7 +1229,7 @@ export function buildIndustryPromptFromDB(
     umrahAllMonthsMessage, umrahAllMonthsDetails,
     ctaReply, installmentReply,
     umrahDurationMessages, umrahDurationDetails, availableDurations, durationPivotMsg,
-    rawUmrahPrograms,
+    rawUmrahPrograms, hasFutureOfferings,
   }
 }
 

@@ -519,6 +519,33 @@ export class WhatsAppService {
       return handoffMsg
     }
 
+    // ── Freshness gate: all DB offerings have departed — route Umrah catalog
+    // questions to handoff instead of serving stale or empty catalog data.
+    // Only fires when the company is on the Offerings-table path (hasFutureOfferings
+    // is true by default when falling back to the legacy JSON catalog).
+    // Hajj, FAQ, greetings, and non-catalog questions pass through unaffected.
+    if (prebuiltCatalog && prebuiltCatalog.hasFutureOfferings === false) {
+      const isUmrahCatalogQ =
+        detectUmrahOverviewIntent(text) ||
+        !!detectUmrahMonth(text) ||
+        detectNearestTripIntent(text) ||
+        detectFullCatalogIntent(text) ||
+        detectDurationDays(text) !== null
+      if (isUmrahCatalogQ) {
+        const handoffMsg = buildHandoffMessage(aiTemplates)
+        await persistReply(conv.id, handoffMsg)
+        logHandoff(this.prisma, { companyId, conversationId: conv.id, phone, customerMessage: text, reason: 'freshness_gate', category: 'all_offerings_expired' })
+        if (!simulate) {
+          await this.prisma.conversation.update({
+            where: { id: conv.id },
+            data:  { status: ConvStatus.NEEDS_HUMAN, handoffMessageSent: true },
+          })
+        }
+        console.log(`FRESHNESS_GATE → ${phone} no future offerings — routing to handoff`)
+        return handoffMsg
+      }
+    }
+
     // ══════════════════════════════════════════════════════════════════════════
     // DISPATCH TIER 2 — CATALOG OVERVIEW FALLBACK (non-first-message)
     // Month/duration words are MODIFIERS, not primary intent.
