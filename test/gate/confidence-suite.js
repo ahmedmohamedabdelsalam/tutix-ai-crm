@@ -183,7 +183,12 @@ function evalGateVerdict(id, reply) {
     if (reply.includes('ابعت رقم الرحلة المحددة')) return 'FAIL(dead end, no overview)'
     return 'MANUAL'
   }
-  if (id === 'Q07') return reply.includes('تقسيط') ? 'PASS' : 'FAIL(no installment info)'
+  if (id === 'Q07') {
+    const handoffMarkers = ['زميلنا المختص', 'غير متاح دلوقتي', 'هيرد عليك', 'هيتواصل معك', 'لحظة يافندم', 'فريقنا']
+    if (handoffMarkers.some(m => reply.includes(m))) return 'PASS(handoff on installment)'
+    if (reply.includes('تقسيط')) return 'FAIL(installment policy leaked — must handoff)'
+    return 'FAIL(no handoff on installment question)'
+  }
   if (id === 'Q08') {
     if (reply.includes('أي فندق')) return 'PASS(B1 fixed)'
     if (reply.includes('برامج العمرة ٢٠٢٦') || reply.includes('يوليو')) return 'FAIL(B1 broken: overview shown)'

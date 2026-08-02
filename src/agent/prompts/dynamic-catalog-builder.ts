@@ -1112,7 +1112,6 @@ export interface IndustryPromptParts {
   umrahAllMonthsDetails: string[]
   // Batch-1 handlers
   ctaReply: string
-  installmentReply: string
   umrahDurationMessages: Record<number, string>
   umrahDurationDetails: Record<number, string[]>
   availableDurations: number[]
@@ -1208,8 +1207,6 @@ export function buildIndustryPromptFromDB(
   const hijriYear = '١٤٤٨'
   const ctaTemplate = tpls['ctaTemplate'] ?? DEFAULT_CTA_TEMPLATE
   const ctaReply = buildCTAReply(ctaTemplate, companyName, rawUmrahPrograms, hijriYear)
-  const installmentReply = tpls['installmentPolicy'] ?? ''
-
   const availableDurations = getAvailableUmrahDurations(rawUmrahPrograms)
   const durationPivotMsg = buildDurationPivotMsg(availableDurations)
 
@@ -1227,7 +1224,7 @@ export function buildIndustryPromptFromDB(
     hajjFiveStarPrograms, hajjFiveStarDetails, hajjKadanPrograms, hajjKadanDetails,
     umrahMonthMessages, umrahMonthDetails, umrahMonthLevelMessages,
     umrahAllMonthsMessage, umrahAllMonthsDetails,
-    ctaReply, installmentReply,
+    ctaReply,
     umrahDurationMessages, umrahDurationDetails, availableDurations, durationPivotMsg,
     rawUmrahPrograms, hasFutureOfferings,
   }

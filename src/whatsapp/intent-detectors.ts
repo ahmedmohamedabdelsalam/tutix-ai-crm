@@ -89,7 +89,7 @@ export function detectFlightIntent(text: string): boolean {
 }
 
 export function detectInstallmentIntent(text: string): boolean {
-  return /تقسيط|أقساط|اقساط|قسط|بالقسط|على\s*أقساط|على\s*اقساط/.test(text)
+  return /تقسيط|أقساط|اقساط|قسط|بالقسط|على\s*أقساط|على\s*اقساط|نقسط|دفعات/.test(text)
 }
 
 export function detectHotelDistanceIntent(text: string): boolean {

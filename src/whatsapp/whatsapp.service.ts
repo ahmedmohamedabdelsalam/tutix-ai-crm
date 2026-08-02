@@ -546,6 +546,22 @@ export class WhatsAppService {
       }
     }
 
+    // ── Installment: unconditional handoff — payment terms must be confirmed by a salesperson.
+    // Unconditional: not admin-configurable (unlike blocked categories in confidence-router).
+    if (detectInstallmentIntent(text)) {
+      const handoffMsg = buildHandoffMessage(aiTemplates)
+      await persistReply(conv.id, handoffMsg)
+      logHandoff(this.prisma, { companyId, conversationId: conv.id, phone, customerMessage: text, reason: 'blocked_category', category: 'installment' })
+      if (!simulate) {
+        await this.prisma.conversation.update({
+          where: { id: conv.id },
+          data:  { status: ConvStatus.NEEDS_HUMAN, handoffMessageSent: true },
+        })
+      }
+      console.log(`INSTALLMENT_HANDOFF → ${phone}`)
+      return handoffMsg
+    }
+
     // ══════════════════════════════════════════════════════════════════════════
     // DISPATCH TIER 2 — CATALOG OVERVIEW FALLBACK (non-first-message)
     // Month/duration words are MODIFIERS, not primary intent.
@@ -843,13 +859,6 @@ export class WhatsAppService {
       await persistReply(conv.id, flightMsg)
       console.log(`FLIGHT_HANDLER → ${phone} hajj=false`)
       return flightMsg
-    }
-
-    // ── Installment handler: reply with stored policy; skip if policy not configured ─
-    if (prebuiltCatalog?.installmentReply && detectInstallmentIntent(text)) {
-      await persistReply(conv.id, prebuiltCatalog.installmentReply)
-      console.log(`INSTALLMENT_HANDLER → ${phone}`)
-      return prebuiltCatalog.installmentReply
     }
 
     // ── Nearest trip handler: "أقرب رحلة عمرة امتى" → earliest departure from catalog ─

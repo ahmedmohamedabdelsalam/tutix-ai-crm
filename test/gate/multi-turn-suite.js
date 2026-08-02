@@ -281,11 +281,10 @@ const SCENARIOS = [
       },
       {
         msg: 'ممكن تقسيط؟',
-        hint: 'INSTALLMENT',
+        hint: 'INSTALLMENT→HANDOFF',
         check: r => {
-          if (isHandoffReply(r)) return { pass: false, note: 'FAIL: handoff on installment — should return policy' }
-          const hasTaqseet = r.includes('تقسيط')
-          return { pass: hasTaqseet, note: hasTaqseet ? 'installment info returned' : 'FAIL: no تقسيط in reply' }
+          const handoff = isHandoffReply(r)
+          return { pass: handoff, note: handoff ? 'handoff on installment (correct)' : 'FAIL: installment must route to handoff' }
         },
       },
       {
@@ -488,11 +487,10 @@ const SCENARIOS = [
       },
       {
         msg: 'ممكن تقسيط؟',
-        hint: 'INSTALLMENT',
+        hint: 'INSTALLMENT→HANDOFF',
         check: r => {
-          if (isHandoffReply(r)) return { pass: false, note: 'FAIL: handoff on installment question' }
-          const hasTaqseet = r.includes('تقسيط')
-          return { pass: hasTaqseet, note: hasTaqseet ? 'installment info returned' : 'FAIL: no تقسيط in reply' }
+          const handoff = isHandoffReply(r)
+          return { pass: handoff, note: handoff ? 'handoff on installment (correct)' : 'FAIL: installment must route to handoff' }
         },
       },
       {
@@ -603,11 +601,10 @@ const SCENARIOS = [
       },
       {
         msg: 'عندكم تقسيط في برامج سبتمبر؟',
-        hint: 'INSTALLMENT',
+        hint: 'INSTALLMENT→HANDOFF',
         check: r => {
-          if (isHandoffReply(r)) return { pass: false, note: 'FAIL: handoff on installment question' }
-          const hasTaqseet = r.includes('تقسيط')
-          return { pass: hasTaqseet, note: hasTaqseet ? 'installment info returned' : 'FAIL: no تقسيط' }
+          const handoff = isHandoffReply(r)
+          return { pass: handoff, note: handoff ? 'handoff on installment (correct)' : 'FAIL: installment must route to handoff' }
         },
       },
       {
@@ -693,11 +690,10 @@ const SCENARIOS = [
       },
       {
         msg: 'عندكم تقسيط؟',
-        hint: 'INSTALLMENT',
+        hint: 'INSTALLMENT→HANDOFF',
         check: r => {
-          if (isHandoffReply(r)) return { pass: false, note: 'FAIL: handoff on installment' }
-          const hasTaqseet = r.includes('تقسيط')
-          return { pass: hasTaqseet, note: hasTaqseet ? 'installment returned' : 'FAIL: no تقسيط' }
+          const handoff = isHandoffReply(r)
+          return { pass: handoff, note: handoff ? 'handoff on installment (correct)' : 'FAIL: installment must route to handoff' }
         },
       },
       {

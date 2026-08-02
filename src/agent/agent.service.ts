@@ -28,7 +28,6 @@ export interface PrebuiltCatalog {
   umrahAllMonthsDetails: string[]
   // Batch-1 handlers
   ctaReply: string
-  installmentReply: string
   umrahDurationMessages: Record<number, string>
   umrahDurationDetails: Record<number, string[]>
   availableDurations: number[]
