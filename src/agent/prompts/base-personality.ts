@@ -1,3 +1,5 @@
+import { arabicCount, TIMES } from '../../utils/arabic-numerals'
+
 export function buildBasePersonality(
   identityBlock: string,
   catalogBlock: string,
@@ -8,7 +10,7 @@ export function buildBasePersonality(
   companyName = '',
 ): string {
   const returningBlock = returningCustomer ? `## العميل الدائم — تعليمة فورية
-هذا العميل سبق وسافر معانا ${returningCustomer.tripsCount} ${returningCustomer.tripsCount === 1 ? 'مرة' : 'مرات'} قبل كده. في أول رسالة رحّب بيه ترحيب خاص:
+هذا العميل سبق وسافر معانا ${arabicCount(returningCustomer.tripsCount, TIMES)} قبل كده. في أول رسالة رحّب بيه ترحيب خاص:
 "أهلاً بعودتك يا أستاذ ${returningCustomer.name} تشرفنا تاني حضرتك من عملاءنا المميزين إن شاء الله الرحلة الجديدة تكون أحسن من السابقة"
 بعد الترحيب سأله عن احتياجه الجديد بشكل طبيعي
 

@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common'
-import { toArabicIndic } from '../utils/arabic-numerals'
+import { toArabicIndic, arabicCount, DAYS } from '../utils/arabic-numerals'
 import { PrismaService } from '../prisma/prisma.service'
 import { ConvStatus, FollowUpStatus, LeadStatus } from '@prisma/client'
 import { getAgentReply, extractLeadData, calculateScore, shouldHandoff, LeadData, LeadFacts, PrebuiltCatalog, ApiCreditsExhaustedError, AI_ERROR_REPLY, BOOKING_KEYWORDS } from '../agent/agent.service'
@@ -705,8 +705,7 @@ export class WhatsAppService {
               return false
             })
             if (!levelExists) {
-              const durWord = durationDays >= 3 && durationDays <= 10 ? 'أيام' : 'يوم'
-              levelMismatch = `مش عندنا برامج ${requestedLevel} لمدة ${toArabicIndic(durationDays)} ${durWord} — اتفضل المتاح:\n\n`
+              levelMismatch = `مش عندنا برامج ${requestedLevel} لمدة ${arabicCount(durationDays, DAYS)} — اتفضل المتاح:\n\n`
             }
           }
 

@@ -10,7 +10,7 @@
  */
 
 import { CompanyAIConfig } from '@prisma/client'
-import { toArabicIndic, formatPrice } from '../../utils/arabic-numerals'
+import { toArabicIndic, formatPrice, arabicCount, DAYS, NIGHTS } from '../../utils/arabic-numerals'
 import { UmrahProgram, ProgramType, buildUmrahCatalogTableFromData } from './umrah-packages-2026'
 import { HotelEntry, buildHotelKnowledgeFromData, findHotelInMessageFromData } from './hajj-umrah-hotels'
 
@@ -516,7 +516,7 @@ function renderUmrahTripCard(
   levels: string[], minQuad: number,
   levelPrices?: Record<string, number>,
 ): string {
-  const dur = `${toArabicIndic(duration)} ${ovDurWord(duration)}`
+  const dur = arabicCount(duration, DAYS)
   const header = `⭐ ${toArabicIndic(n)}• ${ovFmtDay(depISO)} — ${ovFmtDay(retISO)} (${dur})`
   if (levelPrices && levels.length > 1) {
     const priceLine = levels.map(l => `${l}: من ${formatPrice(levelPrices[l] ?? 0)}`).join(' | ')
@@ -639,10 +639,8 @@ function ovFmtDay(iso: string): string {
   return `${toArabicIndic(day)} ${OV_MONTHS[mon] ?? iso.slice(5, 7)}`
 }
 
-function ovDurWord(n: number): string { return n >= 3 && n <= 10 ? 'أيام' : 'يوم' }
-
 function renderUmrahTripDetail(depISO: string, retISO: string, duration: number, progs: any[]): string {
-  const header = `*رحلة ${ovFmtDay(depISO)} — ${ovFmtDay(retISO)} ٢٠٢٦ (${toArabicIndic(duration)} ${ovDurWord(duration)})*`
+  const header = `*رحلة ${ovFmtDay(depISO)} — ${ovFmtDay(retISO)} ٢٠٢٦ (${arabicCount(duration, DAYS)})*`
   const sorted = [...progs].sort((a, b) => (a.quadPrice ?? a.priceQuad ?? 0) - (b.quadPrice ?? b.priceQuad ?? 0))
   const lines: string[] = [header, '']
   for (const p of sorted) {
@@ -704,7 +702,7 @@ export function buildUmrahMonthOverview(rawPrograms: any[]): string {
     if (mt.length === 0) continue
     const monName = OV_MONTHS[mon] ?? String(mon)
     const lines = mt.map(t =>
-      `${ovFmtDay(t.depISO)} — ${ovFmtDay(t.retISO)} (${toArabicIndic(t.duration)} ${ovDurWord(t.duration)}) — يبدأ من ${formatPrice(t.minPrice)} جنيه للفرد`
+      `${ovFmtDay(t.depISO)} — ${ovFmtDay(t.retISO)} (${arabicCount(t.duration, DAYS)}) — يبدأ من ${formatPrice(t.minPrice)} جنيه للفرد`
     )
     blocks.push(`[ملخص رحلات ${monName} ٢٠٢٦ — انقله حرفياً]\n${lines.join('\n')}\n[/ملخص رحلات ${monName} ٢٠٢٦]`)
   }
@@ -897,8 +895,7 @@ export function getAvailableUmrahDurations(rawPrograms: any[]): number[] {
 }
 
 export function buildDurationPivotMsg(durations: number[]): string {
-  const durWord = (n: number) => (n >= 3 && n <= 10 ? 'أيام' : 'يوم')
-  const dStr = durations.map(d => `${toArabicIndic(d)} ${durWord(d)}`).join(' / ')
+  const dStr = durations.map(d => arabicCount(d, DAYS)).join(' / ')
   return `متاح يافندم برامج ${dStr} — أنهي مدة مناسبة مع حضرتك؟ 🤍`
 }
 
@@ -946,8 +943,7 @@ export function buildUmrahDurationMessage(
 
   const orderedDetails = trips.map(t => renderUmrahTripDetail(t.depISO, t.retISO, t.duration, t.progs))
 
-  const durWord = durationDays >= 3 && durationDays <= 10 ? 'أيام' : 'يوم'
-  const title = `*رحلات عمرة ${toArabicIndic(durationDays)} ${durWord}*`
+  const title = `*رحلات عمرة ${arabicCount(durationDays, DAYS)}*`
   const parts: string[] = [title]
   trips.forEach((t, i) => {
     let levelPrices: Record<string, number> | undefined
@@ -1012,7 +1008,6 @@ export function buildScheduleItinerary(depISO: string, retISO: string, progs: an
   const depMs = new Date(depISO + 'T00:00:00Z').getTime()
   const retMs = new Date(retISO + 'T00:00:00Z').getTime()
   const totalDays = Math.round((retMs - depMs) / 86400000) + 1
-  const durWord = totalDays === 1 ? 'يوم' : totalDays <= 10 ? 'أيام' : 'يوم'
 
   const makkahNights  = progs[0]?.makkahNights  ?? progs[0]?.meccaNights  ?? 0
   const madinahNights = progs[0]?.madinahNights ?? progs[0]?.medinaNights ?? 0
@@ -1021,11 +1016,11 @@ export function buildScheduleItinerary(depISO: string, retISO: string, progs: an
   const route    = progs.map(p => (p.route ?? '') as string).find(r => r) ?? ''
 
   const lines: string[] = [
-    `*رحلة ${fmtTripDay(depISO)} — ${fmtTripDay(retISO)} (${toArabicIndic(totalDays)} ${durWord})*`,
+    `*رحلة ${fmtTripDay(depISO)} — ${fmtTripDay(retISO)} (${arabicCount(totalDays, DAYS)})*`,
     '',
   ]
-  if (madinahNights > 0) lines.push(`· المدينة المنورة: ${toArabicIndic(madinahNights)} ليالي`)
-  if (makkahNights  > 0) lines.push(`· مكة المكرمة: ${toArabicIndic(makkahNights)} ليالي`)
+  if (madinahNights > 0) lines.push(`· المدينة المنورة: ${arabicCount(madinahNights, NIGHTS)}`)
+  if (makkahNights  > 0) lines.push(`· مكة المكرمة: ${arabicCount(makkahNights, NIGHTS)}`)
   if (hasTrain)          lines.push(`· قطار الحرمين: مشمول ✓`)
   if (airline)           lines.push(`· الطيران: ${airline}${route ? ` (${route})` : ''}`)
 
