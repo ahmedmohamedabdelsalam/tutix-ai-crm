@@ -18,6 +18,7 @@ import { incrementAIFailure, resetAIFailure } from './ai-failure-tracker'
 import { getPrebuiltCatalog } from './catalog-loader'
 import { isAIConfigActive, getAIConfigTemplates } from './ai-config-cache'
 import { fullDetailsMap, overviewMap, categoryQuestionMap, noMatchMap } from './conversation-state'
+import { lastAssistantMatching, looksLikeOverview, looksLikeCategoryQuestion, looksLikeUnfinishedChunk, identifyOverview, recoveryText } from './state-recovery'
 import { scanModelOutput, buildEntityBlocklist } from './output-guard'
 import { logHandoff } from './handoff-log'
 import { matchFAQ, detectBlockedCategory, buildHandoffMessage } from './confidence-router'
@@ -425,6 +426,27 @@ export class WhatsAppService {
       if (fdState && !isContinue) {
         fullDetailsMap.delete(conv.id)
       }
+
+      // ── STATE RECOVERY: chunk offset lost mid-delivery ──────────────────────
+      // "كمل" with no fdState used to dead-end (isContinue needs the state, and
+      // "كمل" is not a full-details intent). Restart from the beginning instead —
+      // only when the recent history shows an unfinished chunk was actually sent.
+      if (!fdState && detectContinueResponse(text)) {
+        const prevChunk = lastAssistantMatching(conv.messages as any[], looksLikeUnfinishedChunk)
+        if (prevChunk) {
+          const details = prebuiltCatalog.hajjProgramDetails
+          const chunkItems = details.slice(0, 3)
+          const isLast = chunkItems.length >= details.length
+          const closing = isLast
+            ? `كده عرضتلك كل البرامج يافندم — أنهي واحد قرب لقلبك؟`
+            : `دول ${toArabicIndic(chunkItems.length)} من ${toArabicIndic(details.length)} يافندم — أكملك الباقي؟`
+          const msg = `${recoveryText(aiTemplates, 'chunk')}\n\n${chunkItems.join('\n\n')}\n\n${closing}`
+          if (!isLast) fullDetailsMap.set(conv.id, { offset: chunkItems.length, total: details.length })
+          await persistReply(conv.id, msg)
+          console.log(`STATE_RECOVERY fullDetails → ${phone} restarted from 0/${details.length}`)
+          return msg
+        }
+      }
     }
 
     // ── Overview state: number-reply handler (all message counts) ────────────────
@@ -459,6 +481,33 @@ export class WhatsAppService {
         }
         // Topic changed — clear overview state and let normal AI handle it
         overviewMap.delete(conv.id)
+      } else {
+        // ── STATE RECOVERY: overview state lost (deploy restart / eviction) ──
+        // Fires ONLY when the recent history shows we actually sent an overview or
+        // the category question, so a bare number meaning something else ("٤" =
+        // four people) still falls through untouched.
+        const n = detectNumberReply(text)
+        if (n !== null) {
+          const prevOv = lastAssistantMatching(conv.messages as any[], looksLikeOverview)
+          if (prevOv) {
+            const recovered = identifyOverview(prevOv, prebuiltCatalog)
+            if (recovered) {
+              overviewMap.set(conv.id, recovered.state)
+              const msg = `${recoveryText(aiTemplates, 'overview')}\n\n${recovered.message}`
+              await persistReply(conv.id, msg)
+              console.log(`STATE_RECOVERY overview → ${phone} n=${n} re-sent + state restored`)
+              return msg
+            }
+          }
+          const prevCat = lastAssistantMatching(conv.messages as any[], looksLikeCategoryQuestion)
+          if (prevCat && prebuiltCatalog.hajjCategoryQuestion) {
+            categoryQuestionMap.set(conv.id, true)
+            const msg = `${recoveryText(aiTemplates, 'category')}\n\n${prebuiltCatalog.hajjCategoryQuestion}`
+            await persistReply(conv.id, msg)
+            console.log(`STATE_RECOVERY category → ${phone} n=${n} re-sent + state restored`)
+            return msg
+          }
+        }
       }
     }
 
