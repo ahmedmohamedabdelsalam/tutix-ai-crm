@@ -36,6 +36,74 @@ export function extractByRole(
   return values[def.key] ?? null
 }
 
+// ── Hajj: Offering values → HajjProgram (H3 bridge) ──────────────────────────
+// Inverse of scripts/hajj-h2-populate.js. Reconstructs the exact shape that
+// catalog.hajjPrograms holds, so every existing hajj renderer is untouched.
+// Spec: docs/hajj-offering-spec.md
+const HAJJ_SECTION_MAP: Array<[keyof HajjProgram, string]> = [
+  ['medina',          'medina'],
+  ['aziziyah',        'aziziyah'],
+  ['makkahPreSeason', 'makkah'],
+  ['tahseen',         'tahseen'],
+]
+
+export function offeringToRawHajjProgram(values: Record<string, unknown>): any {
+  const v = values as any
+  const content  = (v.contentJson  ?? {}) as Record<string, any>
+  const sections = (v.sectionsJson ?? {}) as Record<string, any>
+
+  const p: any = {
+    id:                 v.id,
+    name:               v.name,
+    pricePerPerson:     v.pricePerPerson ?? null,
+    ticketType:         v.ticketType ?? '',
+    transportationType: v.transportationType ?? '',
+    haramainTrain:      v.haramainTrain ?? false,
+    includesAirTicket:  v.includesAirTicket ?? false,
+    highlights:         content.highlights ?? [],
+  }
+
+  // Optional scalars: omit when absent so the rendered output matches the JSON
+  // path exactly (renderHajjProgram branches on truthiness).
+  if (v.discountedPrice != null) p.discountedPrice = v.discountedPrice
+  if (v.discountAmount  != null) p.discountAmount  = v.discountAmount
+  if (v.discountNote    != null) p.discountNote    = v.discountNote
+  for (const k of ['scholarNote', 'subLevels', 'transitToMecca', 'arafat', 'mina', 'manasikhMeals']) {
+    if (content[k] != null) p[k] = content[k]
+  }
+
+  // Presence rule (spec §2.3): a section exists iff its hotel key is non-empty.
+  // Never emit an empty section object — the renderer branches on `if (p.medina)`
+  // and would print a header with blank hotel/dates.
+  for (const [src, prefix] of HAJJ_SECTION_MAP) {
+    const hotel = v[`${prefix}Hotel`]
+    if (typeof hotel !== 'string' || hotel.trim() === '') continue
+    p[src as string] = {
+      hotel,
+      dateHijri:     v[`${prefix}DateHijri`]     ?? '',
+      dateGregorian: v[`${prefix}DateGregorian`] ?? '',
+      ...(sections[src as string] ?? {}),
+    }
+  }
+  return p
+}
+
+/**
+ * Maps hajj Offerings to the raw array the builders expect, PRESERVING THE GIVEN
+ * ORDER (the loader supplies them by sortOrder = original catalog.hajjPrograms index).
+ *
+ * Do NOT sort by category+price here. That grouping is applied *inside*
+ * buildHajjOverviewMessage / buildHajjCategoryPrograms, which re-filter and re-sort
+ * the raw array themselves. Two surfaces — hajjProgramDetails and the system-prompt
+ * hajj section — render the raw array in the order given, so pre-sorting here
+ * silently renumbers them. (H4 caught exactly this.)
+ */
+export function hajjOfferingsToRawPrograms(
+  offerings: Array<{ values: Record<string, unknown> }>,
+): any[] {
+  return offerings.map(o => offeringToRawHajjProgram(o.values))
+}
+
 /**
  * Maps one Offering's values + its type's fieldDefs to the same raw shape as
  * catalog.umrahPrograms entries.  All downstream builders already accept this
@@ -1118,6 +1186,7 @@ export function buildIndustryPromptFromDB(
   config: CompanyAIConfig,
   companyName: string,
   offeringsOverride?: Array<{ values: Record<string, unknown>; fieldDefs: FieldDef[] }>,
+  hajjOfferingsOverride?: Array<{ values: Record<string, unknown> }>,
 ): IndustryPromptParts {
   const cat = config.catalog as unknown as CatalogJson
   const ind = config.industryData as unknown as IndustryDataJson | null
@@ -1146,9 +1215,15 @@ export function buildIndustryPromptFromDB(
     cat.hotelBookingLinks ?? {},
   )
 
-  // Hajj catalog rendered from structured JSON (unchanged — Hajj still reads catalog.hajjPrograms)
+  // Hajj source: Offerings table when the bridge is enabled (USE_DB_HAJJ), else the
+  // frozen catalog.hajjPrograms JSON. Order is the source authoring order in both
+  // cases — see docs/hajj-offering-spec.md §5.
+  const rawHajjPrograms: any[] = hajjOfferingsOverride !== undefined
+    ? hajjOfferingsToRawPrograms(hajjOfferingsOverride)
+    : (cat.hajjPrograms as any[])
+
   const hajjCatalog = buildHajjCatalogFromDB(
-    cat.hajjPrograms,
+    rawHajjPrograms,
     ind?.hajjHijriDates ?? [],
   )
 
@@ -1163,18 +1238,18 @@ export function buildIndustryPromptFromDB(
   const hotelList = ind?.hotels ?? []
   const hotels    = buildHotelKnowledgeFromData(hotelList)
 
-  const hajjProgramDetails = buildHajjProgramDetailsArray(cat.hajjPrograms)
+  const hajjProgramDetails = buildHajjProgramDetailsArray(rawHajjPrograms)
 
   const { message: hajjOverviewMessage, orderedDetails: hajjOverviewDetails } =
-    buildHajjOverviewMessage(cat.hajjPrograms)
+    buildHajjOverviewMessage(rawHajjPrograms)
 
-  const hajjCategoryQuestion = buildHajjCategoryQuestion(cat.hajjPrograms)
+  const hajjCategoryQuestion = buildHajjCategoryQuestion(rawHajjPrograms)
   const { message: hajjEconomyPrograms, orderedDetails: hajjEconomyDetails } =
-    buildHajjCategoryPrograms('ECONOMY', cat.hajjPrograms, HAJJ_OV_DISCLAIMER)
+    buildHajjCategoryPrograms('ECONOMY', rawHajjPrograms, HAJJ_OV_DISCLAIMER)
   const { message: hajjFiveStarPrograms, orderedDetails: hajjFiveStarDetails } =
-    buildHajjCategoryPrograms('FIVE_STAR', cat.hajjPrograms, HAJJ_OV_DISCLAIMER)
+    buildHajjCategoryPrograms('FIVE_STAR', rawHajjPrograms, HAJJ_OV_DISCLAIMER)
   const { message: hajjKadanPrograms, orderedDetails: hajjKadanDetails } =
-    buildHajjCategoryPrograms('KADAN', cat.hajjPrograms, HAJJ_OV_DISCLAIMER)
+    buildHajjCategoryPrograms('KADAN', rawHajjPrograms, HAJJ_OV_DISCLAIMER)
 
   const umrahMonthMessages: Record<string, string> = {}
   const umrahMonthDetails: Record<string, string[]> = {}

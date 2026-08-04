@@ -26,6 +26,15 @@ console.log(
   `[STARTUP] USE_DB_CATALOG raw="${process.env.USE_DB_CATALOG ?? ''}" → resolved=${USE_DB_CATALOG_RESOLVED}`,
 )
 
+// H3 bridge flag. OFF by default: hajj keeps reading the frozen
+// catalog.hajjPrograms JSON until the byte-identical proof (H4) is accepted and
+// the owner flips this deliberately. See docs/hajj-offering-spec.md.
+const USE_DB_HAJJ_RESOLVED = resolveFlag(process.env.USE_DB_HAJJ)
+console.log(
+  `[STARTUP] USE_DB_HAJJ raw="${process.env.USE_DB_HAJJ ?? ''}" → resolved=${USE_DB_HAJJ_RESOLVED}` +
+  ` (${USE_DB_HAJJ_RESOLVED ? 'hajj from Offerings table' : 'hajj from catalog.hajjPrograms JSON'})`,
+)
+
 // In-memory per-company catalog cache.  TTL = 5 minutes.
 // Invalidated explicitly by invalidateCatalogCache() — call this wherever
 // Offering or OfferingType rows are written so the next request rebuilds.
@@ -99,8 +108,28 @@ export async function getPrebuiltCatalog(
     console.log(`DB_CATALOG: Offerings path — ${allOfferings.length} total, ${futureOfferings.length} future for companyId=${companyId} (today=${todayISO} tz=${tz})`)
   }
 
+  // Hajj bridge (H3). Flag-gated and undefined unless BOTH the flag is on and the
+  // حج OfferingType exists — undefined keeps the builder on catalog.hajjPrograms.
+  // No date filtering here: hajj freshness is H5 and must use the END date.
+  let hajjOverride: Array<{ values: Record<string, unknown> }> | undefined
+  if (USE_DB_HAJJ_RESOLVED) {
+    const hajjType = await prisma.offeringType.findFirst({
+      where: { companyId, name: 'حج', isActive: true },
+    })
+    if (hajjType) {
+      const hajjOfferings = await prisma.offering.findMany({
+        where: { companyId, offeringTypeId: hajjType.id, isActive: true },
+        orderBy: { sortOrder: 'asc' },
+      })
+      hajjOverride = hajjOfferings.map(o => ({ values: o.values as Record<string, unknown> }))
+      console.log(`DB_CATALOG: Hajj Offerings path — ${hajjOfferings.length} programs for companyId=${companyId}`)
+    } else {
+      console.warn(`DB_CATALOG: USE_DB_HAJJ is on but no 'حج' OfferingType for companyId=${companyId} — falling back to JSON`)
+    }
+  }
+
   console.log(`DB_CATALOG: building catalog for config id=${config.id} company=${companyName}`)
-  const result = buildIndustryPromptFromDB(config as any, companyName, offeringsOverride)
+  const result = buildIndustryPromptFromDB(config as any, companyName, offeringsOverride, hajjOverride)
 
   cache.set(companyId, { result, expiresAt: now + CACHE_TTL_MS })
   return result
