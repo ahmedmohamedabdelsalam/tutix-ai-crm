@@ -1,5 +1,6 @@
-import { Controller, Get, Post, Body, Query, Res, Headers, ForbiddenException } from '@nestjs/common'
-import type { Response } from 'express'
+import { Controller, Get, Post, Body, Query, Res, Req, Headers, ForbiddenException } from '@nestjs/common'
+import type { RawBodyRequest } from '@nestjs/common'
+import type { Request, Response } from 'express'
 import { ConvStatus } from '@prisma/client'
 import { WhatsAppService } from './whatsapp.service'
 import { FollowUpService } from './followup.service'
@@ -11,6 +12,7 @@ import { isAIConfigActive, getAIConfigTemplates } from './ai-config-cache'
 import { buildHandoffMessage } from './confidence-router'
 import { logHandoff } from './handoff-log'
 import { invalidateCatalogCache } from './catalog-loader'
+import { assertInternalToken, checkMetaSignature } from './internal-auth'
 
 const MEDIA_REPLIES: Record<string, { label: string; reply: string }> = {
   audio:    { label: '[رسالة صوتية]',   reply: 'حضرتك بعتلنا رسالة صوتية، للأسف مش بنقدر نسمعها دلوقتي لو ممكن تكتب طلبك يافندم نكون شاكرين' },
@@ -79,7 +81,27 @@ export class WhatsAppController {
   }
 
   @Post()
-  async receive(@Body() body: any, @Res() res: Response) {
+  async receive(
+    @Body() body: any,
+    @Res() res: Response,
+    @Req() req: RawBodyRequest<Request>,
+    @Headers('x-hub-signature-256') signature?: string,
+  ) {
+    // Verify Meta's HMAC BEFORE returning 200 or doing any work. Under enforcement
+    // an unsigned or forged payload must never reach handleMessage — that path
+    // writes Lead / Conversation / Message rows, calls the model, and sends
+    // WhatsApp messages from the company's number to an attacker-controlled `from`.
+    //
+    // Ships in WARN mode (META_SIGNATURE_ENFORCE unset): the outcome is logged but
+    // the request is still processed, so a misconfigured secret cannot cut off live
+    // customer traffic. Nothing below this block runs when accept is false.
+    const sig = checkMetaSignature(req.rawBody, signature)
+    if (!sig.accept) {
+      console.warn(`WEBHOOK_SIG_REJECT — ${sig.reason}`)
+      res.status(403).send('Forbidden')
+      return
+    }
+
     // Must return 200 to Meta immediately before any async work
     res.status(200).send('OK')
     try {
@@ -284,7 +306,11 @@ export class WhatsAppController {
   }
 
   @Post('test')
-  async test(@Body() body: { phone: string; message: string; simulate?: boolean }) {
+  async test(
+    @Body() body: { phone: string; message: string; simulate?: boolean },
+    @Headers('x-internal-token') token: string,
+  ) {
+    assertInternalToken(token, 'TEST_ENDPOINT_TOKEN')
     try {
       console.log('--- /webhook/test called ---')
       console.log('DEFAULT_COMPANY_ID:', process.env.DEFAULT_COMPANY_ID ?? '❌ NOT SET')
@@ -344,7 +370,11 @@ export class WhatsAppController {
 
   // Test media handling — simulates receiving a non-text message
   @Post('test-media')
-  async testMedia(@Body() body: { phone: string; type: string }) {
+  async testMedia(
+    @Body() body: { phone: string; type: string },
+    @Headers('x-internal-token') token: string,
+  ) {
+    assertInternalToken(token, 'TEST_ENDPOINT_TOKEN')
     const companyId = process.env.DEFAULT_COMPANY_ID
     if (!companyId) return { error: 'DEFAULT_COMPANY_ID not set' }
     const company = await this.prisma.company.findUnique({ where: { id: companyId } })
@@ -375,7 +405,11 @@ export class WhatsAppController {
   // conversation without duplicating the user message. Called by the dashboard before
   // switching agentMode to HUMAN, so the customer gets a reply before the rep takes over.
   @Post('convreply')
-  async convReply(@Body() body: { convId: string; companyId: string }) {
+  async convReply(
+    @Body() body: { convId: string; companyId: string },
+    @Headers('x-internal-token') token: string,
+  ) {
+    assertInternalToken(token, 'TEST_ENDPOINT_TOKEN')
     try {
       if (!body.convId)    return { error: 'convId required' }
       if (!body.companyId) return { error: 'companyId required' }
@@ -395,7 +429,8 @@ export class WhatsAppController {
 
   // Manually trigger the follow-up cron (bypasses time window — for testing only)
   @Post('test-followup')
-  async testFollowup() {
+  async testFollowup(@Headers('x-internal-token') token: string) {
+    assertInternalToken(token, 'TEST_ENDPOINT_TOKEN')
     return this.followup.triggerNow()
   }
 
@@ -406,8 +441,7 @@ export class WhatsAppController {
     @Body() body: { companyId: string },
     @Headers('x-internal-token') token: string,
   ) {
-    const expected = process.env.INTERNAL_CACHE_TOKEN
-    if (!expected || token !== expected) throw new ForbiddenException()
+    assertInternalToken(token, 'INTERNAL_CACHE_TOKEN')
     if (!body.companyId) return { error: 'companyId required' }
     invalidateCatalogCache(body.companyId)
     return { ok: true }

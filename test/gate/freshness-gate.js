@@ -40,6 +40,13 @@ if (!COMPANY) { console.error('FATAL: DEFAULT_COMPANY_ID not set'); process.exit
 const pool = new Pool({ connectionString: process.env.DIRECT_URL || process.env.DATABASE_URL })
 
 // ── Server lifecycle ───────────────────────────────────────────────────────
+// ── Test-endpoint auth ───────────────────────────────────────────────────────
+// /webhook/test now requires X-Internal-Token (fail-closed). Uses
+// TEST_ENDPOINT_TOKEN from the environment when set; otherwise mints an
+// ephemeral token and injects it into the server this suite spawns, so a local
+// run needs no configuration. Never hardcoded.
+const TEST_TOKEN = process.env.TEST_ENDPOINT_TOKEN || require("crypto").randomBytes(24).toString("hex")
+
 let serverProc = null
 
 function startServer() {
@@ -47,7 +54,7 @@ function startServer() {
     console.log('\n[SERVER] Spawning node dist/src/main.js ...')
     serverProc = spawn('node', ['dist/src/main.js'], {
       cwd: path.join(__dirname, '../..'),
-      env: { ...process.env, NODE_ENV: 'production' },
+      env: { ...process.env, NODE_ENV: 'production', TEST_ENDPOINT_TOKEN: TEST_TOKEN },
       stdio: ['ignore', 'pipe', 'pipe'],
     })
     serverProc.stdout.on('data', d => process.stdout.write('[SRV] ' + d.toString()))
@@ -80,7 +87,7 @@ function httpPost(urlPath, body) {
     const data = JSON.stringify(body)
     const req = http.request(
       { hostname: HOST, port: PORT, path: urlPath, method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) } },
+        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data), 'X-Internal-Token': TEST_TOKEN } },
       res => {
         let buf = ''
         res.on('data', d => buf += d)

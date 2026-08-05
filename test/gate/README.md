@@ -62,3 +62,44 @@ npm run build:clean
 ```
 
 Run this before pushing whenever you add a new `.ts` file to `src/` to match what Railway sees on a cold build.
+
+---
+
+## verify-webhook-signature.js — post-deploy signature check
+
+`POST /webhook` verifies Meta's `X-Hub-Signature-256`. It ships in **warn mode**
+(`META_SIGNATURE_ENFORCE` unset): the outcome is logged as `[SIG] ok` / `[SIG] FAIL`,
+but every request is still processed, so a wrong secret cannot cut off live customer
+traffic. Enforcement is opt-in — see [SECURITY.md](../../SECURITY.md) §5.
+
+Run immediately after any deploy that touches signature verification, `META_APP_SECRET`,
+or `META_SIGNATURE_ENFORCE`:
+
+```bash
+META_APP_SECRET=<same-value-as-railway> node test/gate/verify-webhook-signature.js
+```
+
+It proves correctly-signed requests are **accepted** (not just that forgeries are
+rejected) and reports the detected mode, with zero side effects — the probes use a bogus
+`phone_number_id`, so they stop at the unknown-company guard before any DB write, AI
+call, or WhatsApp send. `correctly signed → 200` must hold in both modes.
+
+The CRM also logs one `[SIG_SUMMARY]` line per hour showing how many inbound requests
+passed vs failed verification — that is the signal for when it is safe to enforce.
+
+That probe signs with our own implementation, so it cannot prove our HMAC matches Meta's.
+Follow it with a genuine Meta-signed request:
+
+```bash
+# after sending one real WhatsApp message from the test phone to the business number
+node test/gate/verify-webhook-signature.js --check-inbound
+```
+
+Rollback steps, deploy order, and the full endpoint auth table are in [SECURITY.md](../../SECURITY.md).
+
+### Test-endpoint token
+
+The gate suites call `/webhook/test`, which now requires `X-Internal-Token`. They read
+`TEST_ENDPOINT_TOKEN` from the environment; when it is unset they mint an ephemeral token
+and inject it into the server they spawn, so local runs need no configuration. The token
+is never hardcoded.
