@@ -92,6 +92,25 @@ export function detectInstallmentIntent(text: string): boolean {
   return /تقسيط|أقساط|اقساط|قسط|بالقسط|على\s*أقساط|على\s*اقساط|نقسط|دفعات/.test(text)
 }
 
+/**
+ * "How many nights in Makkah / Madinah", "how many days is the trip", "how are the
+ * nights split". The correct answer always contains a digit, which the output guard
+ * blocks in model text — so this must be answered deterministically or it can only
+ * ever end in a handoff.
+ *
+ * Requires an explicit كام/كم so a catalog filter like "عمرة ١٠ أيام" (a statement,
+ * not a question) still routes to the duration bypass.
+ */
+export function detectNightsSplitIntent(text: string): boolean {
+  const asksNights = /(كام|كم)\s*(ليلة|ليله|ليالي|ليال)/.test(text)
+  if (asksNights) return true
+  const asksDays = /(كام|كم)\s*(يوم|أيام|ايام)/.test(text)
+  const placeCtx  = /مكة|مكه|المدينة|المدينه|الحرم|هناك|النبوي/.test(text)
+  if (asksDays && placeCtx) return true
+  if (/(تقسيم|توزيع)\s*(ال)?(ليالي|ليال|أيام|ايام|إقامة|اقامة)/.test(text)) return true
+  return false
+}
+
 export function detectHotelDistanceIntent(text: string): boolean {
   // NOTE: \b is NOT used — Arabic chars are \W in JS, so \b after Arabic text is always dead.
   return /المسافة|قريب\s*(?:من)?|بعيد\s*(?:من)?|كام\s*(?:متر|دقيق)|كم\s*(?:متر|دقيق)|مشي\s*(?:كام|كم)|مشياً|من\s*الحرم|من\s*المسجد/.test(text)

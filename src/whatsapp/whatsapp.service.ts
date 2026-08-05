@@ -8,7 +8,7 @@ import { applyHajjDateDisclaimer } from './hajj-date-disclaimer'
 import { companionConfirmedInHistory, travelDateConfirmedInHistory } from './lead-fact-guards'
 import { detectOnlinePayment, detectFarFromBranch, detectVisitConfirm } from './booking-stage-detectors'
 import { getGovFromText, branchMessage } from './branch-lookup'
-import { containsFirstMessageQuestion, detectUmrahMonth, detectUmrahLevel, detectFullDetailsIntent, detectContinueResponse, detectHajjOverviewIntent, detectHajjCategoryReply, detectNumberReply, detectUmrahOverviewIntent, detectCTAMessage, detectDurationDays, detectPriceIntent, detectScheduleIntent, detectFlightIntent, detectInstallmentIntent, detectHotelDistanceIntent, detectNearestTripIntent, detectHotelContentIntent, detectGreetingOnly, detectReligiousPhrase, extractNameFromText, extractPhoneNumber, detectFullCatalogIntent } from './intent-detectors'
+import { containsFirstMessageQuestion, detectUmrahMonth, detectUmrahLevel, detectFullDetailsIntent, detectContinueResponse, detectHajjOverviewIntent, detectHajjCategoryReply, detectNumberReply, detectUmrahOverviewIntent, detectCTAMessage, detectDurationDays, detectPriceIntent, detectScheduleIntent, detectFlightIntent, detectInstallmentIntent, detectHotelDistanceIntent, detectNearestTripIntent, detectHotelContentIntent, detectNightsSplitIntent, detectGreetingOnly, detectReligiousPhrase, extractNameFromText, extractPhoneNumber, detectFullCatalogIntent } from './intent-detectors'
 
 import { detectFollowUpIntent, clampToWindow, DEFERRAL_PHRASES } from './follow-up-scheduler'
 import { handleAICreditsExhausted, writeCostRecord } from './ai-cost-helpers'
@@ -19,6 +19,7 @@ import { getPrebuiltCatalog } from './catalog-loader'
 import { isAIConfigActive, getAIConfigTemplates } from './ai-config-cache'
 import { fullDetailsMap, overviewMap, categoryQuestionMap, noMatchMap } from './conversation-state'
 import { lastAssistantMatching, looksLikeOverview, looksLikeCategoryQuestion, looksLikeUnfinishedChunk, identifyOverview, recoveryText } from './state-recovery'
+import { narrowCandidates, buildNightsReply, distinctSplits, historyTextOf } from './nights-handler'
 import { scanModelOutput, buildEntityBlocklist } from './output-guard'
 import { logHandoff } from './handoff-log'
 import { matchFAQ, detectBlockedCategory, buildHandoffMessage } from './confidence-router'
@@ -958,6 +959,25 @@ export class WhatsAppService {
         await persistReply(conv.id, detail + closingQ)
         console.log(`NEAREST_TRIP_HANDLER → ${phone} dep=${nearest.depISO}`)
         return ['اتفضل يافندم — أقرب رحلة عمرة عندنا:', detail + closingQ]
+      }
+    }
+
+    // ── Nights-split handler: answer from offering data, never the model ─────────
+    // "كام يوم في مكة؟" has a numeric answer, and the output guard blocks every digit
+    // in model output — so without this the reply is discarded and the customer gets a
+    // handoff. Scoped to the program in context (hotel/duration named here or earlier
+    // in the conversation); ambiguous cases ask, listing only real catalog durations.
+    // Hajj is excluded: its nights live in section objects, a different shape.
+    if (prebuiltCatalog?.rawUmrahPrograms?.length
+        && detectNightsSplitIntent(text)
+        && detectHajjOverviewIntent(text) === null) {
+      const histText = historyTextOf(conv.messages as any[])
+      const cands    = narrowCandidates(text, histText, prebuiltCatalog.rawUmrahPrograms, detectDurationDays)
+      const reply    = buildNightsReply(cands, prebuiltCatalog.availableDurations ?? [])
+      if (reply) {
+        await persistReply(conv.id, reply)
+        console.log(`NIGHTS_HANDLER → ${phone} candidates=${cands.length} splits=${distinctSplits(cands).length}`)
+        return reply
       }
     }
 
