@@ -145,6 +145,27 @@ export function detectDepartureDatesIntent(text: string): boolean {
   return /(بتسافر|بتسافروا|السفر|بتقوم|بتقوموا|تقوم|الرحلة|الرحلات|المغادرة|بتمشي|بتمشوا)/.test(text)
 }
 
+/**
+ * SPECIFICITY GUARD — the message asks something a dedicated handler answers, so a
+ * month/duration word in it is a MODIFIER, not a request for the catalog.
+ *
+ * Single definition on purpose: this used to be inlined in the non-first-message
+ * overview bypass only, so on a FIRST message "الطيران ايه في برامج سبتمبر؟" was
+ * answered with a September catalog dump instead of the flight answer. Both bypasses
+ * now call this, and test/gate/dispatch-order-suite.js holds them to it.
+ */
+export function hasSpecificHandlerIntent(text: string): boolean {
+  return detectFlightIntent(text)
+      || detectInstallmentIntent(text)
+      || detectHotelDistanceIntent(text)
+      || detectScheduleIntent(text)
+      || detectNearestTripIntent(text)
+      || detectNightsSplitIntent(text)
+      || detectRoomCapacityIntent(text)
+      || detectDepartureDatesIntent(text)
+      || detectHotelContentIntent(text)
+}
+
 export function detectHotelDistanceIntent(text: string): boolean {
   // NOTE: \b is NOT used — Arabic chars are \W in JS, so \b after Arabic text is always dead.
   return /المسافة|قريب\s*(?:من)?|بعيد\s*(?:من)?|كام\s*(?:متر|دقيق)|كم\s*(?:متر|دقيق)|مشي\s*(?:كام|كم)|مشياً|من\s*الحرم|من\s*المسجد/.test(text)

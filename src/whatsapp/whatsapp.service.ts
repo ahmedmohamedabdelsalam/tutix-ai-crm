@@ -8,7 +8,7 @@ import { applyHajjDateDisclaimer } from './hajj-date-disclaimer'
 import { companionConfirmedInHistory, travelDateConfirmedInHistory } from './lead-fact-guards'
 import { detectOnlinePayment, detectFarFromBranch, detectVisitConfirm } from './booking-stage-detectors'
 import { getGovFromText, branchMessage } from './branch-lookup'
-import { containsFirstMessageQuestion, detectUmrahMonth, detectUmrahLevel, detectFullDetailsIntent, detectContinueResponse, detectHajjOverviewIntent, detectHajjCategoryReply, detectNumberReply, detectUmrahOverviewIntent, detectCTAMessage, detectDurationDays, detectPriceIntent, detectScheduleIntent, detectFlightIntent, detectInstallmentIntent, detectHotelDistanceIntent, detectNearestTripIntent, detectHotelContentIntent, detectNightsSplitIntent, detectRoomCapacityIntent, detectDepartureDatesIntent, detectHajjDurationIntent, detectGreetingOnly, detectReligiousPhrase, extractNameFromText, extractPhoneNumber, detectFullCatalogIntent } from './intent-detectors'
+import { containsFirstMessageQuestion, detectUmrahMonth, detectUmrahLevel, detectFullDetailsIntent, detectContinueResponse, detectHajjOverviewIntent, detectHajjCategoryReply, detectNumberReply, detectUmrahOverviewIntent, detectCTAMessage, detectDurationDays, detectPriceIntent, detectScheduleIntent, detectFlightIntent, detectInstallmentIntent, detectHotelDistanceIntent, detectNearestTripIntent, detectHotelContentIntent, detectNightsSplitIntent, detectRoomCapacityIntent, detectDepartureDatesIntent, detectHajjDurationIntent, hasSpecificHandlerIntent, detectGreetingOnly, detectReligiousPhrase, extractNameFromText, extractPhoneNumber, detectFullCatalogIntent } from './intent-detectors'
 
 import { detectFollowUpIntent, clampToWindow, DEFERRAL_PHRASES } from './follow-up-scheduler'
 import { handleAICreditsExhausted, writeCostRecord } from './ai-cost-helpers'
@@ -525,7 +525,9 @@ export class WhatsAppService {
         // Fires ONLY when the recent history shows we actually sent an overview or
         // the category question, so a bare number meaning something else ("٤" =
         // four people) still falls through untouched.
-        const n = detectNumberReply(text)
+        // Skip when categoryQuestionMap still holds state: nothing was lost, and the
+        // hajj category handler below owns this number.
+        const n = categoryQuestionMap.has(conv.id) ? null : detectNumberReply(text)
         if (n !== null) {
           const prevOv = lastAssistantMatching(conv.messages as any[], looksLikeOverview)
           if (prevOv) {
@@ -715,19 +717,10 @@ export class WhatsAppService {
       // below) answers — the month should FILTER that answer, not preempt it with an
       // overview dump. Price queries with a month are intentionally excluded: the overview
       // → trip-selection → detail flow is the correct price path for month+price combos.
-      const hasSpecificHandlerIntent =
-        detectFlightIntent(text) ||
-        detectInstallmentIntent(text) ||
-        detectHotelDistanceIntent(text) ||
-        detectScheduleIntent(text) ||
-        detectNearestTripIntent(text) ||
-        detectNightsSplitIntent(text) ||
-        detectRoomCapacityIntent(text) ||
-        detectDepartureDatesIntent(text) ||
-        detectHotelContentIntent(text)
+      const specificIntent = hasSpecificHandlerIntent(text)
 
       // Umrah overviews — rawTrips populated for schedule/flight handlers
-      if ((isUmrahOv || isUmrahAllOv) && !hasSpecificHandlerIntent) {
+      if ((isUmrahOv || isUmrahAllOv) && !specificIntent) {
         fullDetailsMap.delete(conv.id)
         const firstName = knownCustomerName?.split(/\s+/)[0]
         const intro = firstName ? `تمام يا أستاذ ${firstName} اتفضل` : `اتفضل يافندم`
@@ -766,7 +759,7 @@ export class WhatsAppService {
 
       // Month unavailable: a specific month was detected but has no programs.
       // Skip if a specific handler intent is present — that handler takes priority.
-      if (ovMonth && !prebuiltCatalog.umrahMonthMessages?.[ovMonth] && detectHajjOverviewIntent(text) === null && !hasSpecificHandlerIntent) {
+      if (ovMonth && !prebuiltCatalog.umrahMonthMessages?.[ovMonth] && detectHajjOverviewIntent(text) === null && !specificIntent) {
         const unavailMsg = `برامج ${ovMonth} لسه بتتجهز — لما تبقى متاحة هنعلمك فوراً إن شاء الله 🤍\nتحب تبعتلنا اسمك ورقم تليفونك عشان نتواصل معك أول ما تتاح البرامج؟`
         if (conv.leadId) {
           await this.prisma.lead.update({ where: { id: conv.leadId }, data: { notes: `اهتمام: ${ovMonth}` } })
@@ -871,7 +864,9 @@ export class WhatsAppService {
       }
 
       // Umrah overviews — rawTrips populated for schedule/flight handlers
-      if (isUmrahOvFirst || isUmrahAllOvFirst) {
+      // Same SPECIFICITY GUARD as the non-first path — without it a flight/hotel/
+      // nights question that mentions a month gets a catalog dump on first contact.
+      if ((isUmrahOvFirst || isUmrahAllOvFirst) && !hasSpecificHandlerIntent(text)) {
         fullDetailsMap.delete(conv.id)
         const firstName = knownCustomerName?.split(/\s+/)[0]
         const intro = firstName ? `تمام يا أستاذ ${firstName} اتفضل` : `اتفضل يافندم`
