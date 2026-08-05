@@ -192,7 +192,14 @@ model Message {
   conversation   Conversation @relation(fields: [conversationId], references: [id])
 
   @@index([conversationId])
-  @@index([whatsappMsgId])
+  // Prevention, not remediation: the audit found 0 duplicate wamids in 16,362 rows.
+  // Meta can redeliver a webhook, and the in-memory dedup map is wiped by every
+  // deploy — this makes the database the arbiter instead of process memory, and
+  // also covers a redelivery landing on a different conversation.
+  // NULLs stay unconstrained: PostgreSQL treats NULLs as distinct in a unique
+  // index, so the 6,561 unstamped rows are unaffected. (Prisma cannot express a
+  // partial index; this is equivalent and survives `prisma db push`.)
+  @@unique([whatsappMsgId])
 }
 
 enum Industry {
