@@ -95,7 +95,18 @@ export class WhatsAppController {
     // Ships in WARN mode (META_SIGNATURE_ENFORCE unset): the outcome is logged but
     // the request is still processed, so a misconfigured secret cannot cut off live
     // customer traffic. Nothing below this block runs when accept is false.
-    const sig = checkMetaSignature(req.rawBody, signature)
+    //
+    // The context below feeds [SIG_REJECT_ALARM] under enforcement. Every field is
+    // read from an UNVERIFIED request, so it is treated as untrusted and sanitised
+    // before logging. Railway sits behind a proxy, so the client IP comes from
+    // x-forwarded-for (first hop) with req.ip as the fallback.
+    const fwd = (req.headers?.['x-forwarded-for'] as string | undefined)?.split(',')[0]?.trim()
+    const sig = checkMetaSignature(req.rawBody, signature, {
+      ip:          fwd || req.ip || req.socket?.remoteAddress,
+      payloadType: body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.type,
+      objectType:  body?.object,
+      bodyBytes:   req.rawBody?.length ?? 0,
+    })
     if (!sig.accept) {
       console.warn(`WEBHOOK_SIG_REJECT — ${sig.reason}`)
       res.status(403).send('Forbidden')

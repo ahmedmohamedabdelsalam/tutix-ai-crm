@@ -153,6 +153,73 @@ describe('WhatsAppController — unknown waPhoneId', () => {
     })
   })
 
+  // ── [SIG_REJECT_ALARM] — a dropped customer message must never be silent ──
+  describe('reject alarm', () => {
+    let errSpy: jest.SpyInstance
+    beforeEach(() => { errSpy = jest.spyOn(console, 'error').mockImplementation(() => {}) })
+    afterEach(() => { errSpy.mockRestore() })
+
+    const alarmLines = () =>
+      errSpy.mock.calls.map(c => String(c[0])).filter(l => l.includes('[SIG_REJECT_ALARM]'))
+
+    it('fires at ERROR level under enforcement, with IP, payload type and running count', async () => {
+      process.env.META_SIGNATURE_ENFORCE = 'true'
+      const body: any = makeWebhookBody('any_id')
+      body.object = 'whatsapp_business_account'
+      const { req, signature } = signed(body, 'attacker-secret')
+      req.headers = { 'x-forwarded-for': '203.0.113.9, 10.0.0.1' }
+      req.ip = '10.0.0.1'
+
+      await controller.receive(body, makeRes(), req, signature)
+
+      const lines = alarmLines()
+      expect(lines).toHaveLength(1)
+      expect(lines[0]).toContain('ip=203.0.113.9')          // first hop, not the proxy
+      expect(lines[0]).toContain('payloadType=text')
+      expect(lines[0]).toContain('object=whatsapp_business_account')
+      expect(lines[0]).toContain('sigHeader=present')
+      expect(lines[0]).toMatch(/failCount=\d+ of \d+/)      // spike visible from one line
+      expect(lines[0]).toContain('META_SIGNATURE_ENFORCE=false')
+    })
+
+    it('reports a missing signature header distinctly', async () => {
+      process.env.META_SIGNATURE_ENFORCE = 'true'
+      const body = makeWebhookBody('any_id')
+      const req = { rawBody: Buffer.from(JSON.stringify(body)), headers: {} } as any
+
+      await controller.receive(body, makeRes(), req, undefined)
+
+      expect(alarmLines()[0]).toContain('sigHeader=MISSING')
+    })
+
+    it('does NOT fire in warn mode — nothing is dropped, so an alarm would be noise', async () => {
+      delete process.env.META_SIGNATURE_ENFORCE
+      mockPrisma.company.findFirst.mockResolvedValue(null)
+      const body = makeWebhookBody('any_id')
+      const { req, signature } = signed(body, 'attacker-secret')
+
+      await controller.receive(body, makeRes(), req, signature)
+
+      expect(alarmLines()).toHaveLength(0)
+    })
+
+    it('sanitises untrusted fields so a forged payload cannot inject log lines', async () => {
+      process.env.META_SIGNATURE_ENFORCE = 'true'
+      const body: any = makeWebhookBody('any_id')
+      body.object = 'evil\n[SIG] ok\nfake=1'
+      body.entry[0].changes[0].value.messages[0].type = 'te\nxt'
+      const { req, signature } = signed(body, 'attacker-secret')
+      req.headers = { 'x-forwarded-for': '1.2.3.4\n[SIG_SUMMARY] forged' }
+
+      await controller.receive(body, makeRes(), req, signature)
+
+      const line = alarmLines()[0]
+      expect(line.split('\n')).toHaveLength(1)   // still exactly one log line
+      expect(line).not.toContain('[SIG] ok')
+      expect(line).not.toContain('[SIG_SUMMARY]')
+    })
+  })
+
   // Default rollout posture on a live system: verify and log, never block.
   describe('WARN mode (META_SIGNATURE_ENFORCE unset — the shipped default)', () => {
     beforeEach(() => { delete process.env.META_SIGNATURE_ENFORCE })

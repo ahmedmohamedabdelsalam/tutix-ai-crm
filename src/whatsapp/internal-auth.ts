@@ -102,17 +102,54 @@ export type SignatureDecision = {
   reason?:  string
 }
 
+/** Request details for the reject alarm. Every field is attacker-controlled — sanitise. */
+export type SignatureContext = {
+  /** Client IP, normally from x-forwarded-for (Railway sits behind a proxy). */
+  ip?:          string
+  /** Meta message type (text/image/…) pulled from the unverified body. */
+  payloadType?: string
+  /** Meta's top-level `object` field, e.g. whatsapp_business_account. */
+  objectType?:  string
+  bodyBytes?:   number
+}
+
+/**
+ * Log-safe rendering of untrusted input.
+ *
+ * Strips CR/LF/control characters so a forged payload cannot inject a fake log
+ * LINE, and strips square brackets so it cannot forge a bracketed marker either —
+ * without that, a payload containing "[SIG] ok" would inflate a grep-based success
+ * count even though it stayed on one line. Then truncates.
+ */
+function logSafe(v: unknown, max = 40): string {
+  if (v === undefined || v === null || v === '') return '-'
+  const s = String(v)
+    .replace(/[\r\n\t]/g, ' ')
+    .replace(/[\[\]]/g, '')          // no forged [MARKER]s
+    .replace(/[^\x20-\x7E]/g, '')
+    .trim()
+  return s.length === 0 ? '-' : s.length > max ? s.slice(0, max) + '…' : s
+}
+
 /**
  * Verifies Meta's signature, records the outcome, logs it, and applies the
  * rollout policy.
  *
  * WARN mode (default):    always accept — logs [SIG] ok / FAIL / UNCONFIGURED.
  * ENFORCE mode:           reject anything that does not verify, including an
- *                         unset META_APP_SECRET (fail-closed).
+ *                         unset META_APP_SECRET (fail-closed), and additionally
+ *                         emit [SIG_REJECT_ALARM] at ERROR level.
+ *
+ * The alarm fires ONLY under enforcement, because only then does a failure drop a
+ * real customer message. In warn mode nothing is lost, so the [SIG] warn line is
+ * enough and an alarm would be noise. Silent rejection is the failure mode that
+ * actually costs customers, so the alarm carries the running fail count inline —
+ * a spike is visible from a single log entry without correlating across lines.
  */
 export function checkMetaSignature(
   rawBody: Buffer | undefined,
   signatureHeader: string | undefined,
+  ctx: SignatureContext = {},
 ): SignatureDecision {
   const result   = verifyMetaSignature(rawBody, signatureHeader)
   const enforced = isSignatureEnforced()
@@ -129,6 +166,22 @@ export function checkMetaSignature(
   const label    = result.unconfigured ? 'UNCONFIGURED' : 'FAIL'
   const disposition = enforced ? 'REJECTED' : 'accepted (warn mode — set META_SIGNATURE_ENFORCE=true to reject)'
   console.warn(`[SIG] ${label} — ${result.reason} → ${disposition}`)
+
+  if (enforced) {
+    const totalFailed = sigStats.fail + sigStats.unconfigured
+    const seen        = sigStats.ok + totalFailed
+    console.error(
+      `[SIG_REJECT_ALARM] inbound webhook REJECTED — a customer message was DROPPED` +
+      ` | reason=${logSafe(result.reason, 60)}` +
+      ` | ip=${logSafe(ctx.ip)}` +
+      ` | payloadType=${logSafe(ctx.payloadType, 24)}` +
+      ` | object=${logSafe(ctx.objectType, 32)}` +
+      ` | bodyBytes=${ctx.bodyBytes ?? 0}` +
+      ` | sigHeader=${signatureHeader ? 'present' : 'MISSING'}` +
+      ` | failCount=${totalFailed} of ${seen} since ${sigStats.since.toISOString()}` +
+      ` | recovery: set META_SIGNATURE_ENFORCE=false on Railway (~30s restart, no rebuild)`,
+    )
+  }
 
   return { accept: !enforced, verified: false, enforced, reason: result.reason }
 }
