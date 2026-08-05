@@ -204,15 +204,28 @@ export class WhatsAppController {
           data: { updatedAt: new Date() },
         })
 
-        const savedUserMsg = await this.prisma.message.create({
-          data: {
-            conversationId: convId,
-            role: 'USER',
-            content: media.label,
-            ...(incomingWamid && { whatsappMsgId: incomingWamid }),
-            ...(resolvedReplyToId && { replyToId: resolvedReplyToId }),
-          },
-        })
+        // Site 5 — media path. This one already set whatsappMsgId at insert, so with
+        // the unique index it is ALSO a dedup claim: a redelivered image now raises
+        // P2002 here. Handled explicitly rather than falling into the outer catch,
+        // where it would read as a generic "Webhook error".
+        let savedUserMsg
+        try {
+          savedUserMsg = await this.prisma.message.create({
+            data: {
+              conversationId: convId,
+              role: 'USER',
+              content: media.label,
+              ...(incomingWamid && { whatsappMsgId: incomingWamid }),
+              ...(resolvedReplyToId && { replyToId: resolvedReplyToId }),
+            },
+          })
+        } catch (e: any) {
+          if (e?.code === 'P2002') {
+            console.log(`WEBHOOK_DUP → redelivery of media wamid=${incomingWamid}, not processed`)
+            return
+          }
+          throw e
+        }
 
         // Fire-and-forget: download from Meta → upload to Supabase → stamp mediaUrl on the row.
         // Runs in all modes so the dashboard always shows the actual file.
@@ -262,7 +275,13 @@ export class WhatsAppController {
         return
       }
 
-      const result = await this.whatsapp.handleMessage(company.id, message.from, message.text.body, adSource, referral)
+      // wamid + replyToId are passed in so the USER-row insert IS the dedup claim
+      // (unique index on Message.whatsappMsgId). A Meta redelivery loses that race
+      // atomically and returns without calling the model or sending anything.
+      const result = await this.whatsapp.handleMessage(
+        company.id, message.from, message.text.body, adSource, referral,
+        false, incomingWamid, resolvedReplyToId,
+      )
       const replyList = Array.isArray(result) ? result : (result ? [result] : [])
 
       // Send each reply via Meta WhatsApp Cloud API — split into parts with typing delays
@@ -278,23 +297,14 @@ export class WhatsAppController {
         console.warn(`Reply generated but not sent — waToken or waPhoneId missing for company: ${company.name}`)
       }
 
-      // Fire-and-forget: stamp wamid on incoming USER message + outgoing ASSISTANT messages
+      // Fire-and-forget: stamp wamid on the OUTGOING ASSISTANT messages only.
+      // The incoming USER row is no longer stamped here — handleMessage now sets
+      // whatsappMsgId at insert time so the insert doubles as the dedup claim. The
+      // old "most recent null-wamid USER row within 5 minutes" match is gone; it ran
+      // after the reply was already sent and could stamp the wrong row.
       void (async () => {
         const cutoff = new Date(Date.now() - 300000) // 5-min window
         const phone  = message.from as string
-        if (incomingWamid) {
-          const lastUser = await this.prisma.message.findFirst({
-            where: { conversation: { companyId: company.id, phone }, role: 'USER', whatsappMsgId: null, createdAt: { gte: cutoff } },
-            orderBy: { createdAt: 'desc' },
-            select: { id: true },
-          })
-          if (lastUser) {
-            await this.prisma.message.update({
-              where: { id: lastUser.id },
-              data: { whatsappMsgId: incomingWamid, ...(resolvedReplyToId && { replyToId: resolvedReplyToId }) },
-            })
-          }
-        }
         if (outWamids.some(w => w)) {
           const recentAsst = await this.prisma.message.findMany({
             where: { conversation: { companyId: company.id, phone }, role: 'ASSISTANT', whatsappMsgId: null, createdAt: { gte: cutoff } },
@@ -310,7 +320,23 @@ export class WhatsAppController {
             }
           }
         }
-      })().catch(err => console.error('[WAMID_STAMP]', err))
+      })().catch(err => {
+        // P2002 here means two ASSISTANT rows are being stamped with the SAME outbound
+        // wamid — the positional zip of outWamids against "recent null-wamid rows" has
+        // mismatched, so outbound ids are colliding. Before the unique index this wrote
+        // silently corrupt data; now it throws, and without this branch it would vanish
+        // into a generic log. Surfaced loudly because nothing else would ever notice.
+        if (err?.code === 'P2002') {
+          console.error(
+            `[WAMID_STAMP_COLLISION] outbound wamid already used — ASSISTANT stamping mismatched` +
+            ` | phone=${message.from} | company=${company.name}` +
+            ` | outWamids=${outWamids.filter(Boolean).length}` +
+            ` | target=${err?.meta?.target ?? '-'}`,
+          )
+          return
+        }
+        console.error('[WAMID_STAMP]', err)
+      })
     } catch (err) {
       console.error('Webhook error:', err)
     }
@@ -318,7 +344,10 @@ export class WhatsAppController {
 
   @Post('test')
   async test(
-    @Body() body: { phone: string; message: string; simulate?: boolean },
+    // wamid: optional, test-only. Lets the dedup regression suite exercise the
+    // claim without driving the real Meta webhook, which would trigger an actual
+    // WhatsApp send. Never supplied by production traffic.
+    @Body() body: { phone: string; message: string; simulate?: boolean; wamid?: string },
     @Headers('x-internal-token') token: string,
   ) {
     assertInternalToken(token, 'TEST_ENDPOINT_TOKEN')
@@ -356,6 +385,7 @@ export class WhatsAppController {
         'direct',
         null,
         simulate,  // structural guarantee: ONLY this endpoint passes simulate=true
+        body.wamid,
       )
 
       // Stamp the conversation as a test so it is excluded from the sales inbox.

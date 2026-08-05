@@ -96,11 +96,51 @@ function hasNameComplaint(text: string): boolean {
 export class WhatsAppService {
   constructor(private prisma: PrismaService) {}
 
+  /**
+   * Inserts the inbound USER row. THE INSERT IS THE DEDUP CLAIM.
+   *
+   * Message.whatsappMsgId carries a unique index, so a redelivered Meta webhook
+   * (same wamid) loses the race atomically and lands here as P2002. Returns false
+   * in that case; the caller must return without processing.
+   *
+   * This replaces the old post-hoc "stamp the most recent null-wamid USER row
+   * within 5 minutes" pass, which ran AFTER the reply was already sent and could
+   * stamp the wrong row under concurrency.
+   *
+   * Only P2002 counts as a duplicate — every other error is rethrown, because a
+   * connection failure silently treated as "already seen" would drop real
+   * customer messages.
+   */
+  private async claimInbound(
+    conversationId: string,
+    content: string,
+    wamid?: string,
+    replyToId?: string,
+  ): Promise<boolean> {
+    try {
+      await this.prisma.message.create({
+        data: {
+          conversationId,
+          role: 'USER',
+          content,
+          ...(wamid     && { whatsappMsgId: wamid }),
+          ...(replyToId && { replyToId }),
+        },
+      })
+      return true
+    } catch (e: any) {
+      if (e?.code === 'P2002') {
+        console.log(`WEBHOOK_DUP → redelivery of wamid=${wamid} on conv=${conversationId}, not processed`)
+        return false
+      }
+      throw e
+    }
+  }
 
 
-
-
-  async handleMessage(companyId: string, phone: string, text: string, source = 'direct', referralData?: object | null, simulate = false): Promise<string | string[]> {
+  // wamid/replyToId are appended last so existing positional callers are unaffected.
+  // wamid is the Meta message id; when present the USER insert becomes the dedup claim.
+  async handleMessage(companyId: string, phone: string, text: string, source = 'direct', referralData?: object | null, simulate = false, wamid?: string, replyToId?: string): Promise<string | string[]> {
     // simulate=true: accepted ONLY from /webhook/test — never passed by the real Meta webhook path.
     // Gates are bypassed so catalog bypasses can be tested while AI stays fully locked.
     // Assistant replies ARE persisted to DB even in simulate mode so that multi-turn test
@@ -192,9 +232,8 @@ export class WhatsAppService {
         })
 
         if (hasWonLead) {
-          await this.prisma.message.create({
-            data: { conversationId: conv.id, role: 'USER', content: text },
-          })
+          // Site 1/4 — returning customer on a brand-new conversation
+          if (!await this.claimInbound(conv.id, text, wamid, replyToId)) return ''
           if (aiActive) {
             const welcomeBack = 'أهلاً بعودتك يافندم نورتنا تاني سيتواصل معك أحد متخصصينا قريباً إن شاء الله'
             await persistReply(conv.id,welcomeBack)
@@ -267,9 +306,8 @@ export class WhatsAppService {
 
     // ── PART 2: HUMAN mode — save message ───────────────────
     if (!simulate && conv.agentMode === 'HUMAN') {
-      await this.prisma.message.create({
-        data: { conversationId: conv.id, role: 'USER', content: text },
-      })
+      // Site 2/4 — HUMAN mode: saved for the sales inbox, never auto-answered
+      if (!await this.claimInbound(conv.id, text, wamid, replyToId)) return ''
       await this.prisma.conversation.update({
         where: { id: conv.id },
         data: { updatedAt: new Date() },
@@ -282,9 +320,8 @@ export class WhatsAppService {
 
     // ── AI mode but conversation already handed off ───────────
     if (!simulate && conv.status !== ConvStatus.AI_HANDLING) {
-      await this.prisma.message.create({
-        data: { conversationId: conv.id, role: 'USER', content: text },
-      })
+      // Site 3/4 — AI mode but already handed off to a human
+      if (!await this.claimInbound(conv.id, text, wamid, replyToId)) return ''
       await this.prisma.conversation.update({
         where: { id: conv.id },
         data: { updatedAt: new Date() },
@@ -293,9 +330,9 @@ export class WhatsAppService {
     }
 
     // ── Full AI pipeline ─────────────────────────────────────
-    await this.prisma.message.create({
-      data: { conversationId: conv.id, role: 'USER', content: text },
-    })
+    // Site 4/4 — the claim happens BEFORE the model is called and before the
+    // controller sends anything, so a redelivery costs no tokens and no send.
+    if (!await this.claimInbound(conv.id, text, wamid, replyToId)) return ''
 
     // Company-wide AI kill switch: message saved for inbox, no automated reply
     if (!simulate && !aiActive) {
