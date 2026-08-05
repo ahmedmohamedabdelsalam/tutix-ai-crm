@@ -69,6 +69,16 @@ export function detectHajjOverviewIntent(text: string): 'ECONOMY' | 'FIVE_STAR' 
   return 'GENERIC'
 }
 
+/**
+ * "How many days is hajj". Without this it matches the generic hajj intent and gets
+ * the category question — technically correct content, but never an answer.
+ */
+export function detectHajjDurationIntent(text: string): boolean {
+  if (!/حج(?!ز)/.test(text)) return false
+  if (/(كام|كم)\s*(يوم|أيام|ايام|ليلة|ليالي)/.test(text)) return true
+  return /مدة\s*(ال)?(حج|برنامج|رحلة)/.test(text)
+}
+
 export function detectHajjCategoryReply(text: string): 'ECONOMY' | 'FIVE_STAR' | 'KADAN' | null {
   const t = text.trim()
   if (/^[١1]$/.test(t)) return 'ECONOMY'
@@ -109,6 +119,30 @@ export function detectNightsSplitIntent(text: string): boolean {
   if (asksDays && placeCtx) return true
   if (/(تقسيم|توزيع)\s*(ال)?(ليالي|ليال|أيام|ايام|إقامة|اقامة)/.test(text)) return true
   return false
+}
+
+/**
+ * "How many people fit in a quad room" — the answer is a number, so it must be
+ * answered from code or the guard turns it into a handoff.
+ */
+export function detectRoomCapacityIntent(text: string): boolean {
+  const roomWord = /غرفة|غرف|أوضة|اوضة|رباعي|ثلاثي|ثنائي|مزدوج|تسكين/.test(text)
+  const asksCount = /(كام|كم)\s*(شخص|أشخاص|اشخاص|فرد|أفراد|افراد|نفر)/.test(text)
+  if (roomWord && asksCount) return true
+  // "الرباعي يعني كام؟" / "الغرفة تسع كام؟"
+  if (roomWord && /(يعني|تسع|بتاخد|بتشيل)\s*(كام|كم)/.test(text)) return true
+  return false
+}
+
+/**
+ * "When do you travel / when does the trip leave" with no specific trip chosen.
+ * Deserves the real departure dates rather than a pivot to "which duration?".
+ * Excludes مواعيد, which already routes to the schedule handler.
+ */
+export function detectDepartureDatesIntent(text: string): boolean {
+  const asksWhen = /(امتى|إمتى|متى|امتا)/.test(text)
+  if (!asksWhen) return false
+  return /(بتسافر|بتسافروا|السفر|بتقوم|بتقوموا|تقوم|الرحلة|الرحلات|المغادرة|بتمشي|بتمشوا)/.test(text)
 }
 
 export function detectHotelDistanceIntent(text: string): boolean {

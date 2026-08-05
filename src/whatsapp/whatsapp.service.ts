@@ -8,7 +8,7 @@ import { applyHajjDateDisclaimer } from './hajj-date-disclaimer'
 import { companionConfirmedInHistory, travelDateConfirmedInHistory } from './lead-fact-guards'
 import { detectOnlinePayment, detectFarFromBranch, detectVisitConfirm } from './booking-stage-detectors'
 import { getGovFromText, branchMessage } from './branch-lookup'
-import { containsFirstMessageQuestion, detectUmrahMonth, detectUmrahLevel, detectFullDetailsIntent, detectContinueResponse, detectHajjOverviewIntent, detectHajjCategoryReply, detectNumberReply, detectUmrahOverviewIntent, detectCTAMessage, detectDurationDays, detectPriceIntent, detectScheduleIntent, detectFlightIntent, detectInstallmentIntent, detectHotelDistanceIntent, detectNearestTripIntent, detectHotelContentIntent, detectNightsSplitIntent, detectGreetingOnly, detectReligiousPhrase, extractNameFromText, extractPhoneNumber, detectFullCatalogIntent } from './intent-detectors'
+import { containsFirstMessageQuestion, detectUmrahMonth, detectUmrahLevel, detectFullDetailsIntent, detectContinueResponse, detectHajjOverviewIntent, detectHajjCategoryReply, detectNumberReply, detectUmrahOverviewIntent, detectCTAMessage, detectDurationDays, detectPriceIntent, detectScheduleIntent, detectFlightIntent, detectInstallmentIntent, detectHotelDistanceIntent, detectNearestTripIntent, detectHotelContentIntent, detectNightsSplitIntent, detectRoomCapacityIntent, detectDepartureDatesIntent, detectHajjDurationIntent, detectGreetingOnly, detectReligiousPhrase, extractNameFromText, extractPhoneNumber, detectFullCatalogIntent } from './intent-detectors'
 
 import { detectFollowUpIntent, clampToWindow, DEFERRAL_PHRASES } from './follow-up-scheduler'
 import { handleAICreditsExhausted, writeCostRecord } from './ai-cost-helpers'
@@ -20,6 +20,7 @@ import { isAIConfigActive, getAIConfigTemplates } from './ai-config-cache'
 import { fullDetailsMap, overviewMap, categoryQuestionMap, noMatchMap } from './conversation-state'
 import { lastAssistantMatching, looksLikeOverview, looksLikeCategoryQuestion, looksLikeUnfinishedChunk, identifyOverview, recoveryText } from './state-recovery'
 import { narrowCandidates, buildNightsReply, distinctSplits, historyTextOf } from './nights-handler'
+import { buildRoomCapacityReply, buildDepartureDatesReply, buildHajjDurationReply } from './catalog-facts'
 import { scanModelOutput, buildEntityBlocklist } from './output-guard'
 import { logHandoff } from './handoff-log'
 import { matchFAQ, detectBlockedCategory, buildHandoffMessage } from './confidence-router'
@@ -658,6 +659,20 @@ export class WhatsAppService {
     // routes to the correct specific handler rather than getting a catalog dump.
     // ══════════════════════════════════════════════════════════════════════════
 
+    // ── Hajj duration: answer the span, THEN ask the category ───────────────────
+    // Previously matched the generic hajj intent and returned only the category
+    // question — correct content, but never an answer to what was asked.
+    if (prebuiltCatalog && detectHajjDurationIntent(text)) {
+      const hajjRaw = (prebuiltCatalog as any).rawHajjPrograms ?? []
+      const durReply = buildHajjDurationReply(hajjRaw, prebuiltCatalog.hajjCategoryQuestion)
+      if (durReply) {
+        const withDisclaimer = applyHajjDateDisclaimer(durReply)
+        await persistReply(conv.id, withDisclaimer)
+        console.log(`HAJJ_DURATION_HANDLER → ${phone} programs=${hajjRaw.length}`)
+        return withDisclaimer
+      }
+    }
+
     // ── Overview bypass: non-first-message hajj/umrah overview request ───────────
     // For first messages, the bypass runs inside the firstMessageQuestion block below.
     // Here we handle subsequent messages asking for an overview, so the AI never
@@ -706,6 +721,9 @@ export class WhatsAppService {
         detectHotelDistanceIntent(text) ||
         detectScheduleIntent(text) ||
         detectNearestTripIntent(text) ||
+        detectNightsSplitIntent(text) ||
+        detectRoomCapacityIntent(text) ||
+        detectDepartureDatesIntent(text) ||
         detectHotelContentIntent(text)
 
       // Umrah overviews — rawTrips populated for schedule/flight handlers
@@ -959,6 +977,33 @@ export class WhatsAppService {
         await persistReply(conv.id, detail + closingQ)
         console.log(`NEAREST_TRIP_HANDLER → ${phone} dep=${nearest.depISO}`)
         return ['اتفضل يافندم — أقرب رحلة عمرة عندنا:', detail + closingQ]
+      }
+    }
+
+    // ── Departure dates: list real upcoming departures instead of a duration pivot ─
+    if (prebuiltCatalog?.rawUmrahPrograms?.length
+        && detectDepartureDatesIntent(text)
+        && detectHajjOverviewIntent(text) === null) {
+      const tz = (aiTemplates?.workingHours?.timezone as string | undefined) ?? 'Africa/Cairo'
+      let todayISO: string
+      try {
+        todayISO = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
+      } catch { todayISO = new Date().toISOString().slice(0, 10) }
+      const depReply = buildDepartureDatesReply(prebuiltCatalog.rawUmrahPrograms, todayISO)
+      if (depReply) {
+        await persistReply(conv.id, depReply)
+        console.log(`DEPARTURE_DATES_HANDLER → ${phone}`)
+        return depReply
+      }
+    }
+
+    // ── Room capacity: occupancy per room type, from the types we actually price ─
+    if (prebuiltCatalog?.rawUmrahPrograms?.length && detectRoomCapacityIntent(text)) {
+      const roomReply = buildRoomCapacityReply(prebuiltCatalog.rawUmrahPrograms)
+      if (roomReply) {
+        await persistReply(conv.id, roomReply)
+        console.log(`ROOM_CAPACITY_HANDLER → ${phone}`)
+        return roomReply
       }
     }
 

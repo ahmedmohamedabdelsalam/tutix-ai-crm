@@ -21,6 +21,7 @@ export interface PrebuiltCatalog {
   hajjKadanPrograms: string
   hajjKadanDetails: string[]
   rawUmrahPrograms: any[]
+  rawHajjPrograms: any[]
   umrahMonthMessages: Record<string, string>
   umrahMonthDetails: Record<string, string[]>
   umrahMonthLevelMessages: Record<string, Record<string, string>>

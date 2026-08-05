@@ -1065,7 +1065,9 @@ const OV_MONTH_NAMES: Record<number, string> = {
   7: 'يوليو', 8: 'أغسطس', 9: 'سبتمبر', 10: 'أكتوبر', 11: 'نوفمبر', 12: 'ديسمبر',
 }
 
-function fmtTripDay(iso: string): string {
+/** "2026-08-18" → "١٨ أغسطس". Exported so deterministic handlers format dates
+ *  identically to the catalog instead of carrying their own month table. */
+export function fmtTripDay(iso: string): string {
   const d = parseInt(iso.slice(8), 10)
   const m = parseInt(iso.slice(5, 7), 10)
   return `${toArabicIndic(d)} ${OV_MONTH_NAMES[m] ?? iso.slice(5, 7)}`
@@ -1168,6 +1170,7 @@ export interface IndustryPromptParts {
   hajjKadanPrograms: string
   hajjKadanDetails: string[]
   rawUmrahPrograms: any[]
+  rawHajjPrograms: any[]
   umrahMonthMessages: Record<string, string>
   umrahMonthDetails: Record<string, string[]>
   umrahMonthLevelMessages: Record<string, Record<string, string>>
@@ -1296,7 +1299,7 @@ export function buildIndustryPromptFromDB(
     umrahAllMonthsMessage, umrahAllMonthsDetails,
     ctaReply,
     umrahDurationMessages, umrahDurationDetails, availableDurations, durationPivotMsg,
-    rawUmrahPrograms, hasFutureOfferings,
+    rawUmrahPrograms, rawHajjPrograms, hasFutureOfferings,
   }
 }
 
