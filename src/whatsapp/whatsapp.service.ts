@@ -1197,12 +1197,15 @@ export class WhatsAppService {
       }).catch(e => console.error('AgentInsight write error:', e))
     }
 
-    // Run extractLeadData on msg 1-2 (capture name early), every 3rd message,
-    // or whenever the customer's message contains a booking keyword.
+    // Run extractLeadData on msg 1-2 (capture name early), every 8th message, or
+    // whenever the customer's message contains a booking keyword.
+    // Note this whole block sits AFTER the model call, so extraction never runs when
+    // the reply was code-built by a deterministic handler — measured at ~8% of real
+    // customer messages, versus ~28% that reach the model at all.
     const msgCount = totalMsgCount; // total msgs in DB (not history.length, which is capped at 10)
     const hasBookingSignal = BOOKING_KEYWORDS.some(kw => text.includes(kw));
     const runExtract = msgCount <= 2 || msgCount % 8 === 0 || hasBookingSignal;
-    console.log(`EXTRACT: msg=${msgCount} run=${runExtract} (booking=${hasBookingSignal} mod5=${msgCount % 5 === 0})`);
+    console.log(`EXTRACT: msg=${msgCount} run=${runExtract} (booking=${hasBookingSignal} mod8=${msgCount % 8 === 0})`);
 
     let extracted: Partial<LeadData> = {}
     let score = 0

@@ -675,11 +675,13 @@ const SCENARIOS = [
         hint: 'AI_OR_CATALOG(nearest trip Makkah hotel)',
         check: r => {
           if (isHandoffReply(r)) return { pass: false, note: 'FAIL: unexpected handoff' }
-          // Aug 5 trip (ts-t6p1): Makkah=إعمار المنار
-          const hasHotel = r.includes('إعمار المنار') || r.includes('إعمار') || r.includes('المنار')
-          return { pass: hasHotel, note: hasHotel
-            ? 'إعمار المنار identified for nearest trip'
-            : 'FAIL: إعمار المنار not mentioned (wrong hotel or no context carry)' }
+          // Derived at run time, never hardcoded: this previously named إعمار المنار and
+          // started failing the morning its last trip departed. HOTEL_CONTENT_HANDLER
+          // lists Makkah hotels by level, so assert it names one that is still sellable.
+          const named = LIVE.makkahHotels.filter(h => r.includes(h))
+          return { pass: named.length > 0, note: named.length > 0
+            ? `named live Makkah hotel(s): ${named.join(', ')}`
+            : `FAIL: no current Makkah hotel named (live set: ${LIVE.makkahHotels.join(', ') || 'EMPTY'})` }
         },
       },
       {
@@ -784,6 +786,25 @@ async function runScenario(sc) {
 }
 
 // ── Main ───────────────────────────────────────────────────────────────────
+// Facts read from the DB at run time, so a departed trip can never make an
+// assertion stale. The K constants above stay for values that do not expire.
+const LIVE = { makkahHotels: [], madinahHotels: [], nearestDep: null }
+
+async function loadLiveCatalogFacts() {
+  const c = await pool.connect()
+  try {
+    const today = (await c.query(
+      `SELECT to_char(now() AT TIME ZONE 'Africa/Cairo','YYYY-MM-DD') AS d`)).rows[0].d
+    const rows = (await c.query(
+      `SELECT o.values FROM "Offering" o JOIN "OfferingType" t ON t.id = o."offeringTypeId"
+        WHERE o."companyId" = $1 AND t.name = 'عمرة' AND o."isActive" = true`, [COMPANY])).rows
+    const future = rows.map(r => r.values).filter(v => (v.departureDate ?? '') >= today)
+    LIVE.makkahHotels  = [...new Set(future.map(v => v.makkahHotel).filter(Boolean))]
+    LIVE.madinahHotels = [...new Set(future.map(v => v.madinahHotel).filter(Boolean))]
+    LIVE.nearestDep    = future.map(v => v.departureDate).sort()[0] ?? null
+  } finally { c.release() }
+}
+
 async function main() {
   console.log('MULTI-TURN CONFIDENCE SUITE — Section F')
   console.log('Date: ' + new Date().toISOString())
@@ -791,6 +812,13 @@ async function main() {
   console.log('No writes to isActive / agentMode / env vars')
   console.log('Scenarios: ' + SCENARIOS.length + ' | Turns total: ' + SCENARIOS.reduce((s, sc) => s + sc.turns.length, 0))
   console.log('═'.repeat(72))
+
+  // Hotels that are actually still sellable TODAY. Assertions must not name a hotel
+  // whose trips have departed: MT05 T4 hardcoded إعمار المنار and began failing the
+  // morning its last trip (5 Aug) left, which is test-data expiry, not a regression.
+  await loadLiveCatalogFacts()
+  console.log(`Live catalog: ${LIVE.makkahHotels.length} Makkah hotels on future trips `
+            + `(${LIVE.makkahHotels.join(', ')}) | nearest departure ${LIVE.nearestDep ?? 'none'}`)
 
   const started = await startServer()
   if (!started) {

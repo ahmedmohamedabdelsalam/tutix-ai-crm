@@ -83,9 +83,15 @@ const pool = new Pool({ connectionString: process.env.DIRECT_URL || process.env.
 
     // The hajj block of the system prompt lives inside `catalog`; capture just that
     // slice so unrelated Umrah edits do not churn the golden file.
+    //
+    // As of the prompt-slimming change this is EXPECTED to be absent: the hajj
+    // programme table is deliberately no longer sent to the model (every hajj path is
+    // deterministic, and the output guard would discard any figure it quoted). What
+    // remains under this header is the hajj general-knowledge/FAQ prose, which stays.
+    // The eleven handler-facing surfaces above are the ones that must never drift.
     const cat = String(parts.catalog ?? '')
     const start = cat.indexOf('برامج الحج')
-    snapshot.hajjCatalogSection = start >= 0 ? cat.slice(start) : '(hajj section not found)'
+    snapshot.hajjCatalogSection = start >= 0 ? cat.slice(start) : '(hajj programme table withheld from the model prompt — by design)'
 
     // Ordering contract from spec §5 — customers reply by number, so this must be
     // asserted explicitly rather than left implicit inside the rendered strings.

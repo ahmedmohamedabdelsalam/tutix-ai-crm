@@ -328,31 +328,10 @@ function renderHajjProgram(p: HajjProgram, globalIndex?: number): string {
   return lines.join('\n')
 }
 
-function buildHajjCatalogFromDB(
-  hajjPrograms: HajjProgram[],
-  hijriDates: Array<{ hijri: string; gregorian: string }>,
-): string {
-  const hijriTable = hijriDates
-    .map(d => `• ${d.hijri} تقريباً = ${d.gregorian}`)
-    .join('\n')
-
-  const programBlocks = hajjPrograms.map(p => renderHajjProgram(p)).join('\n\n')
-
-  return `## القسم ٣ب — برامج الحج ١٤٤٨هـ (مايو ٢٠٢٧م) (الأسعار للفرد الواحد - بدون تذكرة الطيران أو العبّارة)
-⚠️ تنبيه إلزامي: كل سعر حج مذكور هنا هو للفرد الواحد فقط وبدون تذكرة الطيران أو العبّارة — يجب ذكر هذا التوضيح دائماً عند عرض أي سعر.
-
-جدول تحويل تواريخ ذي الحجة ١٤٤٨هـ (تقديرية — يُعلن الرسمي بعد رؤية الهلال):
-${hijriTable}
-
-${programBlocks}
-
-## تعليمات بيع برامج الحج
-• الأسعار أعلاه كلها للفرد الواحد وكلها بدون تذكرة الطيران أو العبّارة — هذا التوضيح إلزامي مع كل سعر تذكره
-• لو العميل طلب تفاصيل كل البرامج (كل البرامج بالتفاصيل / اعرضهم كلهم بالتفصيل / تفاصيل كل حاجة): اعرض كل برنامج بتفاصيله الكاملة من الكتالوج بالترتيب — برنامج مستقل في رسالة واحدة
-• لو العميل طلب تفاصيل برنامج بعينه أو سأل عن ميزانية محددة: اعرض التفاصيل الكاملة لما يناسبه فقط
-• لحساب الإجمالي: السعر للفرد × عدد الأفراد، واذكر دائماً "وده بدون تذكرة الطيران/العبّارة"
-• لو سأل "هل يشمل الطيران؟" — جاوب بوضوح: "لا يافندم السعر ده بدون تذكرة الطيران/العبّارة، التذكرة بتُحسب بشكل منفصل حسب توفرها وقت الحجز"`
-}
+// buildHajjCatalogFromDB was removed when the hajj programme table stopped being
+// sent to the model — every hajj path is deterministic and the output guard would
+// discard any figure the model quoted, so the rendered table had no reader. The
+// per-programme renderer (renderHajjProgram) is still used by the handlers below.
 
 // Returns one fully-rendered string per program (used for code-driven chunked delivery)
 export function buildHajjProgramDetailsArray(hajjPrograms: HajjProgram[]): string[] {
@@ -1211,12 +1190,10 @@ export function buildIndustryPromptFromDB(
     ? buildIdentityFromDB(companyName, ind)
     : `## القسم ١ — من أنت\nأنت مستشار حجز عمرة محترف تعمل لصالح "${companyName}"`
 
-  // Umrah catalog table — normalise field names from DB schema → UmrahProgram
-  const umrahPrograms = rawUmrahPrograms.map(normDbUmrahProgram)
-  const umrahCatalog = buildUmrahCatalogTableFromData(
-    umrahPrograms,
-    cat.hotelBookingLinks ?? {},
-  )
+  // buildUmrahCatalogTableFromData is no longer called: the rendered umrah table was
+  // only ever the model's copy, and the model no longer receives it. Every umrah fact
+  // reaches customers through the prebuilt per-month / per-duration / overview strings
+  // below, all built from rawUmrahPrograms.
 
   // Hajj source: Offerings table when the bridge is enabled (USE_DB_HAJJ), else the
   // frozen catalog.hajjPrograms JSON. Order is the source authoring order in both
@@ -1225,21 +1202,44 @@ export function buildIndustryPromptFromDB(
     ? hajjOfferingsToRawPrograms(hajjOfferingsOverride)
     : (cat.hajjPrograms as any[])
 
-  const hajjCatalog = buildHajjCatalogFromDB(
-    rawHajjPrograms,
-    ind?.hajjHijriDates ?? [],
-  )
-
   // General knowledge + FAQ — use static fallbacks (same text)
   const generalKnowledge = HAJJ_GENERAL_KNOWLEDGE_STATIC
   const faq              = HAJJ_FAQ_STATIC
 
   const monthOverview = buildUmrahMonthOverview(rawUmrahPrograms)
-  const catalog = [umrahCatalog, monthOverview, hajjCatalog, generalKnowledge, faq].filter(Boolean).join('\n\n')
 
-  // Hotels section
+  // ── The hajj programme table is deliberately NOT in the model's prompt ───────
+  // Every hajj path is answered deterministically (category question, category
+  // programmes, per-programme details, chunked full details, duration), and the
+  // output guard discards any digit, month name or hotel name the model emits — so
+  // it could never quote this table even when it had it. Withholding it turns
+  // "the model states no facts" from a filter into a structural guarantee: it
+  // cannot state what it cannot see.
+  //
+  // rawHajjPrograms above is still built and exported — the handlers read it. Only
+  // the ~6,600-token rendered table is withheld from the prompt.
+  //
+  // Hajj general knowledge and FAQ (rites, mahram rules, insurance) DO stay: they
+  // are prose the model may legitimately discuss and carry no catalog facts.
+  // The umrah programme table and month overview are withheld for the same reason as
+  // hajj: prices, dates and hotel names are all delivered by deterministic handlers,
+  // and the output guard discards any digit, month name or hotel name in model text.
+  // Withholding them means the model cannot be plausibly wrong — a fabricated figure
+  // phrased in words is exactly what the guard cannot catch, and it now has nothing
+  // to fabricate from.
+  //
+  // umrahCatalog / monthOverview are still BUILT: rawUmrahPrograms and the prebuilt
+  // per-month, per-duration and overview strings all feed the handlers, and
+  // rawUmrahPrograms also feeds buildEntityBlocklist so hotel names stay blocked.
+  // Only the model's copy is withheld.
+  const catalog = [generalKnowledge, faq].filter(Boolean).join('\n\n')
+
+  // Hotels: the structured hotelList stays — HOTEL_DIST_HANDLER and
+  // HOTEL_CONTENT_HANDLER read it, and buildEntityBlocklist derives the guard's
+  // blocked-name list from it. Only the RENDERED prose block is withheld from the
+  // model, which could never quote a hotel name anyway (the blocklist rejects it).
   const hotelList = ind?.hotels ?? []
-  const hotels    = buildHotelKnowledgeFromData(hotelList)
+  const hotels    = ''
 
   const hajjProgramDetails = buildHajjProgramDetailsArray(rawHajjPrograms)
 
