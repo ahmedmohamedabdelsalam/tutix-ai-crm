@@ -83,13 +83,24 @@ export function getSignatureStats() {
 export function formatSignatureSummary(): string {
   const { ok, fail, unconfigured, since } = sigStats
   const total = ok + fail + unconfigured
-  const mode  = isSignatureEnforced() ? 'ENFORCE' : 'WARN'
+  const enforced = isSignatureEnforced()
+  const mode  = enforced ? 'ENFORCE' : 'WARN'
   const pct   = total > 0 ? `${((ok / total) * 100).toFixed(1)}%` : '—'
+  const bad   = fail + unconfigured
+
+  // The verdict MUST depend on the mode. Both branches used to be written for WARN,
+  // which made the line lie in enforcement: it recommended a flip already done, and
+  // — far worse — described dropped customer messages as something that "would"
+  // happen. Under ENFORCE a failure is not a forecast, it is an incident.
   const verdict = total === 0
     ? 'no inbound webhook traffic yet'
-    : fail + unconfigured === 0
-      ? 'all verified — safe to set META_SIGNATURE_ENFORCE=true'
-      : `${fail + unconfigured} would be REJECTED under enforcement — do NOT flip yet`
+    : bad === 0
+      ? (enforced
+          ? 'all verified — enforcement active, nothing rejected'
+          : 'all verified — safe to set META_SIGNATURE_ENFORCE=true')
+      : (enforced
+          ? `${bad} REJECTED — inbound was DROPPED; set META_SIGNATURE_ENFORCE=false to restore delivery`
+          : `${bad} would be REJECTED under enforcement — do NOT flip yet`)
   return `[SIG_SUMMARY] mode=${mode} since=${since.toISOString()} total=${total} ok=${ok} (${pct}) fail=${fail} unconfigured=${unconfigured} — ${verdict}`
 }
 
