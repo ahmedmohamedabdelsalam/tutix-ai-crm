@@ -25,7 +25,7 @@ import { scanModelOutput, buildEntityBlocklist } from './output-guard'
 import { logHandoff } from './handoff-log'
 import { matchFAQ, detectBlockedCategory, buildHandoffMessage } from './confidence-router'
 import { HAJJ_OV_DISCLAIMER, groupUmrahTrips, buildScheduleItinerary, buildFlightReply } from '../agent/prompts/dynamic-catalog-builder'
-import { lookupHotelEntry } from '../agent/prompts/hajj-umrah-hotels'
+import { lookupHotelEntry, isDistanceConfirmed } from '../agent/prompts/hajj-umrah-hotels'
 import { RawTrip } from './conversation-state'
 
 // Arabic month name → calendar number (used when populating rawTrips on overviewMap)
@@ -1027,13 +1027,36 @@ export class WhatsAppService {
       if (hotel) {
         const starsTag = hotel.stars ? ` (${hotel.stars})` : ''
         let distReply: string
-        if (hotel.distance) {
+        // A distance is stated ONLY when someone has taken responsibility for it.
+        //
+        // This handler is deterministic, so its output never passes scanModelOutput —
+        // whatever is stored goes to the customer verbatim, digits and all. Every
+        // distance migrated out of hajj-umrah-hotels.ts is provenance 'unknown':
+        // no source comment, no data file, no commit message ever recorded where the
+        // numbers came from. "Stored" is not "verified", and a customer books on this.
+        //
+        // Unconfirmed does not mean silent: everything that IS known about the hotel
+        // is still given, and the distance is escalated rather than guessed — the
+        // same shape as refusing a stale price image.
+        if (isDistanceConfirmed(hotel)) {
           distReply = `*${hotel.name}*${starsTag}:\n· المسافة: ${hotel.distance}\n· الموقع: ${hotel.location ?? ''}\n\nعندك سؤال تاني عن الفندق؟ 🤍`
         } else {
-          distReply = `*${hotel.name}*${starsTag}:\n· الموقع: ${hotel.location ?? ''}\n\nللمسافة الدقيقة — تواصل مع الفريق لتأكيد التفاصيل. عندك سؤال تاني؟ 🤍`
+          // Location and highlight only. NOT the rating: it is a measurement from
+          // the same unowned dataset as the distance, so volunteering it while
+          // refusing the distance would be incoherent — we would be declining one
+          // unverified number and then stating another in the same breath.
+          const known: string[] = []
+          if (hotel.location) known.push(`· الموقع: ${hotel.location}`)
+          if (hotel.highlight) known.push(`· ${hotel.highlight}`)
+          const knownBlock = known.length ? `\n${known.join('\n')}` : ''
+          distReply = `*${hotel.name}*${starsTag}:${knownBlock}\n\nبالنسبة للمسافة من الحرم — هأكدهالك من الفريق عشان أديك رقم مظبوط. عندك سؤال تاني عن الفندق؟ 🤍`
+          console.warn(
+            `HOTEL_DIST_UNVERIFIED → ${phone} hotel="${hotel.name}" source=${hotel.distanceSource ?? 'missing'} ` +
+            `— distance withheld; confirm it in /admin/ai-config to let the agent state it`,
+          )
         }
         await persistReply(conv.id, distReply)
-        console.log(`HOTEL_DIST_HANDLER → ${phone} hotel=${hotel.name} hasDist=${!!hotel.distance}`)
+        console.log(`HOTEL_DIST_HANDLER → ${phone} hotel=${hotel.name} confirmed=${isDistanceConfirmed(hotel)}`)
         return distReply
       }
       // Distance intent but no hotel name in message — ask which hotel

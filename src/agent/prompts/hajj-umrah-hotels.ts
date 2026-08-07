@@ -7,114 +7,34 @@ export interface HotelEntry {
   rating: string;
   link: string;
   keywords: string[];
+  /**
+   * Where the distance came from. 'unknown' means nobody has ever confirmed it —
+   * which is the honest state of every value migrated out of this file, since no
+   * source comment, data file or commit message ever recorded one.
+   *
+   * A distance is a customer-facing factual claim that arrives through
+   * deterministic handlers, so it never passes scanModelOutput. Provenance is the
+   * only thing standing between an unverified number and a customer who books on it.
+   */
+  distanceSource?: 'client' | 'booking.com' | 'measured' | 'unknown' | null;
+  distanceConfirmedBy?: string | null;
+  distanceConfirmedAt?: string | null;
 }
 
-export const HOTELS: HotelEntry[] = [
-  {
-    name: 'موفنبيك برج هاجر',
-    stars: '٦ نجوم',
-    location: 'مكة المكرمة',
-    distance: 'أقل من دقيقة مشياً للحرم بممرات مكيفة وإطلالة مباشرة على الكعبة',
-    highlight: 'موقع استثنائي ملاصق للحرم وإطلالة على الكعبة من الغرفة',
-    rating: '٩٫٣ من ١٠',
-    link: 'https://www.booking.com/Share-zYAacjf',
-    keywords: ['موفنبيك', 'برج هاجر'],
-  },
-  {
-    name: 'أذكي الصفا',
-    stars: '٥ نجوم',
-    location: 'شارع أجياد مكة المكرمة',
-    distance: 'حوالي ١٥٠-٣٠٠ متر من المسجد الحرام',
-    highlight: 'قريب من الحرم وأسعار معقولة مقارنة بتصنيفه',
-    rating: '٧٫٢ من ١٠',
-    link: 'https://www.booking.com/hotel/sa/azka-al-safa.ar.html',
-    keywords: ['أذكي الصفا', 'أزكى الصفا', 'ازكي الصفا'],
-  },
-  {
-    name: 'الصفوة',
-    stars: '٣ نجوم',
-    location: 'منطقة بوابة الملك عبدالعزيز مكة المكرمة',
-    distance: 'حوالي ٩٥٠ متر من المسجد الحرام',
-    highlight: 'موقع مريح ونظافة ممتازة وقيمة ممتازة مقارنة بالسعر — تقييم ٩٫٢ للأزواج',
-    rating: '٩٫٢ من ١٠',
-    link: 'https://www.booking.com/Share-8hDcymv',
-    keywords: ['الصفوة', 'صفوة'],
-  },
-  {
-    name: 'رمادا دار الفائزين',
-    stars: '٤ نجوم',
-    location: 'شارع أجياد مكة المكرمة',
-    distance: '٣٠٠-٥٠٠ متر من الحرم (٥ دقائق مشياً)',
-    highlight: 'خدمة ممتازة وبوفيه إفطار جيد ومناسب للعائلات',
-    rating: '٨ من ١٠',
-    link: 'https://www.trivago.com/share/ShwM6UtJbZ',
-    keywords: ['رمادا', 'دار الفائزين'],
-  },
-  {
-    name: 'سنود الريان',
-    stars: '٢ نجوم',
-    location: 'مكة المكرمة',
-    distance: 'حوالي ٣ دقائق بالسيارة من الحرم مع خدمة توصيل مجانية',
-    highlight: 'طاقم عمل ممتاز وخدمة نقل مجانية للحرم وسعر اقتصادي',
-    rating: '٧٫٧ من ١٠',
-    link: 'https://sa.trip.com/hotels/makkah-hotel-detail-81468178/snood-al-rayyan-hotel/',
-    keywords: ['سنود', 'الريان', 'سنود الريان'],
-  },
-  {
-    name: 'فرونتيل الحارثية',
-    stars: '٤ نجوم',
-    location: 'منطقة الحارثية المدينة المنورة',
-    distance: '٥ دقائق مشياً من الروضة الشريفة مع إطلالة مباشرة على المسجد النبوي',
-    highlight: 'إطلالة رائعة على الحرم النبوي ونظافة عالية وخدمة راقية',
-    rating: '٤ من ٥ (ترتيب ١٤ من ٢٥٦ فندق في المدينة)',
-    link: 'https://www.booking.com/Share-gFleQHr',
-    keywords: ['الحارثية', 'فرونتيل', 'فرونتيل الحارثية'],
-  },
-  {
-    name: 'إعمار المنار',
-    stars: '٦ نجوم',
-    location: 'وسط المدينة المنورة',
-    distance: 'حوالي ١٠٠-١٨٠ متر من المسجد النبوي',
-    highlight: 'قريب جداً من النبوي وغرف واسعة وبوفيه إفطار متميز',
-    rating: '٨٫٢ من ١٠',
-    link: 'https://www.booking.com/Share-jCPBIDW',
-    keywords: ['إعمار', 'اعمار', 'المنار', 'إعمار المنار'],
-  },
-  {
-    name: 'جراند بلازا المدينة',
-    stars: '',
-    location: 'المدينة المنورة',
-    distance: '٦٠٠-٧٠٠ متر من المسجد النبوي الشريف',
-    highlight: 'موقع ممتاز وخدمة ودية ومناسب للعائلات والمجموعات',
-    rating: '',
-    link: 'https://www.booking.com/Share-t752OEg',
-    keywords: ['جراند بلازا', 'جراند'],
-  },
-  {
-    name: 'شذا ريجنسي بلازا',
-    stars: '٣ نجوم',
-    location: 'قلب المدينة المنورة',
-    distance: '٣ دقائق مشياً من المسجد النبوي',
-    highlight: 'موقع مثالي قريب جداً من الحرم النبوي وسعر مناسب',
-    rating: '',
-    link: 'https://www.booking.com/Share-3JCkDA',
-    keywords: ['شذا', 'ريجنسي', 'شذا ريجنسي'],
-  },
-  {
-    name: 'أوديست المدينة',
-    stars: '',
-    location: 'المدينة المنورة',
-    distance: 'حوالي ١٠ دقائق مشياً من المسجد النبوي',
-    highlight: 'خيار اقتصادي ممتاز لمن يفضل توفير ميزانية أكبر للتسوق',
-    rating: '',
-    link: 'https://www.booking.com/Share-cGbCMAy',
-    keywords: ['أوديست', 'اوديست'],
-  },
-];
-
-export function findHotelInMessage(message: string): string | null {
-  return findHotelInMessageFromData(message, HOTELS);
+/**
+ * Only a distance someone has taken responsibility for may be stated.
+ * Absent provenance is treated exactly like 'unknown' — a value that predates the
+ * provenance fields is not thereby trustworthy.
+ */
+export function isDistanceConfirmed(h: Pick<HotelEntry, 'distance' | 'distanceSource'>): boolean {
+  if (!String(h.distance ?? '').trim()) return false;
+  return !!h.distanceSource && h.distanceSource !== 'unknown';
 }
+
+// The hardcoded HOTELS array lived here until 2026-08-07. It is gone deliberately:
+// the live path reads CompanyAIConfig.industryData.hotels, and keeping a second
+// copy in code guaranteed the two would drift with no way to tell which was right.
+// Per-company DB config is now the single source. See scripts/hotel-provenance-migrate.js.
 
 // Returns the matched HotelEntry (or null) — used by the hotel-distance handler for direct reply.
 export function lookupHotelEntry(message: string, hotels: HotelEntry[]): HotelEntry | null {
@@ -135,13 +55,19 @@ export function findHotelInMessageFromData(message: string, hotels: HotelEntry[]
         const starsStr    = hotel.stars     ? ` ${hotel.stars}`            : '';
         const ratingStr   = hotel.rating    ? ` تقييم: ${hotel.rating}`    : '';
         const location    = hotel.location  ?? (hotel as any).city ?? '';
-        const distance    = hotel.distance  ?? '';
+        // Unconfirmed distances are withheld from the model too. This block tells it
+        // to state the contents directly, so leaving the number in would route an
+        // unverified fact to the customer through the model instead of the handler.
+        const distance    = isDistanceConfirmed(hotel) ? (hotel.distance ?? '') : '';
         const highlight   = hotel.highlight ?? '';
         const link        = hotel.link      ?? (hotel as any).bookingLink ?? '';
+        const distanceLine = distance
+          ? `المسافة من الحرم: ${distance}`
+          : 'المسافة من الحرم: غير مؤكدة — لا تذكر أي رقم، قول إن الفريق هيأكد المسافة';
         return `[تعليمة: العميل سأل بالاسم عن فندق "${hotel.name ?? ''}" — ارد بهذه المعلومات مباشرة بدون أسئلة متابعة]
 فندق: ${hotel.name ?? ''}${starsStr}
 الموقع: ${location}
-المسافة من الحرم: ${distance}
+${distanceLine}
 أبرز ميزة: ${highlight}${ratingStr}
 رابط الحجز: ${link}`;
       }
@@ -150,9 +76,6 @@ export function findHotelInMessageFromData(message: string, hotels: HotelEntry[]
   return null;
 }
 
-export function buildHotelKnowledge(): string {
-  return buildHotelKnowledgeFromData(HOTELS)
-}
 
 export function buildHotelKnowledgeFromData(hotels: HotelEntry[]): string {
   const mecca  = hotels.filter(h => !h.location?.includes('المدينة المنورة'))

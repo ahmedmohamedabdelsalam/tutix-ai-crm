@@ -33,6 +33,18 @@ if (!COMPANY) { console.error('FATAL: DEFAULT_COMPANY_ID not set'); process.exit
 // Use DIRECT_URL for immediate writes (bypasses Supabase pooler 30-s stale cache)
 const pool = new Pool({ connectionString: process.env.DIRECT_URL || process.env.DATABASE_URL })
 
+// Live hotel provenance — Q09 asserts against it rather than assuming a distance
+// is always sendable.
+let HOTELS_PROVENANCE = []
+async function loadHotelProvenance() {
+  const c = await pool.connect()
+  try {
+    const r = await c.query('SELECT "industryData" AS d FROM "CompanyAIConfig" WHERE "companyId"=$1',
+      [process.env.DEFAULT_COMPANY_ID])
+    HOTELS_PROVENANCE = (r.rows[0] && r.rows[0].d && Array.isArray(r.rows[0].d.hotels)) ? r.rows[0].d.hotels : []
+  } finally { c.release() }
+}
+
 // â”€â”€ Server process handle â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // ── Test-endpoint auth ───────────────────────────────────────────────────────
 // /webhook/test now requires X-Internal-Token (fail-closed). Uses
@@ -201,7 +213,21 @@ function evalGateVerdict(id, reply) {
     if (reply.includes('برامج العمرة ٢٠٢٦') || reply.includes('يوليو')) return 'FAIL(B1 broken: overview shown)'
     return 'MANUAL'
   }
-  if (id === 'Q09') return (reply.includes('موفنبيك') && reply.includes('المسافة')) ? 'PASS' : 'FAIL(no hotel distance)'
+  if (id === 'Q09') {
+    // A distance may only be stated when its provenance is confirmed. Every value
+    // migrated out of hajj-umrah-hotels.ts is 'unknown' — nobody ever recorded a
+    // source — so the correct behaviour today is to name the hotel, give what is
+    // known, and escalate the number rather than assert it. This asserts against
+    // the DATA's provenance so it stays correct once Alex confirms a distance.
+    if (!reply.includes('موفنبيك')) return 'FAIL(hotel not named)'
+    const confirmed = (HOTELS_PROVENANCE || []).some(h =>
+      (h.keywords || []).some(k => 'موفنبيك'.includes(k) || String(k).includes('موفنبيك'))
+      && h.distanceSource && h.distanceSource !== 'unknown')
+    if (confirmed) return reply.includes('المسافة') ? 'PASS' : 'FAIL(confirmed distance not stated)'
+    if (reply.includes('المسافة:')) return 'FAIL(unverified distance leaked)'
+    return /يأكد|هأكد|الفريق/.test(reply) ? 'PASS(unverified distance withheld + escalated)'
+                                          : 'FAIL(no escalation for unverified distance)'
+  }
   if (id === 'Q10') return (reply.includes('الحج') && reply.includes('٢٣٩')) ? 'PASS' : 'MANUAL'
   if (id === 'Q11') return 'PASS'
   if (id === 'Q12') {
@@ -776,6 +802,7 @@ async function main() {
   const faqCountBefore = await getFAQCount()
   console.log(`[PRE-RUN] FAQ count now: ${faqCountBefore}`)
 
+  await loadHotelProvenance()
   const started = await startServer()
   if (!started) {
     console.error('Server failed to start. Aborting suite.')

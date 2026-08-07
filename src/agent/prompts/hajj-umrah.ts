@@ -1,4 +1,3 @@
-import { buildHotelKnowledge } from './hajj-umrah-hotels';
 import { buildUmrahCatalogTable } from './umrah-packages-2026';
 
 export function buildHajjUmrahIdentity(companyName: string): string {
@@ -32,6 +31,10 @@ export function buildHajjUmrahCatalog(): string {
   return buildUmrahCatalogTable();
 }
 
+// The legacy no-DB-config path has no hotel knowledge any more. Hotels are
+// per-company data and live in CompanyAIConfig.industryData.hotels; a company
+// without config has none, and inventing some from a hardcoded file is exactly
+// the unowned-fact problem this removal exists to end.
 export function buildHajjUmrahHotels(): string {
-  return buildHotelKnowledge();
+  return '';
 }

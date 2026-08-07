@@ -2,7 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { Industry } from '@prisma/client';
 import { buildBasePersonality } from './prompts/base-personality';
 import { getIndustryPrompt } from './prompts/index';
-import { HotelEntry, findHotelInMessage, findHotelInMessageFromData } from './prompts/hajj-umrah-hotels';
+import { HotelEntry, findHotelInMessageFromData } from './prompts/hajj-umrah-hotels';
 
 export interface PrebuiltCatalog {
   identity: string
@@ -231,9 +231,12 @@ export async function getAgentReply(
 
     // Detect hotel name in last user message → injected as a separate uncached block
     const lastUserMsg = history.filter(m => m.role.toLowerCase() === 'user').slice(-1)[0]?.content ?? '';
+    // No DB config means no hotel data at all now that the hardcoded array is gone.
+    // Withholding is the correct fallback: the alternative was a second, unowned
+    // copy of the same customer-facing facts.
     const hotelOverride = prebuiltCatalog?.hotelList
       ? findHotelInMessageFromData(lastUserMsg, prebuiltCatalog.hotelList)
-      : findHotelInMessage(lastUserMsg);
+      : null;
 
     // Base system prompt is identical across all calls for the same company → cache it.
     // Known facts (conversation-specific) and hotel info are separate uncached blocks so

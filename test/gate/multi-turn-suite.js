@@ -35,6 +35,20 @@ if (!COMPANY) { console.error('FATAL: DEFAULT_COMPANY_ID not set'); process.exit
 
 const pool = new Pool({ connectionString: process.env.DIRECT_URL || process.env.DATABASE_URL })
 
+// Live hotel provenance, loaded once before the run. Distance assertions consult
+// it rather than assuming a distance is always sendable — see checkDistance().
+let HOTELS_DATA = []
+async function loadHotels() {
+  const c = await pool.connect()
+  try {
+    const r = await c.query('SELECT "industryData" AS d FROM "CompanyAIConfig" WHERE "companyId"=$1', [COMPANY])
+    HOTELS_DATA = (r.rows[0] && Array.isArray(r.rows[0].d && r.rows[0].d.hotels)) ? r.rows[0].d.hotels : []
+    const unconfirmed = HOTELS_DATA.filter(h => String(h.distance || '').trim()
+      && (!h.distanceSource || h.distanceSource === 'unknown')).length
+    console.log(`hotel provenance: ${HOTELS_DATA.length} hotels, ${unconfirmed} distance(s) unconfirmed`)
+  } finally { c.release() }
+}
+
 // ── Server lifecycle ───────────────────────────────────────────────────────
 // ── Test-endpoint auth ───────────────────────────────────────────────────────
 // /webhook/test now requires X-Internal-Token (fail-closed). Uses
@@ -211,6 +225,8 @@ const K = {
     airline: 'رحلة خاصة',
   },
   // Distance markers (substrings from industryData.hotels)
+  // NOTE: whether these may be STATED depends on the hotel's distanceSource.
+  // See checkDistance() — an unconfirmed distance must be escalated, not sent.
   dist: {
     موفنبيك: ['أقل من دقيقة', 'مكيفة', 'ملاصق', 'إطلالة'],
     الصفوة: ['٩٥٠'],
@@ -354,14 +370,7 @@ const SCENARIOS = [
       {
         msg: 'الصفوة كام متر من الحرم؟',
         hint: 'HOTEL_DISTANCE(الصفوة)',
-        check: r => {
-          const hasHotel = r.includes('الصفوة')
-          const hasDist  = containsAny(r, K.dist.الصفوة) // ٩٥٠
-          return { pass: hasHotel && hasDist,
-            note: (hasHotel && hasDist)
-              ? 'الصفوة distance (٩٥٠م) confirmed'
-              : `FAIL: hotel=${hasHotel} dist(٩٥٠)=${hasDist}` }
-        },
+        check: (r, ctx) => checkDistance(r, 'الصفوة', K.dist.الصفوة, ctx && ctx.hotels),
       },
       {
         msg: 'الطيران ايه في برامج سبتمبر؟',
@@ -470,14 +479,7 @@ const SCENARIOS = [
       {
         msg: 'سنود الريان بعيدة عن الحرم؟',
         hint: 'HOTEL_DISTANCE(سنود الريان)',
-        check: r => {
-          const hasHotel = r.includes('سنود الريان') || r.includes('سنود')
-          const hasDist  = containsAny(r, K.dist.سنود_الريان) // بالسيارة / توصيل
-          return { pass: hasHotel && hasDist,
-            note: (hasHotel && hasDist)
-              ? 'سنود الريان distance (بالسيارة) confirmed'
-              : `FAIL: hotel=${hasHotel} dist(بالسيارة)=${hasDist}` }
-        },
+        check: (r, ctx) => checkDistance(r, 'سنود الريان', K.dist.سنود_الريان, ctx && ctx.hotels),
       },
       {
         msg: 'الطيران بيكون من اسكندرية والسعر شامله؟',
@@ -748,7 +750,7 @@ async function runScenario(sc) {
     let reply = '', check = { pass: false, note: 'ERROR' }
     try {
       reply = await send(t.msg)
-      check = t.check(reply)
+      check = t.check(reply, { hotels: HOTELS_DATA })
     } catch (e) {
       check = { pass: false, note: `ERROR: ${e.message}` }
     }
@@ -783,6 +785,32 @@ async function runScenario(sc) {
   console.log(scenarioPassed ? `✅ ${sc.id}: PASS` : `❌ ${sc.id}: FAIL`)
 
   return { id: sc.id, name: sc.name, passes, total: sc.turns.length, ok: scenarioPassed, results }
+}
+
+/**
+ * A hotel distance may only be stated when someone has taken responsibility for it
+ * (industryData.hotels[].distanceSource !== 'unknown'). These scenarios used to
+ * assert the distance was always returned, which encoded the pre-provenance
+ * behaviour. Asserting against the DATA's own provenance keeps the test correct
+ * both today (everything 'unknown', so escalation is right) and after Alex
+ * confirms a value (the number is then expected).
+ */
+function checkDistance(reply, hotelDisplayName, markers, hotelsData) {
+  const entry = (hotelsData ?? []).find(h => (h.keywords ?? []).some(k => hotelDisplayName.includes(k))
+    || String(h.name ?? '').includes(hotelDisplayName) || hotelDisplayName.includes(String(h.name ?? '')))
+  const confirmed = !!entry && !!entry.distanceSource && entry.distanceSource !== 'unknown'
+  const named = reply.includes(hotelDisplayName)
+  const hasDist = containsAny(reply, markers)
+  if (confirmed) {
+    return { pass: named && hasDist,
+      note: named && hasDist ? `${hotelDisplayName} distance stated (source=${entry.distanceSource})`
+                             : `FAIL: confirmed distance not stated — hotel=${named} dist=${hasDist}` }
+  }
+  const escalates = /يأكد|هأكد|الفريق/.test(reply)
+  return { pass: named && !hasDist && escalates,
+    note: named && !hasDist && escalates
+      ? `${hotelDisplayName} distance correctly withheld (source=${entry ? entry.distanceSource : 'no entry'})`
+      : `FAIL: unconfirmed distance handling — hotel=${named} leaked=${hasDist} escalates=${escalates}` }
 }
 
 // ── Main ───────────────────────────────────────────────────────────────────
@@ -820,6 +848,7 @@ async function main() {
   console.log(`Live catalog: ${LIVE.makkahHotels.length} Makkah hotels on future trips `
             + `(${LIVE.makkahHotels.join(', ')}) | nearest departure ${LIVE.nearestDep ?? 'none'}`)
 
+  await loadHotels()
   const started = await startServer()
   if (!started) {
     console.error('Server failed to start. Aborting.')
