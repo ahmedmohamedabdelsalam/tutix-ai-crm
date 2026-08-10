@@ -26,6 +26,7 @@ import { logHandoff } from './handoff-log'
 import { matchFAQ, detectBlockedCategory, buildHandoffMessage } from './confidence-router'
 import { HAJJ_OV_DISCLAIMER, groupUmrahTrips, buildScheduleItinerary, buildFlightReply } from '../agent/prompts/dynamic-catalog-builder'
 import { lookupHotelEntry, isDistanceConfirmed } from '../agent/prompts/hajj-umrah-hotels'
+import { linkBsuid } from './bsuid'
 import { buildMealsReply, distinctMealPatterns, narrowMealCandidates } from './meals-handler'
 import { RawTrip } from './conversation-state'
 
@@ -143,7 +144,7 @@ export class WhatsAppService {
 
   // wamid/replyToId are appended last so existing positional callers are unaffected.
   // wamid is the Meta message id; when present the USER insert becomes the dedup claim.
-  async handleMessage(companyId: string, phone: string, text: string, source = 'direct', referralData?: object | null, simulate = false, wamid?: string, replyToId?: string): Promise<string | string[]> {
+  async handleMessage(companyId: string, phone: string, text: string, source = 'direct', referralData?: object | null, simulate = false, wamid?: string, replyToId?: string, bsuid?: string | null): Promise<string | string[]> {
     // simulate=true: accepted ONLY from /webhook/test — never passed by the real Meta webhook path.
     // Gates are bypassed so catalog bypasses can be tested while AI stays fully locked.
     // Assistant replies ARE persisted to DB even in simulate mode so that multi-turn test
@@ -262,6 +263,11 @@ export class WhatsAppService {
         return ''
       }
     }
+
+    // Phase 1 BSUID capture — after find-or-create, so it lands on the row this
+    // customer actually resolved to. Fire-and-forget: a customer's reply must never
+    // wait on, or fail because of, identity bookkeeping.
+    if (bsuid && !simulate) void linkBsuid(this.prisma, conv.id, bsuid, { phone })
 
     // Stamp isTest before any persistReply call so the AI-leak watchdog never sees this
     // conversation. The controller also stamps it after the call, but doing it here

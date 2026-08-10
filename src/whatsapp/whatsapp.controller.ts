@@ -7,6 +7,7 @@ import { FollowUpService } from './followup.service'
 import { PrismaService } from '../prisma/prisma.service'
 import { splitIntoMessages } from './message-splitter'
 import { metaPost, sendWhatsAppMessage } from './send-message'
+import { extractBsuid, linkBsuid } from './bsuid'
 import { captureMedia } from './capture-media'
 import { isAIConfigActive, getAIConfigTemplates } from './ai-config-cache'
 import { buildHandoffMessage } from './confidence-router'
@@ -192,7 +193,10 @@ export class WhatsAppController {
         console.error(
           `[WEBHOOK_NO_IDENTITY] a customer message could not be identified and was NOT processed ` +
           `— occurrence=${noIdentityCount} since boot | ${describePayloadShape(message, contact)} | ` +
-          `ACTION: a human must open the WhatsApp Business app and reply there; this message is not in the CRM`,
+          `UNREACHABLE: this customer cannot be replied to or seen ANYWHERE. This number is Cloud-API ` +
+          `only, so there is no WhatsApp Business app inbox to open; no Conversation row exists; and ` +
+          `every outbound path sends to a phone number we do not have. There is no manual workaround — ` +
+          `landing BSUID support (read user_id → store → send by recipient) is the only remedy.`,
         )
         return
       }
@@ -203,6 +207,9 @@ export class WhatsAppController {
         console.log(`WEBHOOK_DUP → skipped duplicate message.id=${message.id} from=${message.from}`)
         return
       }
+
+      // Phase 1: captured on every inbound message, used for identity by nothing yet.
+      const bsuid = extractBsuid(value)
 
       const incomingPhoneId = value?.metadata?.phone_number_id
       const referral        = message.referral ?? null
@@ -278,6 +285,7 @@ export class WhatsAppController {
             data: { companyId: company.id, phone: message.from, leadId: lead.id, status: ConvStatus.AI_HANDLING, agentMode: 'HUMAN' },
           })
           convId = newConv.id
+          void linkBsuid(this.prisma, convId, bsuid, { phone: message.from })
         }
 
         // Touch updatedAt so the inbox list re-sorts on every incoming message
@@ -362,7 +370,7 @@ export class WhatsAppController {
       // atomically and returns without calling the model or sending anything.
       const result = await this.whatsapp.handleMessage(
         company.id, message.from, message.text.body, adSource, referral,
-        false, incomingWamid, resolvedReplyToId,
+        false, incomingWamid, resolvedReplyToId, bsuid,
       )
       const replyList = Array.isArray(result) ? result : (result ? [result] : [])
 
