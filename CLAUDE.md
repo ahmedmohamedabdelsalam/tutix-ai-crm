@@ -68,13 +68,17 @@ Cron job runs daily at 9 AM (`@Cron('0 9 * * *')`):
 3. Always return 200 to Meta webhook immediately (before any async work)
 4. All user-facing messages in Arabic
 5. Never truncate verification output — see below
+6. A shared-field change is not done until BOTH repos' local types are widened
 
 ## Verifying Your Own Work
 
-Three separate times, a check reported success while the thing it checked was
-broken. Every one was a false PASS, not a missed failure — the command ran, printed
-something reassuring, and the error was in the part that got cut off. A check that
+FOUR separate times, a check reported success while the thing it checked was
+broken. Every one was a false PASS, not a missed failure — the check ran, said
+something reassuring, and the truth was in the part it could not see. A check that
 can only say "fine" is not a check.
+
+The fourth was the worst: stale hand-written types made `tsc` itself the false PASS,
+and the result was a production outage rather than a wasted hour.
 
 **Never truncate the output of a command whose purpose is to prove something
 worked.** No `| tail`, no `| head`, no `2>/dev/null` on a build, a type-check, a
@@ -104,6 +108,23 @@ the intent. Ask what the count should be before accepting it.
 here, `phone            String` in the dashboard). A scripted edit anchored on one
 repo's whitespace silently matches nothing in the other. After any scripted schema
 edit, read the resulting model back.
+
+**Hand-declared types that duplicate a contract WILL drift, and drift disarms the
+compiler.** `tsc` only checks your claims against each other — never against
+reality. When a shared field changes shape, widen EVERY local declaration of it, or
+derive them from one source instead of restating them.
+
+This is the most dangerous of these failures, because it defeats the check we trust
+most. On 2026-08-10 `Conversation.phone` became nullable here; the dashboard's
+pages still carried fifteen hand-written `phone: string` declarations, so `tsc`
+passed there on code that could not run and a null phone took the entire sales
+dashboard down. The schema change was made in this repo — the crash landed in the
+other one, which is exactly how a shared database spreads a fault across a
+type-check boundary.
+
+So a field change here is not finished when this repo compiles. Grep both repos for
+every local declaration of that field and widen them before trusting either clean
+type-check.
 
 **Verify the artifact that runs, not the source.** Gate suites execute `dist/`;
 asserting against `src/` after forgetting `npm run build` tests code that is not
