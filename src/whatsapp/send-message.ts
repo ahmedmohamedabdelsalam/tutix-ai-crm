@@ -1,7 +1,8 @@
 import { splitIntoMessages } from './message-splitter'
+import { GRAPH_BASE } from './graph-api'
 
 export async function metaPost(phoneId: string, token: string, body: object): Promise<void> {
-  await fetch(`https://graph.facebook.com/v18.0/${phoneId}/messages`, {
+  await fetch(`${GRAPH_BASE}/${phoneId}/messages`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -28,7 +29,7 @@ export async function sendWhatsAppMessage(
       text: { body: parts[pi] },
     }
     if (pi === 0 && contextMsgId) body.context = { message_id: contextMsgId }
-    const res = await fetch(`https://graph.facebook.com/v18.0/${phoneId}/messages`, {
+    const res = await fetch(`${GRAPH_BASE}/${phoneId}/messages`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(body),

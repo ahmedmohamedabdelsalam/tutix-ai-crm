@@ -1,6 +1,6 @@
 import type { PrismaService } from '../prisma/prisma.service'
 
-const GRAPH_BASE = 'https://graph.facebook.com/v18.0'
+import { GRAPH_BASE } from './graph-api'
 const BUCKET = 'voice-messages'
 
 function mimeToExt(mime: string, fallbackType: string): string {
