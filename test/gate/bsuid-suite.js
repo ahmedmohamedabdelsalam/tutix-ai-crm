@@ -80,6 +80,28 @@ const textMsg = (id, contactExtra = {}, from = PHONE) => envelope({
     else { console.log(`  ❌ ${label}${detail ? `\n     ${detail}` : ''}`); fail++ }
   }
 
+  /**
+   * REFUSE TO RUN if the test phone holds a REAL captured BSUID.
+   *
+   * PHONE is the owner's actual handset. On 2026-08-10 he sent a message so we
+   * could capture its BSUID for the delivery test; a routine suite run then nuked
+   * the conversation and the identifier was unrecoverable, because logs only ever
+   * store its shape. Deleting rows for that number is fine when the suite created
+   * them — never when Meta did.
+   */
+  const guardRealIdentity = async () => {
+    const { rows } = await c.query(
+      'SELECT "waUserId" FROM "Conversation" WHERE phone=$1 AND "companyId"=$2 AND "waUserId" IS NOT NULL',
+      [PHONE, CO])
+    const real = rows.filter(r => !SUITE_BSUIDS.includes(r.waUserId))
+    if (real.length) {
+      console.error(`FATAL: ${PHONE} holds a REAL captured BSUID (${real[0].waUserId}).`)
+      console.error('This suite deletes that number\'s rows, and the identifier cannot be recovered from logs.')
+      console.error('Finish whatever needs it, or clear the row deliberately, before running this suite.')
+      process.exit(1)
+    }
+  }
+
   const nuke = async () => {
     const { rows } = await c.query('SELECT id FROM "Conversation" WHERE phone=$1 AND "companyId"=$2', [PHONE, CO])
     for (const { id } of rows) {
@@ -97,6 +119,18 @@ const textMsg = (id, contactExtra = {}, from = PHONE) => envelope({
       await c.query(`DELETE FROM "Message" WHERE "conversationId" IN (SELECT id FROM "Conversation" WHERE "waUserId"=$1)`, [b])
       await c.query(`DELETE FROM "Conversation" WHERE "waUserId"=$1`, [b])
     }
+    // A BSUID-only conversation creates a Lead with a NULL phone, which the
+    // phone-keyed delete above can never match. Those rows leaked out of every run
+    // and on 2026-08-10 thirty-six of them crashed the sales dashboard, because the
+    // client pages called .startsWith on a null phone.
+    //
+    // Scoped to rows nothing points at, so a REAL phone-less customer — which
+    // Phase 3b now creates — is never touched.
+    await c.query(`DELETE FROM "Lead" l
+       WHERE l.phone IS NULL AND l."companyId"=$1
+         AND NOT EXISTS (SELECT 1 FROM "Conversation" v WHERE v."leadId"=l.id)
+         AND NOT EXISTS (SELECT 1 FROM "Payment"      p WHERE p."leadId"=l.id)
+         AND NOT EXISTS (SELECT 1 FROM "Task"         t WHERE t."leadId"=l.id)`, [CO])
   }
   const storedId = async () => (await c.query(
     'SELECT "waUserId" FROM "Conversation" WHERE phone=$1 AND "companyId"=$2 ORDER BY "createdAt" DESC LIMIT 1',
@@ -117,6 +151,9 @@ const textMsg = (id, contactExtra = {}, from = PHONE) => envelope({
       console.error('FATAL: Conversation.waUserId does not exist — run `npx prisma db push` first')
       process.exit(1)
     }
+
+    // Before anything is deleted, and before a server is even started.
+    await guardRealIdentity()
 
     srv = spawn('node', ['dist/src/main.js'], {
       cwd: 'c:/Users/Computec/tutix-ai-crm', stdio: ['ignore', 'pipe', 'pipe'],
