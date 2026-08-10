@@ -631,6 +631,15 @@ model UnidentifiedInbound {
   contactKeys String?
   hasWaId     Boolean  @default(false)
   reason      String
+  /// 'production' | 'test'. Set from UNIDENTIFIED_SOURCE, which only test harnesses
+  /// set — production never does, so the default is the safe one.
+  ///
+  /// This exists because the alarm's whole value is being unambiguous. Local probes
+  /// and gate suites write to the PRODUCTION database, so without this the count
+  /// mixes synthetic rows with lost customers and can only be read correctly by
+  /// remembering a WHERE clause. A number that needs a remembered filter will
+  /// eventually be read without it — and reported as an outage that never happened.
+  source      String   @default("production")
   createdAt   DateTime @default(now())
 
   /// Meta redelivers webhooks. Unique among NON-NULL wamids — Postgres treats
@@ -639,4 +648,5 @@ model UnidentifiedInbound {
   @@unique([wamid])
   @@index([companyId, createdAt])
   @@index([createdAt])
+  @@index([source, createdAt])
 }

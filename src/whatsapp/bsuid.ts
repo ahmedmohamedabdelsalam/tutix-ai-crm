@@ -62,6 +62,9 @@ export async function recordUnidentifiedInbound(
     await prisma.unidentifiedInbound.create({
       data: {
         companyId,
+        // Only a test harness sets UNIDENTIFIED_SOURCE. Production never does, so
+        // the default is the safe one: an unlabelled row counts as a real customer.
+        source: process.env.UNIDENTIFIED_SOURCE === 'test' ? 'test' : 'production',
         waPhoneId:   args.waPhoneId   ?? null,
         waUserId:    args.waUserId    ?? null,
         wamid:       args.wamid       ?? null,

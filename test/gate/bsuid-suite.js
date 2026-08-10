@@ -120,7 +120,9 @@ const textMsg = (id, contactExtra = {}, from = PHONE) => envelope({
 
     srv = spawn('node', ['dist/src/main.js'], {
       cwd: 'c:/Users/Computec/tutix-ai-crm', stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, NODE_ENV: 'production', PORT: String(PORT) },
+      // Label every UnidentifiedInbound row this suite causes, so the production
+      // alarm count is never inflated by a test run.
+      env: { ...process.env, NODE_ENV: 'production', PORT: String(PORT), UNIDENTIFIED_SOURCE: 'test' },
     })
     srv.stdout.on('data', d => logs.push(d.toString()))
     srv.stderr.on('data', d => logs.push(d.toString()))
@@ -223,6 +225,7 @@ const textMsg = (id, contactExtra = {}, from = PHONE) => envelope({
       if (row) {
         t(row.waUserId === null, 'no BSUID to store for a no-identity payload', `got ${row.waUserId}`)
         t(row.reason === 'no_identity', `reason recorded (${row.reason})`)
+        t(row.source === 'test', 'labelled source=test — a gate run never inflates the production alarm', `got ${row.source}`)
         t(row.messageType === 'text', `message type recorded (${row.messageType})`)
         t(!!row.companyId, 'attributed to a company via phone_number_id — queryable per tenant')
         t(row.hasWaId === false, 'records that wa_id was absent')
