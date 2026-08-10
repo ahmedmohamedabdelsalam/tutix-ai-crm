@@ -357,8 +357,7 @@ export class WhatsAppController {
           const aiTemplates = await getAIConfigTemplates(this.prisma, company.id)
           const handoffMsg = buildHandoffMessage(aiTemplates)
           if (company.waToken && company.waPhoneId) {
-            if (message.from) await sendWhatsAppMessage(company.waPhoneId, company.waToken, message.from, handoffMsg)
-            else console.error(`MEDIA_HANDOFF_UNSENDABLE conv=${convId} — BSUID-only, no phone; needs PHASE3C recipient support`)
+            await sendWhatsAppMessage(company.waPhoneId, company.waToken, mediaIdentity, handoffMsg)
           }
           await this.prisma.message.create({ data: { conversationId: convId, role: 'ASSISTANT', content: handoffMsg } })
           await this.prisma.conversation.update({
@@ -369,8 +368,7 @@ export class WhatsAppController {
           console.log(`MEDIA_HANDOFF (${mediaType}) → ${message.from}`)
         } else {
           if (company.waToken && company.waPhoneId) {
-            if (message.from) await sendWhatsAppMessage(company.waPhoneId, company.waToken, message.from, media.reply)
-            else console.error(`MEDIA_REPLY_UNSENDABLE conv=${convId} — BSUID-only, no phone; needs PHASE3C recipient support`)
+            await sendWhatsAppMessage(company.waPhoneId, company.waToken, mediaIdentity, media.reply)
           }
           await this.prisma.message.create({ data: { conversationId: convId, role: 'ASSISTANT', content: media.reply } })
           console.log(`MEDIA REPLY (${mediaType}) sent to ${message.from}`)
@@ -395,8 +393,8 @@ export class WhatsAppController {
       if (hasContent && company.waToken && company.waPhoneId) {
         for (const r of replyList) {
           if (!r) continue
-          if (!message.from) { console.error(`REPLY_UNSENDABLE — BSUID-only, no phone; reply generated but not sent; needs PHASE3C recipient support`); break }
-          const w = await sendWhatsAppMessage(company.waPhoneId, company.waToken, message.from, r)
+          const w = await sendWhatsAppMessage(company.waPhoneId, company.waToken,
+            { phone: (message.from as string) ?? null, waUserId: bsuid }, r)
           outWamids.push(w)
         }
       } else if (hasContent) {
@@ -562,16 +560,13 @@ export class WhatsAppController {
     try {
       if (!body.convId)    return { error: 'convId required' }
       if (!body.companyId) return { error: 'companyId required' }
-      const { reply, phone, waToken, waPhoneId, error } = await this.whatsapp.triggerAIReply(body.convId, body.companyId)
+      const { reply, phone, waUserId, waToken, waPhoneId, error } = await this.whatsapp.triggerAIReply(body.convId, body.companyId)
       if (!reply) return { success: false, error: error ?? 'no reply generated' }
 
-      // PHASE3C: when phone is null this conversation is BSUID-only and must be sent
-      // via `recipient`. Until that lands, refuse loudly rather than send nowhere.
-      if (waToken && waPhoneId && phone) {
-        await sendWhatsAppMessage(waPhoneId, waToken, phone, reply)
-      } else if (!phone) {
-        console.error(`CONVREPLY_UNSENDABLE conv=${body.convId} — reply generated but no phone to send it to (BSUID-only); needs PHASE3C recipient support`)
-        return { success: false, error: 'no phone on this conversation — cannot send yet' }
+      // Addressed by phone when we have one, by BSUID when we do not.
+      if (waToken && waPhoneId) {
+        const wamid = await sendWhatsAppMessage(waPhoneId, waToken, { phone, waUserId }, reply)
+        if (!wamid) return { success: false, error: 'تعذّر إرسال الرسالة — راجع السجلات' }
       }
 
       return { success: true, reply }

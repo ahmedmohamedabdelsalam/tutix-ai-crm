@@ -1474,14 +1474,13 @@ export class WhatsAppService {
   // Generates one AI reply for an existing conversation without creating a duplicate
   // USER message — used by the dashboard "take over with AI reply" flow.
   async triggerAIReply(convId: string, expectedCompanyId: string): Promise<{
-    // phone is nullable from Phase 3a: a BSUID-only conversation has none.
-    // PHASE3C will add waUserId here so the caller can send by `recipient`.
-    reply: string; phone: string | null; waToken: string | null; waPhoneId: string | null; error?: string
+    // Both halves of the identity, so the caller can address by phone or by BSUID.
+    reply: string; phone: string | null; waUserId: string | null; waToken: string | null; waPhoneId: string | null; error?: string
   }> {
-    const empty = { reply: '', phone: '', waToken: null, waPhoneId: null }
+    const empty = { reply: '', phone: null, waUserId: null, waToken: null, waPhoneId: null }
     const conv = await this.prisma.conversation.findUnique({
       where: { id: convId },
-      select: { id: true, phone: true, companyId: true, leadId: true, agentMode: true },
+      select: { id: true, phone: true, waUserId: true, companyId: true, leadId: true, agentMode: true },
     })
     if (!conv) return empty
     if (conv.companyId !== expectedCompanyId) {
@@ -1490,16 +1489,16 @@ export class WhatsAppService {
     }
 
     const company = await this.prisma.company.findUnique({ where: { id: conv.companyId } })
-    if (!company || !company.isActive) return { ...empty, phone: conv.phone }
+    if (!company || !company.isActive) return { ...empty, phone: conv.phone, waUserId: conv.waUserId }
 
     if (!await isAIConfigActive(this.prisma, conv.companyId)) {
       console.log(`AI_KILL_SWITCH OFF (TRIGGER) — conv=${convId}`)
-      return { ...empty, phone: conv.phone, error: 'الإيجنت متوقف حالياً' }
+      return { ...empty, phone: conv.phone, waUserId: conv.waUserId, error: 'الإيجنت متوقف حالياً' }
     }
 
     if (conv.agentMode === 'HUMAN') {
       console.log(`TRIGGER_AI_REPLY BLOCKED (HUMAN_MODE) — conv=${convId}`)
-      return { ...empty, phone: conv.phone, error: 'الإيجنت متوقف حالياً' }
+      return { ...empty, phone: conv.phone, waUserId: conv.waUserId, error: 'الإيجنت متوقف حالياً' }
     }
 
     const freshMessages = await this.prisma.message.findMany({
@@ -1564,7 +1563,7 @@ export class WhatsAppService {
       if (!conv.phone) console.warn(`HANDOFF_NO_PHONE conv=${convId} — BSUID-only; logged with a null phone, never a placeholder`)
       logHandoff(this.prisma, { companyId: conv.companyId, conversationId: convId, phone: conv.phone, customerMessage: lastUserMsg, reason: 'output_guard', blockedOutput: rawTriggerReply })
       console.log(`OUTPUT_GUARD_BLOCK(TRIGGER) → conv=${convId} trigger=${triggerGuard}`)
-      return { reply: triggerHandoff, phone: conv.phone, waToken: company.waToken, waPhoneId: company.waPhoneId }
+      return { reply: triggerHandoff, phone: conv.phone, waUserId: conv.waUserId, waToken: company.waToken, waPhoneId: company.waPhoneId }
     }
 
     const reply = applyHajjDateDisclaimer(rawTriggerReply)
@@ -1572,6 +1571,6 @@ export class WhatsAppService {
     await saveAssistantMessage(this.prisma, convId, reply)
     console.log(`MANUAL_AI_REPLY → conv=${convId} phone=${conv.phone}`)
 
-    return { reply, phone: conv.phone, waToken: company.waToken, waPhoneId: company.waPhoneId }
+    return { reply, phone: conv.phone, waUserId: conv.waUserId, waToken: company.waToken, waPhoneId: company.waPhoneId }
   }
 }
