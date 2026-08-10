@@ -45,6 +45,54 @@ function isDuplicateMessage(id: string): boolean {
   return false
 }
 
+/** Count of unidentifiable inbound messages since boot — reported in each alarm. */
+let noIdentityCount = 0
+
+/**
+ * Describe an unidentifiable payload by SHAPE ONLY — never its contents.
+ *
+ * This exists to answer one question from log data alone: are business-scoped
+ * user IDs already arriving, and what does the payload look like when they do?
+ * Key names and types answer that. Values do not, and the message body of a
+ * customer we could not identify is the last thing that belongs in a log line.
+ */
+function describePayloadShape(
+  message: Record<string, unknown> | undefined,
+  contact: Record<string, unknown> | undefined,
+): string {
+  const keys = (o: Record<string, unknown> | undefined) =>
+    o ? Object.keys(o).sort().join(',') : '(absent)'
+  const type = typeof message?.type === 'string' ? sanitiseToken(message.type as string) : '(none)'
+  return [
+    `messageKeys=[${keys(message)}]`,
+    `type=${type}`,
+    `contactKeys=[${keys(contact)}]`,
+    `user_id=${describeBsuid(contact?.user_id)}`,
+    `wa_id=${typeof contact?.wa_id === 'string' ? 'present' : 'absent'}`,
+  ].join(' | ')
+}
+
+/**
+ * A business-scoped user ID reduced to its shape: country-code prefix and length.
+ *
+ * Enough to confirm arrival and the documented "<CC>.<alnum>" format without
+ * writing a stable per-user identifier into logs. We already log full phone
+ * numbers on the normal path, so emitting the whole BSUID would not be
+ * inconsistent — but it is not needed to answer the question this logging exists
+ * for, and the narrower thing is the easier one to widen later if it is.
+ */
+function describeBsuid(v: unknown): string {
+  if (typeof v !== 'string' || v.length === 0) return 'absent'
+  const dot = v.indexOf('.')
+  const cc = dot > 0 ? sanitiseToken(v.slice(0, dot)) : '?'
+  return `present(cc=${cc},len=${v.length})`
+}
+
+/** Strip anything that could forge a log marker or break a line. Untrusted input. */
+function sanitiseToken(v: string, max = 24): string {
+  return v.replace(/[\r\n\[\]|]/g, '').trim().slice(0, max)
+}
+
 function detectAdSource(referral?: { source_url?: string }): string {
   if (!referral) return 'direct'
   const url = referral.source_url ?? ''
@@ -118,7 +166,36 @@ export class WhatsAppController {
     try {
       const value   = body?.entry?.[0]?.changes?.[0]?.value
       const message = value?.messages?.[0]
-      if (!message?.from || !message?.id) return
+      const contact = value?.contacts?.[0] as Record<string, unknown> | undefined
+
+      // No messages[] at all — a status/delivery webhook. Normal and high-volume
+      // (roughly 4 in 5 of everything Meta sends us), so it stays silent.
+      if (!message) return
+
+      // ── IDENTITY GUARD ────────────────────────────────────────────────────
+      // Until 2026-08-07 this read `if (!message?.from || !message?.id) return`
+      // and dropped the message with NO log, NO row and NO alarm — after a 200
+      // had already been sent, so Meta never retried. A customer messaging us
+      // simply vanished, permanently and invisibly.
+      //
+      // Meta's usernames rollout makes that reachable: once a user adopts a
+      // username, `from` and `wa_id` are omitted and identity arrives as
+      // contacts[0].user_id (a business-scoped ID, "<CC>.<alnum>"). We do not
+      // read user_id yet — that is Phase 1 — so such a message still cannot be
+      // processed. What changes here is that it can no longer be LOST silently.
+      //
+      // There is no row to write: HandoffLog requires a non-null conversationId
+      // and phone, and Conversation.phone is NOT NULL. Persisting this needs the
+      // Phase 3 schema change. Until then the handoff is a loud alarm.
+      if (!message.from || !message.id) {
+        noIdentityCount++
+        console.error(
+          `[WEBHOOK_NO_IDENTITY] a customer message could not be identified and was NOT processed ` +
+          `— occurrence=${noIdentityCount} since boot | ${describePayloadShape(message, contact)} | ` +
+          `ACTION: a human must open the WhatsApp Business app and reply there; this message is not in the CRM`,
+        )
+        return
+      }
       if (!message?.text?.body && !MEDIA_TYPES.has(message?.type)) return
 
       // Dedup: Meta re-delivers webhooks; skip duplicates (200 already sent above)
@@ -132,7 +209,12 @@ export class WhatsAppController {
       const adSource        = detectAdSource(referral)
       const incomingWamid   = message.id as string | undefined
       const contextWamid    = (message as Record<string, any>).context?.id as string | undefined
-      console.log(`Webhook received | phone_number_id: ${incomingPhoneId} | from: ${message.from} | type: ${message.type} | adSource: ${adSource}`)
+      // user_id is logged on the NORMAL path too, deliberately. Meta sends both
+      // identifiers during the transition, and that overlap is the only window in
+      // which an existing phone-keyed conversation can be linked to the same
+      // person's BSUID. Knowing whether it has started — and on what share of
+      // traffic — is what decides the timing of Phase 1.
+      console.log(`Webhook received | phone_number_id: ${incomingPhoneId} | from: ${message.from} | type: ${message.type} | adSource: ${adSource} | user_id: ${describeBsuid(contact?.user_id)}`)
 
       // Look up company by waPhoneId so multi-tenant routing works correctly
       let company = incomingPhoneId
