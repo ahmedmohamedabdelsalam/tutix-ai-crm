@@ -43,6 +43,11 @@ if (!CO) { console.error('FATAL: DEFAULT_COMPANY_ID not set'); process.exit(1) }
 
 const BSUID       = 'EG.13491208655302741918'
 const OTHER_BSUID = 'EG.99887766554433221100'
+/** Every BSUID this suite may write, so cleanup can be exhaustive. */
+const SUITE_BSUIDS = [
+  'EG.13491208655302741918', 'EG.99887766554433221100', 'EG.55554444333322221111',
+  'EG.11112222333344445555', 'EG.66667777888899990000',
+]
 const pool  = new Pool({ connectionString: process.env.DIRECT_URL || process.env.DATABASE_URL })
 const delay = ms => new Promise(r => setTimeout(r, ms))
 const logs  = []
@@ -84,6 +89,14 @@ const textMsg = (id, contactExtra = {}, from = PHONE) => envelope({
     await c.query('DELETE FROM "Lead" WHERE phone=$1 AND "companyId"=$2', [PHONE, CO])
     // The suite deliberately creates unidentified-inbound rows; remove only its own.
     await c.query(`DELETE FROM "UnidentifiedInbound" WHERE wamid LIKE 'wamid.GATE_%'`)
+    // Phase 3b processes BSUID-only messages into real conversations, so the suite
+    // now creates phone-less rows too. Leaving them collides with
+    // @@unique([companyId, waUserId]) on the next run and fails tests that have
+    // nothing to do with the bug.
+    for (const b of SUITE_BSUIDS) {
+      await c.query(`DELETE FROM "Message" WHERE "conversationId" IN (SELECT id FROM "Conversation" WHERE "waUserId"=$1)`, [b])
+      await c.query(`DELETE FROM "Conversation" WHERE "waUserId"=$1`, [b])
+    }
   }
   const storedId = async () => (await c.query(
     'SELECT "waUserId" FROM "Conversation" WHERE phone=$1 AND "companyId"=$2 ORDER BY "createdAt" DESC LIMIT 1',
@@ -128,7 +141,20 @@ const textMsg = (id, contactExtra = {}, from = PHONE) => envelope({
     await post(textMsg('wamid.GATE_A', { user_id: BSUID }))
     await settle()
     t(await storedId() === BSUID, 'BSUID stored on the phone-keyed conversation', `got ${await storedId()}`)
-    t(logs.join('').includes('BSUID_LINKED'), 'BSUID_LINKED logged')
+
+    // THE LINKING WINDOW, tested for real: a conversation that already exists with
+    // only a phone, then a later message carrying the BSUID. This is the case that
+    // protects existing history — Phase 3b writes the id at creation, so a brand-new
+    // conversation never exercises the backfill path at all.
+    await nuke()
+    await post(textMsg('wamid.GATE_A0', {}))                   // phone only
+    await settle()
+    t(await storedId() === null, 'existing conversation starts with no BSUID')
+    const bLink = logs.length
+    await post(textMsg('wamid.GATE_A1', { user_id: BSUID }))   // now Meta sends both
+    await settle()
+    t(await storedId() === BSUID, 'BACKFILLED onto the existing conversation — history preserved')
+    t(logs.slice(bLink).join('').includes('BSUID_LINKED'), 'BSUID_LINKED logged for the backfill')
 
     // ── B. idempotent — no write churn on every subsequent message ───────────
     console.log('\nB. repeat messages from the same person')
@@ -171,7 +197,7 @@ const textMsg = (id, contactExtra = {}, from = PHONE) => envelope({
     const b3 = logs.length
     const status = await post(envelope({
       metadata: { phone_number_id: process.env.GATE_PHONE_ID || '1191029790754985' },
-      contacts: [{ profile: { name: 'Gate' }, user_id: BSUID }],
+      contacts: [{ profile: { name: 'Gate' } }],
       messages: [{ id: 'wamid.GATE_F', type: 'text', timestamp: '1780000000', text: { body: 'سؤال سري' } }],
     }))
     await delay(1500)
@@ -182,7 +208,7 @@ const textMsg = (id, contactExtra = {}, from = PHONE) => envelope({
     t(alarm.includes('UNREACHABLE'), 'states the customer is unreachable')
     t(!alarm.includes('سؤال سري'), 'does not leak the message body')
     t(!alarm.includes('13491208655302741918'), 'does not leak the full BSUID')
-    t(alarm.includes('user_id=present'), 'records that a BSUID WAS present — the diagnostic signal')
+    t(alarm.includes('user_id=absent'), 'records that NO BSUID was present — nothing to recover from')
 
     // ── F2. the DURABLE record — the whole point of the table ────────────────
     // A log line dies with its container, and we deploy several times a day, so
@@ -195,8 +221,8 @@ const textMsg = (id, contactExtra = {}, from = PHONE) => envelope({
         `SELECT * FROM "UnidentifiedInbound" WHERE wamid=$1`, ['wamid.GATE_F'])).rows[0]
       t(!!row, 'a row was written for the lost message')
       if (row) {
-        t(row.waUserId === BSUID, 'BSUID stored IN FULL — it is the recovery key for Phase 3', `got ${row.waUserId}`)
-        t(row.reason === 'no_from', `reason recorded (${row.reason})`)
+        t(row.waUserId === null, 'no BSUID to store for a no-identity payload', `got ${row.waUserId}`)
+        t(row.reason === 'no_identity', `reason recorded (${row.reason})`)
         t(row.messageType === 'text', `message type recorded (${row.messageType})`)
         t(!!row.companyId, 'attributed to a company via phone_number_id — queryable per tenant')
         t(row.hasWaId === false, 'records that wa_id was absent')
@@ -210,13 +236,114 @@ const textMsg = (id, contactExtra = {}, from = PHONE) => envelope({
       // Meta redelivers webhooks; the partial unique index must absorb that.
       await post(envelope({
         metadata: { phone_number_id: process.env.GATE_PHONE_ID || '1191029790754985' },
-        contacts: [{ profile: { name: 'Gate' }, user_id: BSUID }],
+        contacts: [{ profile: { name: 'Gate' } }],
         messages: [{ id: 'wamid.GATE_F', type: 'text', timestamp: '1780000000', text: { body: 'سؤال سري' } }],
       }))
       await delay(1500)
       const n = (await c.query(
         `SELECT count(*)::int AS n FROM "UnidentifiedInbound" WHERE wamid=$1`, ['wamid.GATE_F'])).rows[0].n
       t(n === 1, 'a redelivered webhook does not double-count', `rows=${n}`)
+    }
+
+    // ── H. PHASE 3b — a BSUID-only customer becomes VISIBLE ──────────────────
+    // Before 3b this message was dropped and the customer was lost. A row nobody
+    // can see would be the same outage with better records, so this asserts the
+    // conversation reaches the sales inbox query, not merely the database.
+    console.log('\nH. BSUID-only inbound (Phase 3b)')
+    const ONLY_BSUID = 'EG.55554444333322221111'
+    await c.query(`DELETE FROM "Conversation" WHERE "waUserId"=$1`, [ONLY_BSUID]).catch(() => {})
+    {
+      const b = logs.length
+      const status = await post(envelope({
+        metadata: { phone_number_id: process.env.GATE_PHONE_ID || '1191029790754985' },
+        contacts: [{ profile: { name: 'Gate' }, user_id: ONLY_BSUID }],   // NO wa_id
+        messages: [{ id: 'wamid.GATE_H', type: 'text', timestamp: '1780000000', text: { body: 'السلام عليكم' } }],
+      }))
+      await settle()
+      t(status === 200, 'accepted')
+
+      const conv = (await c.query(
+        `SELECT id, phone, "waUserId", "companyId", status, "isTest"
+           FROM "Conversation" WHERE "waUserId"=$1`, [ONLY_BSUID])).rows[0]
+      t(!!conv, 'a conversation was CREATED from a BSUID alone')
+      if (conv) {
+        t(conv.phone === null, 'its phone is null — no placeholder was invented', `got ${conv.phone}`)
+        t(conv.waUserId === ONLY_BSUID, 'keyed by the BSUID')
+
+        // The sales inbox query: companyId + not a test conversation. If this row
+        // does not match it, the customer is invisible and 3b has failed its purpose.
+        const inbox = (await c.query(
+          `SELECT id FROM "Conversation"
+            WHERE "companyId"=$1 AND "isTest"=false AND id=$2`, [conv.companyId, conv.id])).rows
+        t(inbox.length === 1, 'APPEARS in the sales inbox query — visible, not just recorded')
+
+        const msgs = (await c.query(
+          `SELECT role FROM "Message" WHERE "conversationId"=$1 ORDER BY "createdAt"`, [conv.id])).rows
+        t(msgs.some(m => m.role === 'USER'), 'the inbound message is stored on it')
+
+        // It must NOT be recorded as lost any more — that was the old behaviour.
+        const lost = (await c.query(
+          `SELECT count(*)::int n FROM "UnidentifiedInbound" WHERE wamid=$1`, ['wamid.GATE_H'])).rows[0].n
+        t(lost === 0, 'NOT written to UnidentifiedInbound — it is no longer a lost customer')
+        t(!logs.slice(b).join('').includes('WEBHOOK_NO_IDENTITY'), 'no unidentified alarm fired')
+      }
+      await c.query(`DELETE FROM "Message" WHERE "conversationId" IN (SELECT id FROM "Conversation" WHERE "waUserId"=$1)`, [ONLY_BSUID])
+      await c.query(`DELETE FROM "Conversation" WHERE "waUserId"=$1`, [ONLY_BSUID])
+    }
+
+    // ── I. THE NO-REGRESSION INVARIANT — asserted, not inferred ──────────────
+    // "The other suites still pass" is not the same claim. This states directly
+    // that a phone-only inbound produces exactly what it produced before 3b.
+    console.log('\nI. phone-only inbound is unchanged')
+    {
+      await nuke()
+      await post(textMsg('wamid.GATE_I', {}, PHONE))    // no user_id at all
+      await settle()
+      const conv = (await c.query(
+        `SELECT id, phone, "waUserId", "leadId", status, "agentMode"
+           FROM "Conversation" WHERE phone=$1 AND "companyId"=$2`, [PHONE, CO])).rows[0]
+      t(!!conv, 'conversation created')
+      if (conv) {
+        t(conv.phone === PHONE, 'keyed by phone exactly as before', `got ${conv.phone}`)
+        t(conv.waUserId === null, 'no BSUID invented when Meta sent none')
+        t(!!conv.leadId, 'a Lead is attached, as before')
+        const lead = (await c.query(`SELECT phone FROM "Lead" WHERE id=$1`, [conv.leadId])).rows[0]
+        t(lead && lead.phone === PHONE, 'the Lead carries the phone, as before', `got ${lead && lead.phone}`)
+        const msgs = (await c.query(
+          `SELECT role FROM "Message" WHERE "conversationId"=$1`, [conv.id])).rows
+        t(msgs.some(m => m.role === 'USER'), 'inbound stored')
+        // No ASSISTANT assertion: CompanyAIConfig.isActive is false, so new
+        // conversations are created agentMode='HUMAN' and the real webhook path
+        // deliberately produces no AI reply. Asserting a reply would encode the
+        // kill switch being ON.
+        t(conv.agentMode === 'HUMAN', `agentMode is HUMAN while the AI kill switch is off (${conv.agentMode})`)
+      }
+    }
+
+    // ── J. two phone-less customers must NEVER collide ───────────────────────
+    // The dangerous shape: findFirst({ phone: null }) matches ANY phone-less row.
+    // If resolution ever falls back to phone when it is null, one customer is
+    // handed another's thread — silently, on their first message.
+    console.log('\nJ. two different BSUID-only customers stay separate')
+    const B1 = 'EG.11112222333344445555', B2 = 'EG.66667777888899990000'
+    for (const b of [B1, B2]) await c.query(`DELETE FROM "Conversation" WHERE "waUserId"=$1`, [b]).catch(() => {})
+    {
+      for (const [id, b] of [['wamid.GATE_J1', B1], ['wamid.GATE_J2', B2]]) {
+        await post(envelope({
+          metadata: { phone_number_id: process.env.GATE_PHONE_ID || '1191029790754985' },
+          contacts: [{ profile: { name: 'Gate' }, user_id: b }],
+          messages: [{ id, type: 'text', timestamp: '1780000000', text: { body: 'اهلا' } }],
+        }))
+        await settle()
+      }
+      const rows = (await c.query(
+        `SELECT "waUserId", id FROM "Conversation" WHERE "waUserId" IN ($1,$2)`, [B1, B2])).rows
+      t(rows.length === 2, 'two SEPARATE conversations, not one shared thread', `got ${rows.length}`)
+      t(new Set(rows.map(r => r.id)).size === 2, 'distinct conversation ids')
+      for (const b of [B1, B2]) {
+        await c.query(`DELETE FROM "Message" WHERE "conversationId" IN (SELECT id FROM "Conversation" WHERE "waUserId"=$1)`, [b])
+        await c.query(`DELETE FROM "Conversation" WHERE "waUserId"=$1`, [b])
+      }
     }
 
     // ── G. status webhooks stay silent (4 in 5 of all traffic) ───────────────

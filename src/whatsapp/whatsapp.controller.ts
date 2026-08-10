@@ -8,6 +8,7 @@ import { PrismaService } from '../prisma/prisma.service'
 import { splitIntoMessages } from './message-splitter'
 import { metaPost, sendWhatsAppMessage } from './send-message'
 import { extractBsuid, linkBsuid, recordUnidentifiedInbound } from './bsuid'
+import { findConversation, findLead } from './identity'
 import { captureMedia } from './capture-media'
 import { isAIConfigActive, getAIConfigTemplates } from './ai-config-cache'
 import { buildHandoffMessage } from './confidence-router'
@@ -173,45 +174,41 @@ export class WhatsAppController {
       // (roughly 4 in 5 of everything Meta sends us), so it stays silent.
       if (!message) return
 
+      // Phase 1 captured this; Phase 3b makes it an identity in its own right.
+      const bsuid = extractBsuid(value)
+
       // ── IDENTITY GUARD ────────────────────────────────────────────────────
-      // Until 2026-08-07 this read `if (!message?.from || !message?.id) return`
-      // and dropped the message with NO log, NO row and NO alarm — after a 200
-      // had already been sent, so Meta never retried. A customer messaging us
-      // simply vanished, permanently and invisibly.
+      // Phase 3b: a message with ONLY a BSUID is now processable — it creates a
+      // real conversation that appears in the sales inbox. What still cannot be
+      // handled is a message with no identity at all, or no message id (which the
+      // dedup claim depends on).
       //
-      // Meta's usernames rollout makes that reachable: once a user adopts a
-      // username, `from` and `wa_id` are omitted and identity arrives as
-      // contacts[0].user_id (a business-scoped ID, "<CC>.<alnum>"). We do not
-      // read user_id yet — that is Phase 1 — so such a message still cannot be
-      // processed. What changes here is that it can no longer be LOST silently.
-      //
-      // There is no row to write: HandoffLog requires a non-null conversationId
-      // and phone, and Conversation.phone is NOT NULL. Persisting this needs the
-      // Phase 3 schema change. Until then the handoff is a loud alarm.
-      if (!message.from || !message.id) {
+      // Before 3b this branch caught every username-adopting customer and they were
+      // simply lost. It now catches only genuinely unusable payloads, so a row here
+      // should become rare — and each one is still recorded durably rather than
+      // vanishing with the container.
+      if (!message.id || (!message.from && !bsuid)) {
         noIdentityCount++
-        // Persist FIRST, then log. The row is the record that outlives the
-        // container; the log line is only for immediate visibility.
         await recordUnidentifiedInbound(this.prisma, {
           waPhoneId:   value?.metadata?.phone_number_id ?? null,
-          waUserId:    extractBsuid(value),
+          waUserId:    bsuid,
           wamid:       typeof message.id === 'string' ? message.id : null,
           messageType: typeof message.type === 'string' ? sanitiseToken(message.type) : null,
           messageKeys: Object.keys(message).sort().join(','),
           contactKeys: contact ? Object.keys(contact).sort().join(',') : null,
           hasWaId:     typeof contact?.wa_id === 'string',
-          reason:      !message.from ? 'no_from' : 'no_id',
+          reason:      !message.id ? 'no_message_id' : 'no_identity',
         })
         console.error(
           `[WEBHOOK_NO_IDENTITY] a customer message could not be identified and was NOT processed ` +
           `— occurrence=${noIdentityCount} since boot | ${describePayloadShape(message, contact)} | ` +
           `UNREACHABLE: this customer cannot be replied to or seen ANYWHERE. This number is Cloud-API ` +
           `only, so there is no WhatsApp Business app inbox to open; no Conversation row exists; and ` +
-          `every outbound path sends to a phone number we do not have. There is no manual workaround — ` +
-          `landing BSUID support (read user_id → store → send by recipient) is the only remedy.`,
+          `every outbound path sends to a phone number we do not have.`,
         )
         return
       }
+
       if (!message?.text?.body && !MEDIA_TYPES.has(message?.type)) return
 
       // Dedup: Meta re-delivers webhooks; skip duplicates (200 already sent above)
@@ -219,9 +216,6 @@ export class WhatsAppController {
         console.log(`WEBHOOK_DUP → skipped duplicate message.id=${message.id} from=${message.from}`)
         return
       }
-
-      // Phase 1: captured on every inbound message, used for identity by nothing yet.
-      const bsuid = extractBsuid(value)
 
       const incomingPhoneId = value?.metadata?.phone_number_id
       const referral        = message.referral ?? null
@@ -271,8 +265,11 @@ export class WhatsAppController {
       if (!message.text?.body) {
         const mediaType = message.type as string
         const media = MEDIA_REPLIES[mediaType] ?? MEDIA_REPLIES['document']
-        const conv = await this.prisma.conversation.findFirst({
-          where: { companyId: company.id, phone: message.from, status: { not: ConvStatus.CLOSED } },
+        // Same guarded resolution as the text path: waUserId first, phone only when
+        // present. A findFirst on a null phone would match ANY phone-less
+        // conversation in this company and hand the customer a stranger's thread.
+        const mediaIdentity = { phone: (message.from as string) ?? null, waUserId: bsuid }
+        const conv = await findConversation(this.prisma, company.id, mediaIdentity, {
           orderBy: { updatedAt: 'desc' },
         })
         const isHumanMode = conv?.agentMode === 'HUMAN'
@@ -289,12 +286,14 @@ export class WhatsAppController {
           })
           const lead = existingLead ?? await this.prisma.lead.create({
             data: {
-              companyId: company.id, phone: message.from, source: adSource,
+              companyId: company.id, phone: (message.from as string) ?? null, source: adSource,
               ...(referral && { referralData: referral }),
             },
           })
           const newConv = await this.prisma.conversation.create({
-            data: { companyId: company.id, phone: message.from, leadId: lead.id, status: ConvStatus.AI_HANDLING, agentMode: 'HUMAN' },
+            data: { companyId: company.id, phone: (message.from as string) ?? null,
+                    ...(bsuid && { waUserId: bsuid }),
+                    leadId: lead.id, status: ConvStatus.AI_HANDLING, agentMode: 'HUMAN' },
           })
           convId = newConv.id
           void linkBsuid(this.prisma, convId, bsuid, { phone: message.from })
@@ -358,7 +357,8 @@ export class WhatsAppController {
           const aiTemplates = await getAIConfigTemplates(this.prisma, company.id)
           const handoffMsg = buildHandoffMessage(aiTemplates)
           if (company.waToken && company.waPhoneId) {
-            await sendWhatsAppMessage(company.waPhoneId, company.waToken, message.from, handoffMsg)
+            if (message.from) await sendWhatsAppMessage(company.waPhoneId, company.waToken, message.from, handoffMsg)
+            else console.error(`MEDIA_HANDOFF_UNSENDABLE conv=${convId} — BSUID-only, no phone; needs PHASE3C recipient support`)
           }
           await this.prisma.message.create({ data: { conversationId: convId, role: 'ASSISTANT', content: handoffMsg } })
           await this.prisma.conversation.update({
@@ -369,7 +369,8 @@ export class WhatsAppController {
           console.log(`MEDIA_HANDOFF (${mediaType}) → ${message.from}`)
         } else {
           if (company.waToken && company.waPhoneId) {
-            await sendWhatsAppMessage(company.waPhoneId, company.waToken, message.from, media.reply)
+            if (message.from) await sendWhatsAppMessage(company.waPhoneId, company.waToken, message.from, media.reply)
+            else console.error(`MEDIA_REPLY_UNSENDABLE conv=${convId} — BSUID-only, no phone; needs PHASE3C recipient support`)
           }
           await this.prisma.message.create({ data: { conversationId: convId, role: 'ASSISTANT', content: media.reply } })
           console.log(`MEDIA REPLY (${mediaType}) sent to ${message.from}`)
@@ -381,8 +382,10 @@ export class WhatsAppController {
       // (unique index on Message.whatsappMsgId). A Meta redelivery loses that race
       // atomically and returns without calling the model or sending anything.
       const result = await this.whatsapp.handleMessage(
-        company.id, message.from, message.text.body, adSource, referral,
-        false, incomingWamid, resolvedReplyToId, bsuid,
+        company.id,
+        { phone: (message.from as string) ?? null, waUserId: bsuid },
+        message.text.body, adSource, referral,
+        false, incomingWamid, resolvedReplyToId,
       )
       const replyList = Array.isArray(result) ? result : (result ? [result] : [])
 
@@ -392,6 +395,7 @@ export class WhatsAppController {
       if (hasContent && company.waToken && company.waPhoneId) {
         for (const r of replyList) {
           if (!r) continue
+          if (!message.from) { console.error(`REPLY_UNSENDABLE — BSUID-only, no phone; reply generated but not sent; needs PHASE3C recipient support`); break }
           const w = await sendWhatsAppMessage(company.waPhoneId, company.waToken, message.from, r)
           outWamids.push(w)
         }
@@ -449,7 +453,7 @@ export class WhatsAppController {
     // wamid: optional, test-only. Lets the dedup regression suite exercise the
     // claim without driving the real Meta webhook, which would trigger an actual
     // WhatsApp send. Never supplied by production traffic.
-    @Body() body: { phone: string; message: string; simulate?: boolean; wamid?: string },
+    @Body() body: { phone?: string; message: string; simulate?: boolean; wamid?: string; waUserId?: string },
     @Headers('x-internal-token') token: string,
   ) {
     assertInternalToken(token, 'TEST_ENDPOINT_TOKEN')
@@ -482,7 +486,9 @@ export class WhatsAppController {
 
       const result = await this.whatsapp.handleMessage(
         companyId,
-        body.phone ?? '201234567890',
+        // A test caller may supply either half, or both — mirroring what Meta sends.
+        { phone: body.waUserId ? (body.phone ?? null) : (body.phone ?? '201234567890'),
+          waUserId: body.waUserId ?? null },
         body.message ?? 'مرحباً',
         'direct',
         null,

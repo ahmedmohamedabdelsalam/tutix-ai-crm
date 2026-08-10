@@ -27,6 +27,7 @@ import { matchFAQ, detectBlockedCategory, buildHandoffMessage } from './confiden
 import { HAJJ_OV_DISCLAIMER, groupUmrahTrips, buildScheduleItinerary, buildFlightReply } from '../agent/prompts/dynamic-catalog-builder'
 import { lookupHotelEntry, isDistanceConfirmed } from '../agent/prompts/hajj-umrah-hotels'
 import { linkBsuid } from './bsuid'
+import { type InboundIdentity, findConversation, findLead, describeIdentity } from './identity'
 import { buildMealsReply, distinctMealPatterns, narrowMealCandidates } from './meals-handler'
 import { RawTrip } from './conversation-state'
 
@@ -144,7 +145,12 @@ export class WhatsAppService {
 
   // wamid/replyToId are appended last so existing positional callers are unaffected.
   // wamid is the Meta message id; when present the USER insert becomes the dedup claim.
-  async handleMessage(companyId: string, phone: string, text: string, source = 'direct', referralData?: object | null, simulate = false, wamid?: string, replyToId?: string, bsuid?: string | null): Promise<string | string[]> {
+  async handleMessage(companyId: string, identity: InboundIdentity, text: string, source = 'direct', referralData?: object | null, simulate = false, wamid?: string, replyToId?: string): Promise<string | string[]> {
+    // Phase 3b: identity is a PAIR, either half of which may be absent. `phone` is
+    // kept as a local for the many log lines and reply paths below that read it, but
+    // it is now nullable and must never be used as a lookup key on its own.
+    const phone = identity.phone
+    const bsuid = identity.waUserId
     // simulate=true: accepted ONLY from /webhook/test — never passed by the real Meta webhook path.
     // Gates are bypassed so catalog bypasses can be tested while AI stays fully locked.
     // Assistant replies ARE persisted to DB even in simulate mode so that multi-turn test
@@ -161,16 +167,15 @@ export class WhatsAppService {
 
     const msgInclude = { messages: { orderBy: { createdAt: 'asc' as const }, take: -30 } }
 
-    // Find any open (non-closed) conversation for this phone
+    // Find this customer's open conversation — waUserId first, phone as fallback.
+    // Both keys are guarded against null inside findConversation: searching on a
+    // null phone would match ANY phone-less conversation and hand this customer
+    // someone else's thread.
     let conv
     try {
-      conv = await this.prisma.conversation.findFirst({
-        where: { companyId, phone, status: { not: ConvStatus.CLOSED } },
-        include: msgInclude,
-        orderBy: { updatedAt: 'desc' },
-      })
+      conv = await findConversation(this.prisma, companyId, identity, msgInclude)
     } catch (err) {
-      console.error(`DB_ERROR conversation.findFirst phone=${phone} companyId=${companyId}`, err)
+      console.error(`DB_ERROR findConversation ${describeIdentity(identity)} companyId=${companyId}`, err)
       return ''
     }
 
@@ -203,14 +208,14 @@ export class WhatsAppService {
     // ── New conversation ─────────────────────────────────────
     if (!conv) {
       try {
-        // ONE canonical Lead per phone+companyId — reuse if exists, never duplicate
-        const existingLead = await this.prisma.lead.findFirst({
-          where: { companyId, phone },
-          orderBy: { createdAt: 'asc' },
-        })
+        // ONE canonical Lead per phone+companyId — reuse if exists, never duplicate.
+        // Returns null for a BSUID-only customer: Lead carries no waUserId, so there
+        // is nothing to match on and a fresh lead is correct. Matching on a null
+        // phone would attach them to a stranger's lead.
+        const existingLead = await findLead(this.prisma, companyId, identity)
         const hasWonLead = existingLead?.status === LeadStatus.WON
         knownCustomerName = existingLead?.name ?? undefined
-        console.log(`NEW_CONV → phone=${phone} existingLead=${existingLead?.id ?? 'null'} knownName=${knownCustomerName ?? 'undefined'}`)
+        console.log(`NEW_CONV → ${describeIdentity(identity)} existingLead=${existingLead?.id ?? 'null'} knownName=${knownCustomerName ?? 'undefined'}`)
         const lead = existingLead ?? await this.prisma.lead.create({
           data: {
             companyId, phone, source,
@@ -228,6 +233,9 @@ export class WhatsAppService {
           data: {
             companyId,
             phone,
+            // Written at creation so a BSUID-only conversation is findable by the
+            // only identifier it has, from its very first message.
+            ...(bsuid && { waUserId: bsuid }),
             leadId: lead.id,
             status: ConvStatus.AI_HANDLING,
             agentMode: (!aiActive || hasWonLead) ? 'HUMAN' : 'AI',
@@ -267,7 +275,7 @@ export class WhatsAppService {
     // Phase 1 BSUID capture — after find-or-create, so it lands on the row this
     // customer actually resolved to. Fire-and-forget: a customer's reply must never
     // wait on, or fail because of, identity bookkeeping.
-    if (bsuid && !simulate) void linkBsuid(this.prisma, conv.id, bsuid, { phone })
+    if (bsuid && !simulate) void linkBsuid(this.prisma, conv.id, bsuid, { phone: phone ?? undefined })
 
     // Stamp isTest before any persistReply call so the AI-leak watchdog never sees this
     // conversation. The controller also stamps it after the call, but doing it here
