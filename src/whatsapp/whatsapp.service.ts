@@ -1466,7 +1466,9 @@ export class WhatsAppService {
   // Generates one AI reply for an existing conversation without creating a duplicate
   // USER message — used by the dashboard "take over with AI reply" flow.
   async triggerAIReply(convId: string, expectedCompanyId: string): Promise<{
-    reply: string; phone: string; waToken: string | null; waPhoneId: string | null; error?: string
+    // phone is nullable from Phase 3a: a BSUID-only conversation has none.
+    // PHASE3C will add waUserId here so the caller can send by `recipient`.
+    reply: string; phone: string | null; waToken: string | null; waPhoneId: string | null; error?: string
   }> {
     const empty = { reply: '', phone: '', waToken: null, waPhoneId: null }
     const conv = await this.prisma.conversation.findUnique({
@@ -1547,6 +1549,11 @@ export class WhatsAppService {
       const triggerHandoff = buildHandoffMessage(triggerTemplates)
       await saveAssistantMessage(this.prisma, convId, triggerHandoff)
       const lastUserMsg = freshMessages.filter(m => m.role === 'USER').at(-1)?.content ?? ''
+      // The guard that matters is against FABRICATING a phone, not against recording
+      // the handoff: HandoffLog.phone is nullable from Phase 3a, so a BSUID-only
+      // conversation is written with null and stays visible to a human. Skipping it
+      // would lose the record for exactly the customers hardest to reach.
+      if (!conv.phone) console.warn(`HANDOFF_NO_PHONE conv=${convId} — BSUID-only; logged with a null phone, never a placeholder`)
       logHandoff(this.prisma, { companyId: conv.companyId, conversationId: convId, phone: conv.phone, customerMessage: lastUserMsg, reason: 'output_guard', blockedOutput: rawTriggerReply })
       console.log(`OUTPUT_GUARD_BLOCK(TRIGGER) → conv=${convId} trigger=${triggerGuard}`)
       return { reply: triggerHandoff, phone: conv.phone, waToken: company.waToken, waPhoneId: company.waPhoneId }

@@ -93,7 +93,10 @@ model Lead {
   id            String         @id @default(cuid())
   companyId     String
   name          String?
-  phone         String
+  /// NULLABLE since Phase 3a — a lead created from a BSUID-only conversation has no
+  /// phone number. The manual lead form still REQUIRES one: a BSUID cannot be
+  /// invented for an outbound-initiated conversation.
+  phone         String?
   packageType   String?
   groupSize     Int?
   budget        String?
@@ -148,7 +151,10 @@ model Conversation {
   id                   String         @id @default(cuid())
   companyId            String
   leadId               String?
-  phone                String
+  /// NULLABLE since Phase 3a. Meta's usernames rollout omits `from`/`wa_id` once a
+  /// user adopts a username, so a conversation may be identified ONLY by waUserId.
+  /// Resolution order is waUserId first, then phone. Every read must handle null.
+  phone                String?
   /// Business-scoped user ID from Meta (contacts[0].user_id), format "<CC>.<alnum>".
   /// Nullable and additive: Phase 1 CAPTURES it so an existing phone-keyed row can be
   /// linked to the same person's BSUID during the window in which Meta sends BOTH.
@@ -401,7 +407,10 @@ model HandoffLog {
   id              String   @id @default(cuid())
   companyId       String
   conversationId  String
-  phone           String
+  /// NULLABLE since Phase 3a — a BSUID-only conversation has no phone. Without this
+  /// a handoff could not be recorded at all for exactly the customers we are least
+  /// able to reach. Never fabricate a placeholder to fill it.
+  phone           String?
   customerMessage String   @db.Text
   reason          String   // 'no_handler' | 'blocked_category' | 'output_guard' | 'repeat_failure'
   category        String?  // blocked category name when reason='blocked_category'

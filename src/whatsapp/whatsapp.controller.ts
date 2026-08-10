@@ -559,8 +559,13 @@ export class WhatsAppController {
       const { reply, phone, waToken, waPhoneId, error } = await this.whatsapp.triggerAIReply(body.convId, body.companyId)
       if (!reply) return { success: false, error: error ?? 'no reply generated' }
 
-      if (waToken && waPhoneId) {
+      // PHASE3C: when phone is null this conversation is BSUID-only and must be sent
+      // via `recipient`. Until that lands, refuse loudly rather than send nowhere.
+      if (waToken && waPhoneId && phone) {
         await sendWhatsAppMessage(waPhoneId, waToken, phone, reply)
+      } else if (!phone) {
+        console.error(`CONVREPLY_UNSENDABLE conv=${body.convId} — reply generated but no phone to send it to (BSUID-only); needs PHASE3C recipient support`)
+        return { success: false, error: 'no phone on this conversation — cannot send yet' }
       }
 
       return { success: true, reply }

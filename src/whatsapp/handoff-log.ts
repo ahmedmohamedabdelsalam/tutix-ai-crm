@@ -8,7 +8,10 @@ export function logHandoff(
   args: {
     companyId:       string
     conversationId:  string
-    phone:           string
+    /// Nullable since Phase 3a: a BSUID-only conversation has no phone. Pass null —
+    /// never a placeholder. The row must still be written, because a handoff we
+    /// cannot attribute to a number is precisely the one a human needs to see.
+    phone:           string | null
     customerMessage: string
     reason:          HandoffReason
     category?:       string
@@ -26,5 +29,5 @@ export function logHandoff(
       ...(args.blockedOutput && { blockedOutput: args.blockedOutput.substring(0, 500) }),
     },
   }).catch(e => console.error('HandoffLog write error:', e))
-  console.log(`HANDOFF_LOG → ${args.phone} reason=${args.reason}${args.category ? ` cat=${args.category}` : ''}`)
+  console.log(`HANDOFF_LOG → ${args.phone ?? '(no phone — BSUID-only)'} reason=${args.reason}${args.category ? ` cat=${args.category}` : ''}`)
 }

@@ -79,6 +79,13 @@ export class FollowUpService {
         const greeting = leadName ? `يا أستاذ ${leadName}` : 'يافندم'
         const msg = `السلام عليكم ${greeting}\nحضرتك فكرت في موضوع الرحلة يافندم؟\nتحت أمرك لو احتجت أي تفاصيل`
 
+        // PHASE3C: a BSUID-only conversation has no phone to follow up on. Skipping
+        // keeps today's behaviour identical (no row has a null phone yet) and makes
+        // the gap countable instead of throwing at 9am inside a cron.
+        if (!conv.phone) {
+          this.logger.warn(`FOLLOWUP_SKIPPED conv=${conv.id} — no phone (BSUID-only); needs PHASE3C recipient support`)
+          continue
+        }
         try {
           await sendWhatsAppMessage(company.waPhoneId, company.waToken, conv.phone, msg)
           this.logger.log(`Follow-up sent → ${conv.phone} (${company.name})`)
