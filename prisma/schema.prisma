@@ -161,6 +161,14 @@ model Conversation {
   /// Identity resolution still runs on phone — that switch is Phase 3, together with
   /// making `phone` optional.
   waUserId             String?
+  /// WhatsApp display name from contacts[0].profile.name, captured on every inbound.
+  /// DISPLAY ONLY — never an identifier, and never trusted as a fact about the
+  /// person: the customer sets it themselves and can change it at any time.
+  ///
+  /// It exists because a BSUID-only conversation has no phone and a fresh, nameless
+  /// Lead, so the inbox would render an anonymous row that sales cannot tell apart
+  /// from any other. This is the only human-readable identity such a customer has.
+  profileName             String?
   status               ConvStatus     @default(AI_HANDLING)
   agentMode            String         @default("HUMAN")
   assignedSalesId      String?

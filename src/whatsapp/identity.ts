@@ -20,6 +20,27 @@ export interface InboundIdentity {
   phone: string | null
   /** Business-scoped user ID, "<CC>.<alnum>". Null until Meta sends one. */
   waUserId: string | null
+  /**
+   * WhatsApp display name — DISPLAY ONLY, never used to resolve anyone. The
+   * customer sets it and can change it whenever they like, so it identifies
+   * nothing; it exists so a phone-less thread is not an anonymous row.
+   */
+  profileName?: string | null
+}
+
+/**
+ * contacts[0].profile.name, trimmed and capped.
+ *
+ * Untrusted, customer-controlled text that will be rendered in the sales inbox, so
+ * control characters are stripped here rather than at each display site. The cap is
+ * generous but finite: a name is not a place to accept unbounded input.
+ */
+export function extractProfileName(value: unknown): string | null {
+  const contact = (value as { contacts?: Array<{ profile?: { name?: unknown } }> } | undefined)?.contacts?.[0]
+  const raw = contact?.profile?.name
+  if (typeof raw !== 'string') return null
+  const name = raw.replace(/[\r\n\t]+/g, ' ').trim().slice(0, 120)
+  return name.length ? name : null
 }
 
 export function hasIdentity(id: InboundIdentity): boolean {

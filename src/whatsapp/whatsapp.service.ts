@@ -151,6 +151,7 @@ export class WhatsAppService {
     // it is now nullable and must never be used as a lookup key on its own.
     const phone = identity.phone
     const bsuid = identity.waUserId
+    const profileName = identity.profileName ?? null
     // simulate=true: accepted ONLY from /webhook/test — never passed by the real Meta webhook path.
     // Gates are bypassed so catalog bypasses can be tested while AI stays fully locked.
     // Assistant replies ARE persisted to DB even in simulate mode so that multi-turn test
@@ -236,6 +237,7 @@ export class WhatsAppService {
             // Written at creation so a BSUID-only conversation is findable by the
             // only identifier it has, from its very first message.
             ...(bsuid && { waUserId: bsuid }),
+            ...(profileName && { profileName }),
             leadId: lead.id,
             status: ConvStatus.AI_HANDLING,
             agentMode: (!aiActive || hasWonLead) ? 'HUMAN' : 'AI',
@@ -276,6 +278,13 @@ export class WhatsAppService {
     // customer actually resolved to. Fire-and-forget: a customer's reply must never
     // wait on, or fail because of, identity bookkeeping.
     if (bsuid && !simulate) void linkBsuid(this.prisma, conv.id, bsuid, { phone: phone ?? undefined })
+
+    // Refresh the display name when Meta's value changes. Not identity — just the
+    // label the inbox shows — so it is safe to overwrite, unlike the BSUID.
+    if (profileName && !simulate && conv.profileName !== profileName) {
+      void this.prisma.conversation.update({ where: { id: conv.id }, data: { profileName } })
+        .catch(e => console.error('profileName update failed:', e))
+    }
 
     // Stamp isTest before any persistReply call so the AI-leak watchdog never sees this
     // conversation. The controller also stamps it after the call, but doing it here

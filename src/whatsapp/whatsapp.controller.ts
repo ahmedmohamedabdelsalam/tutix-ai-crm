@@ -8,7 +8,7 @@ import { PrismaService } from '../prisma/prisma.service'
 import { splitIntoMessages } from './message-splitter'
 import { metaPost, sendWhatsAppMessage } from './send-message'
 import { extractBsuid, linkBsuid, recordUnidentifiedInbound } from './bsuid'
-import { findConversation, findLead } from './identity'
+import { findConversation, findLead, extractProfileName } from './identity'
 import { captureMedia } from './capture-media'
 import { isAIConfigActive, getAIConfigTemplates } from './ai-config-cache'
 import { buildHandoffMessage } from './confidence-router'
@@ -176,6 +176,7 @@ export class WhatsAppController {
 
       // Phase 1 captured this; Phase 3b makes it an identity in its own right.
       const bsuid = extractBsuid(value)
+      const profileName = extractProfileName(value)
 
       // ── IDENTITY GUARD ────────────────────────────────────────────────────
       // Phase 3b: a message with ONLY a BSUID is now processable — it creates a
@@ -268,7 +269,7 @@ export class WhatsAppController {
         // Same guarded resolution as the text path: waUserId first, phone only when
         // present. A findFirst on a null phone would match ANY phone-less
         // conversation in this company and hand the customer a stranger's thread.
-        const mediaIdentity = { phone: (message.from as string) ?? null, waUserId: bsuid }
+        const mediaIdentity = { phone: (message.from as string) ?? null, waUserId: bsuid, profileName }
         const conv = await findConversation(this.prisma, company.id, mediaIdentity, {
           orderBy: { updatedAt: 'desc' },
         })
@@ -293,6 +294,7 @@ export class WhatsAppController {
           const newConv = await this.prisma.conversation.create({
             data: { companyId: company.id, phone: (message.from as string) ?? null,
                     ...(bsuid && { waUserId: bsuid }),
+                    ...(profileName && { profileName }),
                     leadId: lead.id, status: ConvStatus.AI_HANDLING, agentMode: 'HUMAN' },
           })
           convId = newConv.id
@@ -381,7 +383,7 @@ export class WhatsAppController {
       // atomically and returns without calling the model or sending anything.
       const result = await this.whatsapp.handleMessage(
         company.id,
-        { phone: (message.from as string) ?? null, waUserId: bsuid },
+        { phone: (message.from as string) ?? null, waUserId: bsuid, profileName },
         message.text.body, adSource, referral,
         false, incomingWamid, resolvedReplyToId,
       )
