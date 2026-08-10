@@ -18,6 +18,68 @@ import type { PrismaService } from '../prisma/prisma.service'
  * on phone; switching to BSUID-first, and making phone optional, is Phase 3.
  */
 
+/**
+ * Durably record an inbound message we could not identify.
+ *
+ * The log line alone was never enough: `railway logs` covers the current
+ * deployment, we deploy several times a day, and these messages leave no other
+ * trace by design — so the one event we most needed to count was the one we were
+ * least able to. This row survives the container.
+ *
+ * SHAPE ONLY, except the BSUID. No message body, no profile name — same stance as
+ * the log line. waUserId is stored in FULL here and only shaped in logs, because
+ * the purposes differ: a log answers "is this happening", whereas this row is the
+ * recovery key. Once Phase 3 can send by `recipient`, this is what makes reaching
+ * the customer we lost possible at all.
+ *
+ * Never throws. A failure to record must not add a second failure on top of a
+ * customer we have already lost.
+ */
+export async function recordUnidentifiedInbound(
+  prisma: PrismaService,
+  args: {
+    waPhoneId?: string | null
+    waUserId?: string | null
+    wamid?: string | null
+    messageType?: string | null
+    messageKeys?: string | null
+    contactKeys?: string | null
+    hasWaId?: boolean
+    reason: string
+  },
+): Promise<void> {
+  try {
+    // Attribute to a tenant where possible: the company is resolvable from
+    // metadata.phone_number_id even when the sender is not.
+    let companyId: string | null = null
+    if (args.waPhoneId) {
+      const co = await prisma.company.findFirst({
+        where: { waPhoneId: args.waPhoneId },
+        select: { id: true },
+      })
+      companyId = co?.id ?? null
+    }
+    await prisma.unidentifiedInbound.create({
+      data: {
+        companyId,
+        waPhoneId:   args.waPhoneId   ?? null,
+        waUserId:    args.waUserId    ?? null,
+        wamid:       args.wamid       ?? null,
+        messageType: args.messageType ?? null,
+        messageKeys: args.messageKeys ?? null,
+        contactKeys: args.contactKeys ?? null,
+        hasWaId:     args.hasWaId ?? false,
+        reason:      args.reason,
+      },
+    })
+  } catch (err: unknown) {
+    // A redelivery of the same wamid is expected, not a problem: the unique index
+    // is doing its job and the first row already records the event.
+    if ((err as { code?: string })?.code === 'P2002') return
+    console.error('[UNIDENTIFIED_RECORD_FAILED] could not persist a lost inbound message', err)
+  }
+}
+
 /** contacts[0].user_id if it is present and well-formed, else null. */
 export function extractBsuid(value: unknown): string | null {
   const contact = (value as { contacts?: Array<Record<string, unknown>> } | undefined)?.contacts?.[0]

@@ -586,3 +586,48 @@ model Offering {
   @@index([offeringTypeId])
   @@index([companyId, offeringTypeId])
 }
+
+/// Inbound messages we could not identify, and therefore could not process.
+///
+/// Meta's usernames rollout omits `from`/`wa_id` once a user adopts a username.
+/// Such a message cannot be answered today: this number is Cloud-API only, so
+/// there is no app inbox to fall back to, and every outbound path addresses a
+/// phone number we do not have.
+///
+/// It is recorded HERE rather than only in logs because `railway logs` covers the
+/// current deployment only, and we deploy several times a day — so the one event
+/// we most need to count was the one we were least able to. A lost customer must
+/// be queryable a week later, not gone with the container.
+///
+/// NOT HandoffLog: that model's conversationId and phone are correctly required
+/// for a real handoff, and these events have neither. Relaxing a NOT NULL is a
+/// one-way door, and the fields that matter here (payload shape, BSUID) have no
+/// column there.
+///
+/// PII: shape only — no message body, no profile name. waUserId is the exception
+/// and is stored in FULL, because it is the recovery key: once Phase 3 can send by
+/// `recipient`, this row is what makes reaching the lost customer possible.
+model UnidentifiedInbound {
+  id          String   @id @default(cuid())
+  /// Resolved from metadata.phone_number_id when possible; null if unattributable.
+  companyId   String?
+  waPhoneId   String?
+  /// contacts[0].user_id — the BSUID, in full. Null when Meta sent none.
+  waUserId    String?
+  /// message.id. Null is itself one of the reasons a message lands here.
+  wamid       String?
+  messageType String?
+  /// Sorted key names only, never values.
+  messageKeys String?
+  contactKeys String?
+  hasWaId     Boolean  @default(false)
+  reason      String
+  createdAt   DateTime @default(now())
+
+  /// Meta redelivers webhooks. Unique among NON-NULL wamids — Postgres treats
+  /// NULLs as distinct, so this dedups what it can without blocking the rows whose
+  /// missing id is the whole problem.
+  @@unique([wamid])
+  @@index([companyId, createdAt])
+  @@index([createdAt])
+}

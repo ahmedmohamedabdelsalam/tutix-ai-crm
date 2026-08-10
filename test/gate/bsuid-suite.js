@@ -82,6 +82,8 @@ const textMsg = (id, contactExtra = {}, from = PHONE) => envelope({
       await c.query('DELETE FROM "Conversation" WHERE id=$1', [id])
     }
     await c.query('DELETE FROM "Lead" WHERE phone=$1 AND "companyId"=$2', [PHONE, CO])
+    // The suite deliberately creates unidentified-inbound rows; remove only its own.
+    await c.query(`DELETE FROM "UnidentifiedInbound" WHERE wamid LIKE 'wamid.GATE_%'`)
   }
   const storedId = async () => (await c.query(
     'SELECT "waUserId" FROM "Conversation" WHERE phone=$1 AND "companyId"=$2 ORDER BY "createdAt" DESC LIMIT 1',
@@ -181,6 +183,41 @@ const textMsg = (id, contactExtra = {}, from = PHONE) => envelope({
     t(!alarm.includes('سؤال سري'), 'does not leak the message body')
     t(!alarm.includes('13491208655302741918'), 'does not leak the full BSUID')
     t(alarm.includes('user_id=present'), 'records that a BSUID WAS present — the diagnostic signal')
+
+    // ── F2. the DURABLE record — the whole point of the table ────────────────
+    // A log line dies with its container, and we deploy several times a day, so
+    // the event we most need to count was the one we could least count. These
+    // assertions are what make "how many customers did we lose last week" a
+    // question with an answer.
+    console.log('\nF2. lost inbound is persisted, not just logged')
+    {
+      const row = (await c.query(
+        `SELECT * FROM "UnidentifiedInbound" WHERE wamid=$1`, ['wamid.GATE_F'])).rows[0]
+      t(!!row, 'a row was written for the lost message')
+      if (row) {
+        t(row.waUserId === BSUID, 'BSUID stored IN FULL — it is the recovery key for Phase 3', `got ${row.waUserId}`)
+        t(row.reason === 'no_from', `reason recorded (${row.reason})`)
+        t(row.messageType === 'text', `message type recorded (${row.messageType})`)
+        t(!!row.companyId, 'attributed to a company via phone_number_id — queryable per tenant')
+        t(row.hasWaId === false, 'records that wa_id was absent')
+        t(typeof row.messageKeys === 'string' && row.messageKeys.includes('text'),
+          'payload shape recorded', row.messageKeys)
+        // Shape only: the body and the profile name must never be persisted here.
+        const blob = JSON.stringify(row)
+        t(!blob.includes('سؤال سري'), 'does NOT persist the message body')
+        t(!blob.includes('Gate'), 'does NOT persist the profile name')
+      }
+      // Meta redelivers webhooks; the partial unique index must absorb that.
+      await post(envelope({
+        metadata: { phone_number_id: process.env.GATE_PHONE_ID || '1191029790754985' },
+        contacts: [{ profile: { name: 'Gate' }, user_id: BSUID }],
+        messages: [{ id: 'wamid.GATE_F', type: 'text', timestamp: '1780000000', text: { body: 'سؤال سري' } }],
+      }))
+      await delay(1500)
+      const n = (await c.query(
+        `SELECT count(*)::int AS n FROM "UnidentifiedInbound" WHERE wamid=$1`, ['wamid.GATE_F'])).rows[0].n
+      t(n === 1, 'a redelivered webhook does not double-count', `rows=${n}`)
+    }
 
     // ── G. status webhooks stay silent (4 in 5 of all traffic) ───────────────
     console.log('\nG. status/delivery webhooks')

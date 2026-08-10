@@ -7,7 +7,7 @@ import { FollowUpService } from './followup.service'
 import { PrismaService } from '../prisma/prisma.service'
 import { splitIntoMessages } from './message-splitter'
 import { metaPost, sendWhatsAppMessage } from './send-message'
-import { extractBsuid, linkBsuid } from './bsuid'
+import { extractBsuid, linkBsuid, recordUnidentifiedInbound } from './bsuid'
 import { captureMedia } from './capture-media'
 import { isAIConfigActive, getAIConfigTemplates } from './ai-config-cache'
 import { buildHandoffMessage } from './confidence-router'
@@ -190,6 +190,18 @@ export class WhatsAppController {
       // Phase 3 schema change. Until then the handoff is a loud alarm.
       if (!message.from || !message.id) {
         noIdentityCount++
+        // Persist FIRST, then log. The row is the record that outlives the
+        // container; the log line is only for immediate visibility.
+        await recordUnidentifiedInbound(this.prisma, {
+          waPhoneId:   value?.metadata?.phone_number_id ?? null,
+          waUserId:    extractBsuid(value),
+          wamid:       typeof message.id === 'string' ? message.id : null,
+          messageType: typeof message.type === 'string' ? sanitiseToken(message.type) : null,
+          messageKeys: Object.keys(message).sort().join(','),
+          contactKeys: contact ? Object.keys(contact).sort().join(',') : null,
+          hasWaId:     typeof contact?.wa_id === 'string',
+          reason:      !message.from ? 'no_from' : 'no_id',
+        })
         console.error(
           `[WEBHOOK_NO_IDENTITY] a customer message could not be identified and was NOT processed ` +
           `— occurrence=${noIdentityCount} since boot | ${describePayloadShape(message, contact)} | ` +
