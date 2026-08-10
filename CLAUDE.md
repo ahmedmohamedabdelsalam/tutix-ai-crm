@@ -67,6 +67,48 @@ Cron job runs daily at 9 AM (`@Cron('0 9 * * *')`):
 2. AI model always from `AI_MODEL` env — never hardcoded
 3. Always return 200 to Meta webhook immediately (before any async work)
 4. All user-facing messages in Arabic
+5. Never truncate verification output — see below
+
+## Verifying Your Own Work
+
+Three separate times, a check reported success while the thing it checked was
+broken. Every one was a false PASS, not a missed failure — the command ran, printed
+something reassuring, and the error was in the part that got cut off. A check that
+can only say "fine" is not a check.
+
+**Never truncate the output of a command whose purpose is to prove something
+worked.** No `| tail`, no `| head`, no `2>/dev/null` on a build, a type-check, a
+schema generate, or a test run. Read it in full. Truncation is fine for exploring
+(listing files, grepping); it is never fine for proving.
+
+Two traps specifically:
+
+```bash
+npx tsc --noEmit | head -6 && echo "tsc OK"    # prints "tsc OK" WITH errors present —
+                                                # `head` exits 0, so && always fires
+npx prisma generate | tail -2                   # a FAILED generate still ends with
+                                                # "Prisma CLI Version : 7.8.0"
+```
+
+**`tsc` cannot validate a Prisma schema.** A clean type-check proves nothing about
+`schema.prisma`. Schema changes are proven by running `prisma generate` and reading
+its output, and by `npm run build` in the dashboard, which runs generate first. A
+schema that references a field it does not declare type-checks perfectly and fails
+every build.
+
+**Read the commit diffstat as a check.** `1 file changed, 1 insertion(+)` when you
+intended a field *and* an index is the failure signal — the number disagrees with
+the intent. Ask what the count should be before accepting it.
+
+**The two repos align schema fields differently** (`phone                String`
+here, `phone            String` in the dashboard). A scripted edit anchored on one
+repo's whitespace silently matches nothing in the other. After any scripted schema
+edit, read the resulting model back.
+
+**Verify the artifact that runs, not the source.** Gate suites execute `dist/`;
+asserting against `src/` after forgetting `npm run build` tests code that is not
+running. Same for `prisma db push` — it is immediate and not gated on a commit, so
+the database can be ahead of both repos.
 
 ## Key Env Vars
 | Variable | Purpose |
