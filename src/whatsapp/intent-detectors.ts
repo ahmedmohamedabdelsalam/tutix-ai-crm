@@ -154,6 +154,40 @@ export function detectDepartureDatesIntent(text: string): boolean {
  * answered with a September catalog dump instead of the flight answer. Both bypasses
  * now call this, and test/gate/dispatch-order-suite.js holds them to it.
  */
+/**
+ * "Are meals / breakfast included?" — answerable ONLY from the offering's
+ * makkahBreakfast / madinahBreakfast flags. See meals-handler.ts.
+ */
+export function detectMealsIntent(text: string): boolean {
+  return /وجبات|وجبة|وجبه|الإفطار|الافطار|إفطار|افطار|فطار|فطور|إعاشة|اعاشة|الأكل|الاكل/.test(text)
+}
+
+/**
+ * Child PRICING questions — routed to a human, never answered.
+ *
+ * Child price varies by programme and by transport type, and we store no child
+ * price field at all. Anything the agent said here would be invented. Requires a
+ * child word AND a price/discount/age-band cue, so "زوجتي وطفلين معايا" (a group
+ * size, handled by lead extraction) is not swallowed as a pricing question.
+ */
+export function detectChildPriceIntent(text: string): boolean {
+  const child = /طفل|أطفال|اطفال|الطفل|أولاد|اولاد|رضيع|بيبي|مواليد|قاصر/.test(text)
+  if (!child) return false
+  const priceCue = /سعر|أسعار|اسعار|بكام|كام|تكلفة|تكلف|خصم|مجان|فلوس|يدفع|دفع|حساب|تخفيض/.test(text)
+  const ageCue   = /سن|عمر|أقل من|اقل من|فوق|تحت|سنة|سنه|سنين/.test(text)
+  return priceCue || ageCue
+}
+
+/**
+ * Baggage questions — routed to a human, never answered.
+ *
+ * The company supplied no baggage data, so there is nothing to state. Any weight
+ * the agent produced would be fabricated, and a customer packs to that number.
+ */
+export function detectBaggageIntent(text: string): boolean {
+  return /شنطة|شنطه|شنط|حقيبة|حقيبه|حقائب|أمتعة|امتعة|عفش|وزن\s*(ال)?(شنط|حقائب|أمتعة|امتعة)?|كام\s*كيلو|كم\s*كيلو|كيلو\s*(مسموح|زيادة)|مسموح.*كيلو|الوزن\s*المسموح/.test(text)
+}
+
 export function hasSpecificHandlerIntent(text: string): boolean {
   return detectFlightIntent(text)
       || detectInstallmentIntent(text)
@@ -164,6 +198,9 @@ export function hasSpecificHandlerIntent(text: string): boolean {
       || detectRoomCapacityIntent(text)
       || detectDepartureDatesIntent(text)
       || detectHotelContentIntent(text)
+      || detectMealsIntent(text)
+      || detectChildPriceIntent(text)
+      || detectBaggageIntent(text)
 }
 
 export function detectHotelDistanceIntent(text: string): boolean {

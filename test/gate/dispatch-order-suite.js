@@ -47,7 +47,9 @@ const REGISTRY = [
   { line: 518,  marker: 'OV_NUMBER',             q: '٢',                     setup: ['عايز برامج الحج الاقتصادية'] },
   { line: 570,  marker: 'HAJJ_CAT_REPLY',        q: '٣',                     setup: ['عايز اعرف عن برامج الحج'] },
   { line: 608,  marker: 'BLOCKED_CATEGORY',      q: 'عايز أعرف عن التأشيرة والفيزا' },
-  { line: 651,  marker: 'INSTALLMENT_HANDOFF',   q: 'عندكم تقسيط؟' },
+  { line: 652,  marker: 'INSTALLMENT_HANDOFF',   q: 'عندكم تقسيط؟' },
+  { line: 671,  marker: 'BAGGAGE_HANDOFF',       q: 'الوزن المسموح للشنطة كام؟' },
+  { line: 689,  marker: 'CHILD_PRICE_HANDOFF',   q: 'سعر الطفل كام؟' },
   { line: 673,  marker: 'HAJJ_DURATION_HANDLER', q: 'الحج كام يوم؟' },
   { line: 830,  marker: 'FULL_CATALOG_HANDLER',  q: 'عايز كل البرامج المتاحة' },
   // The *_ZERO_AI variants live on the first-message path, physically after the
@@ -61,11 +63,12 @@ const REGISTRY = [
   { line: 973,  marker: 'NEAREST_TRIP_HANDLER',  q: 'أقرب رحلة عمرة امتى؟' },
   { line: 990,  marker: 'DEPARTURE_DATES_HANDLER', q: 'الرحلة بتقوم امتى؟' },
   { line: 1000, marker: 'ROOM_CAPACITY_HANDLER', q: 'الغرفة الرباعية كام شخص؟' },
-  { line: 1019, marker: 'NIGHTS_HANDLER',        q: 'كام ليلة في المدينة؟' },
-  { line: 1036, marker: 'HOTEL_DIST_HANDLER',    q: 'الصفوة كام متر من الحرم؟' },
-  { line: 1052, marker: 'HOTEL_CONTENT_HANDLER', q: 'الفنادق ايه في برامج سبتمبر؟' },
-  { line: 1071, marker: 'PRICE_PIVOT',           q: 'بكام برنامج العمرة؟' },
-  { line: 1119, marker: 'GREETING_HANDLER',      q: 'السلام عليكم' },
+  { line: 1056, marker: 'MEALS_HANDLER',         q: 'الإفطار مشمول ولا لأ؟' },
+  { line: 1075, marker: 'NIGHTS_HANDLER',        q: 'كام ليلة في المدينة؟' },
+  { line: 1091, marker: 'HOTEL_DIST_HANDLER',    q: 'الصفوة كام متر من الحرم؟' },
+  { line: 1107, marker: 'HOTEL_CONTENT_HANDLER', q: 'الفنادق ايه في برامج سبتمبر؟' },
+  { line: 1126, marker: 'PRICE_PIVOT',           q: 'بكام برنامج العمرة؟' },
+  { line: 1174, marker: 'GREETING_HANDLER',      q: 'السلام عليكم' },
 ]
 
 function httpPost(p, body) {

@@ -8,7 +8,7 @@ import { applyHajjDateDisclaimer } from './hajj-date-disclaimer'
 import { companionConfirmedInHistory, travelDateConfirmedInHistory } from './lead-fact-guards'
 import { detectOnlinePayment, detectFarFromBranch, detectVisitConfirm } from './booking-stage-detectors'
 import { getGovFromText, branchMessage } from './branch-lookup'
-import { containsFirstMessageQuestion, detectUmrahMonth, detectUmrahLevel, detectFullDetailsIntent, detectContinueResponse, detectHajjOverviewIntent, detectHajjCategoryReply, detectNumberReply, detectUmrahOverviewIntent, detectCTAMessage, detectDurationDays, detectPriceIntent, detectScheduleIntent, detectFlightIntent, detectInstallmentIntent, detectHotelDistanceIntent, detectNearestTripIntent, detectHotelContentIntent, detectNightsSplitIntent, detectRoomCapacityIntent, detectDepartureDatesIntent, detectHajjDurationIntent, hasSpecificHandlerIntent, detectGreetingOnly, detectReligiousPhrase, extractNameFromText, extractPhoneNumber, detectFullCatalogIntent } from './intent-detectors'
+import { containsFirstMessageQuestion, detectUmrahMonth, detectUmrahLevel, detectFullDetailsIntent, detectContinueResponse, detectHajjOverviewIntent, detectHajjCategoryReply, detectNumberReply, detectUmrahOverviewIntent, detectCTAMessage, detectDurationDays, detectPriceIntent, detectScheduleIntent, detectFlightIntent, detectInstallmentIntent, detectHotelDistanceIntent, detectNearestTripIntent, detectHotelContentIntent, detectNightsSplitIntent, detectRoomCapacityIntent, detectDepartureDatesIntent, detectHajjDurationIntent, hasSpecificHandlerIntent, detectGreetingOnly, detectReligiousPhrase, extractNameFromText, extractPhoneNumber, detectFullCatalogIntent, detectMealsIntent, detectChildPriceIntent, detectBaggageIntent } from './intent-detectors'
 
 import { detectFollowUpIntent, clampToWindow, DEFERRAL_PHRASES } from './follow-up-scheduler'
 import { handleAICreditsExhausted, writeCostRecord } from './ai-cost-helpers'
@@ -26,6 +26,7 @@ import { logHandoff } from './handoff-log'
 import { matchFAQ, detectBlockedCategory, buildHandoffMessage } from './confidence-router'
 import { HAJJ_OV_DISCLAIMER, groupUmrahTrips, buildScheduleItinerary, buildFlightReply } from '../agent/prompts/dynamic-catalog-builder'
 import { lookupHotelEntry, isDistanceConfirmed } from '../agent/prompts/hajj-umrah-hotels'
+import { buildMealsReply, distinctMealPatterns, narrowMealCandidates } from './meals-handler'
 import { RawTrip } from './conversation-state'
 
 // Arabic month name → calendar number (used when populating rawTrips on overviewMap)
@@ -652,6 +653,44 @@ export class WhatsAppService {
       return handoffMsg
     }
 
+    // ── Baggage: we have NO data, so nothing may be stated ──────────────────────
+    // The company supplied no baggage allowance. Any weight the agent produced
+    // would be fabricated, and a customer packs to that number and pays excess at
+    // the airport. Placed above the meals handler because "وزن الشنطة" must never
+    // be mistaken for anything answerable.
+    if (detectBaggageIntent(text)) {
+      const baggageReply = 'بالنسبة للشنط والوزن المسموح يافندم — زميلنا المختص هيأكدلك التفاصيل دي بالظبط. عندك سؤال تاني؟ 🤍'
+      await persistReply(conv.id, baggageReply)
+      logHandoff(this.prisma, { companyId, conversationId: conv.id, phone, customerMessage: text, reason: 'blocked_category', category: 'baggage' })
+      if (!simulate) {
+        await this.prisma.conversation.update({
+          where: { id: conv.id },
+          data:  { status: ConvStatus.NEEDS_HUMAN, handoffMessageSent: true },
+        })
+      }
+      console.log(`BAGGAGE_HANDOFF → ${phone} (no baggage data stored — never state a weight)`)
+      return baggageReply
+    }
+
+    // ── Child pricing: varies by programme AND transport type; we store none ─────
+    // There is no child-price field on any OfferingType, so this is not a gap the
+    // agent can fill — it is a fact we do not have. Routed to a human rather than
+    // approximated from the adult price.
+    if (detectChildPriceIntent(text)) {
+      const childReply = 'أسعار الأطفال بتختلف حسب البرنامج ووسيلة السفر يافندم — زميلنا المختص هيحسبهالك بالظبط حسب سن الطفل والبرنامج. عندك سؤال تاني؟ 🤍'
+      await persistReply(conv.id, childReply)
+      logHandoff(this.prisma, { companyId, conversationId: conv.id, phone, customerMessage: text, reason: 'blocked_category', category: 'child_price' })
+      if (!simulate) {
+        await this.prisma.conversation.update({
+          where: { id: conv.id },
+          data:  { status: ConvStatus.NEEDS_HUMAN, handoffMessageSent: true },
+        })
+      }
+      console.log(`CHILD_PRICE_HANDOFF → ${phone}`)
+      return childReply
+    }
+
+
     // ══════════════════════════════════════════════════════════════════════════
     // DISPATCH TIER 2 — CATALOG OVERVIEW FALLBACK (non-first-message)
     // Month/duration words are MODIFIERS, not primary intent.
@@ -999,6 +1038,23 @@ export class WhatsAppService {
         await persistReply(conv.id, roomReply)
         console.log(`ROOM_CAPACITY_HANDLER → ${phone}`)
         return roomReply
+      }
+    }
+
+    // ── Meals handler: answer ONLY from the stored breakfast flags ───────────────
+    // We store two booleans per programme and nothing else — no meal count, no meal
+    // plan. Scoped to the program in context using the same narrowing as the nights
+    // handler; ambiguous cases ask instead of picking one.
+    if (prebuiltCatalog?.rawUmrahPrograms?.length
+        && detectMealsIntent(text)
+        && detectHajjOverviewIntent(text) === null) {
+      const histText = historyTextOf(conv.messages as any[])
+      const mealCands = narrowMealCandidates(text, histText, prebuiltCatalog.rawUmrahPrograms, detectDurationDays)
+      const reply = buildMealsReply(mealCands, prebuiltCatalog.availableDurations ?? [])
+      if (reply) {
+        await persistReply(conv.id, reply)
+        console.log(`MEALS_HANDLER → ${phone} candidates=${mealCands.length} patterns=${distinctMealPatterns(mealCands).length}`)
+        return reply
       }
     }
 
