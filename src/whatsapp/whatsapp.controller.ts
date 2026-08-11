@@ -18,6 +18,7 @@ import { logHandoff } from './handoff-log'
 import { invalidateCatalogCache } from './catalog-loader'
 import { assertInternalToken, checkMetaSignature } from './internal-auth'
 import { optionalLookupKey } from './query-guard'
+import { applyStatuses } from './status-webhook'
 import { stampParts } from './stamp-parts'
 
 const MEDIA_REPLIES: Record<string, { label: string; reply: string }> = {
@@ -174,9 +175,33 @@ export class WhatsAppController {
       const message = value?.messages?.[0]
       const contact = value?.contacts?.[0] as Record<string, unknown> | undefined
 
-      // No messages[] at all — a status/delivery webhook. Normal and high-volume
-      // (roughly 4 in 5 of everything Meta sends us), so it stays silent.
-      if (!message) return
+      // ── STATUS WEBHOOK ────────────────────────────────────────────────────
+      // Roughly 4 in 5 of everything Meta sends us, and until now dropped on the
+      // floor. It carries the only evidence we ever get that a message actually
+      // reached the customer — or did not: a `failed` status is someone who never
+      // received what we sent, which nothing anywhere recorded.
+      //
+      // Routed by waPhoneId like the message path, so one tenant's statuses can
+      // never touch another's rows. 200 has already been sent; nothing in here may
+      // throw, because Meta retries an errored webhook and we would amplify it.
+      if (!message) {
+        const statuses = value?.statuses
+        if (Array.isArray(statuses) && statuses.length) {
+          const statusPhoneId = value?.metadata?.phone_number_id
+          const statusCompany = statusPhoneId
+            ? await this.prisma.company.findFirst({
+                where: { waPhoneId: statusPhoneId, isActive: true },
+                select: { id: true },
+              })
+            : null
+          if (statusCompany) {
+            await applyStatuses(this.prisma, statusCompany.id, statuses)
+          } else {
+            console.warn(`[STATUS_NO_COMPANY] waPhoneId=${statusPhoneId ?? 'absent'} — ${statuses.length} status(es) dropped`)
+          }
+        }
+        return
+      }
 
       // Phase 1 captured this; Phase 3b makes it an identity in its own right.
       const bsuid = extractBsuid(value)
