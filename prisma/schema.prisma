@@ -209,6 +209,14 @@ model Message {
   mediaType      String?
   whatsappMsgId  String?
   replyToId      String?
+  /// Delivery status from Meta's status webhook. FORWARD-ONLY: see status-webhook.ts.
+  /// A plain String, not an enum, so a status Meta adds later (e.g. 'deleted') is
+  /// stored and logged rather than rejected by the client and lost.
+  status         String?
+  statusAt       DateTime?
+  /// Why Meta could not deliver it. Only set when status = 'failed' — that is a
+  /// customer who never received the message, which today we would never know.
+  failureReason  String?
   createdAt      DateTime     @default(now())
   conversation   Conversation @relation(fields: [conversationId], references: [id])
 
