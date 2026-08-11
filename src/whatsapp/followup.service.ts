@@ -6,6 +6,7 @@ import { clampToWindow } from './follow-up-scheduler'
 import { CAIRO_OFFSET_MS } from '../utils/arabic-numerals'
 import { sendWhatsAppMessage } from './send-message'
 import { isAIConfigActive } from './ai-config-cache'
+import { splitIntoMessages } from './message-splitter'
 
 function categorizeDropOff(lastMsg: string, totalMsgCount: number): string {
   if (/غالي|تخفيض|خصم|أرخص/.test(lastMsg)) return 'بعد التعامل مع اعتراض'
@@ -79,8 +80,9 @@ export class FollowUpService {
         const greeting = leadName ? `يا أستاذ ${leadName}` : 'يافندم'
         const msg = `السلام عليكم ${greeting}\nحضرتك فكرت في موضوع الرحلة يافندم؟\nتحت أمرك لو احتجت أي تفاصيل`
 
+        let followUpWamids: (string | null)[] = []
         try {
-          await sendWhatsAppMessage(company.waPhoneId, company.waToken,
+          followUpWamids = await sendWhatsAppMessage(company.waPhoneId, company.waToken,
             { phone: conv.phone, waUserId: conv.waUserId }, msg)
           this.logger.log(`Follow-up sent → ${conv.phone ?? 'BSUID-only'} (${company.name})`)
         } catch (e) {
@@ -93,9 +95,24 @@ export class FollowUpService {
             where: { id: conv.id },
             data: { followUpStatus: FollowUpStatus.SENT, followUpScheduledAt: null },
           })
-          await this.prisma.message.create({
-            data: { conversationId: conv.id, role: 'ASSISTANT', content: msg },
-          })
+          // Persisted with its wamid, not without one. This path sent messages and
+          // recorded them but never captured an id, so every follow-up ever sent was
+          // permanently unmatched — no delivery status could ever be shown for the
+          // one message we send to customers who have gone quiet, which is exactly
+          // the message a rep most wants to know landed.
+          //
+          // The follow-up is a single short line, so splitIntoMessages yields one
+          // part; the array form is used anyway so a longer template later cannot
+          // silently reintroduce the mismatch.
+          const parts = splitIntoMessages(msg)
+          for (let i = 0; i < parts.length; i++) {
+            await this.prisma.message.create({
+              data: {
+                conversationId: conv.id, role: 'ASSISTANT', content: parts[i],
+                whatsappMsgId: followUpWamids[i] ?? null,
+              },
+            })
+          }
         } catch (err) {
           this.logger.error(`DB_ERROR follow-up mark-sent conv=${conv.id}`, err)
         }

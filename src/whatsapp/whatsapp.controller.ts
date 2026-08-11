@@ -7,7 +7,7 @@ import { FollowUpService } from './followup.service'
 import { PrismaService } from '../prisma/prisma.service'
 import { splitIntoMessages } from './message-splitter'
 import { metaPost, sendWhatsAppMessage, sendWhatsAppImage } from './send-message'
-import { normalizeResult } from './reply-shape'
+import { normalizeResult, type PersistedRowSink } from './reply-shape'
 import { findCachedMediaId, cacheMediaId, uploadImageToMeta } from './media-cache'
 import { extractBsuid, linkBsuid, recordUnidentifiedInbound } from './bsuid'
 import { findConversation, findLead, extractProfileName } from './identity'
@@ -17,6 +17,8 @@ import { buildHandoffMessage } from './confidence-router'
 import { logHandoff } from './handoff-log'
 import { invalidateCatalogCache } from './catalog-loader'
 import { assertInternalToken, checkMetaSignature } from './internal-auth'
+import { optionalLookupKey } from './query-guard'
+import { stampParts } from './stamp-parts'
 
 const MEDIA_REPLIES: Record<string, { label: string; reply: string }> = {
   audio:    { label: '[رسالة صوتية]',   reply: 'حضرتك بعتلنا رسالة صوتية، للأسف مش بنقدر نسمعها دلوقتي لو ممكن تكتب طلبك يافندم نكون شاكرين' },
@@ -283,10 +285,17 @@ export class WhatsAppController {
 
         let convId = conv?.id
         if (!convId) {
-          const existingLead = await this.prisma.lead.findFirst({
-            where: { companyId: company.id, phone: message.from },
-            orderBy: { createdAt: 'asc' },
-          })
+          // A BSUID-only customer has no phone, and `phone: undefined` would DROP the
+          // filter — returning this company's OLDEST lead and attaching a brand-new
+          // customer to a stranger's record. No key means no match, so a fresh lead
+          // is created, which is the same decision findLead() makes in identity.ts.
+          const leadPhone = optionalLookupKey(message.from as string | undefined)
+          const existingLead = leadPhone
+            ? await this.prisma.lead.findFirst({
+                where: { companyId: company.id, phone: leadPhone },
+                orderBy: { createdAt: 'asc' },
+              })
+            : null
           const lead = existingLead ?? await this.prisma.lead.create({
             data: {
               companyId: company.id, phone: (message.from as string) ?? null, source: adSource,
@@ -383,17 +392,19 @@ export class WhatsAppController {
       // wamid + replyToId are passed in so the USER-row insert IS the dedup claim
       // (unique index on Message.whatsappMsgId). A Meta redelivery loses that race
       // atomically and returns without calling the model or sending anything.
+      // Collects the row ids handleMessage persists, so each row can be stamped with
+      // the wamid of the exact Meta message it is.
+      const sink: PersistedRowSink = { idGroups: [] }
       const result = await this.whatsapp.handleMessage(
         company.id,
         { phone: (message.from as string) ?? null, waUserId: bsuid, profileName },
         message.text.body, adSource, referral,
-        false, incomingWamid, resolvedReplyToId,
+        false, incomingWamid, resolvedReplyToId, sink,
       )
       const { replies: replyList, images: replyImages } = normalizeResult(result)
 
       // Send each reply via Meta WhatsApp Cloud API — split into parts with typing delays
       const hasContent = replyList.some(r => r)
-      const outWamids: (string | null)[] = []
       const target = { phone: (message.from as string) ?? null, waUserId: bsuid }
       if (hasContent && company.waToken && company.waPhoneId) {
         // ── Image FIRST, then the text ──────────────────────────────────────────
@@ -417,55 +428,32 @@ export class WhatsAppController {
           }
           if (mediaId) await sendWhatsAppImage(company.waPhoneId, company.waToken, target, mediaId, img.caption)
         }
-        for (const r of replyList) {
+        // Reply i was persisted as sink.idGroups[i] (one row per part) and sends as
+        // the same parts in the same order, so row j of group i IS Meta message j of
+        // send i. Stamp them directly.
+        //
+        // FAIL-CLOSED on any disagreement: if the counts do not line up, something
+        // persisted or sent differently than assumed, and a guessed pairing is how a
+        // read receipt ends up on the wrong message. No stamp means no tick, which is
+        // an honest silence; a wrong stamp is a confident false statement.
+        for (let ri = 0; ri < replyList.length; ri++) {
+          const r = replyList[ri]
           if (!r) continue
-          const w = await sendWhatsAppMessage(company.waPhoneId, company.waToken, target, r)
-          outWamids.push(w)
+          const wamids = await sendWhatsAppMessage(company.waPhoneId, company.waToken, target, r)
+
+          await stampParts(this.prisma, sink.idGroups[ri], wamids, `reply ${ri + 1}/${replyList.length}`)
         }
       } else if (hasContent) {
         console.warn(`Reply generated but not sent — waToken or waPhoneId missing for company: ${company.name}`)
       }
 
-      // Fire-and-forget: stamp wamid on the OUTGOING ASSISTANT messages only.
-      // The incoming USER row is no longer stamped here — handleMessage now sets
-      // whatsappMsgId at insert time so the insert doubles as the dedup claim. The
-      // old "most recent null-wamid USER row within 5 minutes" match is gone; it ran
-      // after the reply was already sent and could stamp the wrong row.
-      void (async () => {
-        const cutoff = new Date(Date.now() - 300000) // 5-min window
-        const phone  = message.from as string
-        if (outWamids.some(w => w)) {
-          const recentAsst = await this.prisma.message.findMany({
-            where: { conversation: { companyId: company.id, phone }, role: 'ASSISTANT', whatsappMsgId: null, createdAt: { gte: cutoff } },
-            orderBy: { createdAt: 'asc' },
-            select: { id: true },
-          })
-          for (let i = 0; i < Math.min(recentAsst.length, outWamids.length); i++) {
-            if (outWamids[i]) {
-              await this.prisma.message.update({
-                where: { id: recentAsst[i].id },
-                data: { whatsappMsgId: outWamids[i] },
-              })
-            }
-          }
-        }
-      })().catch(err => {
-        // P2002 here means two ASSISTANT rows are being stamped with the SAME outbound
-        // wamid — the positional zip of outWamids against "recent null-wamid rows" has
-        // mismatched, so outbound ids are colliding. Before the unique index this wrote
-        // silently corrupt data; now it throws, and without this branch it would vanish
-        // into a generic log. Surfaced loudly because nothing else would ever notice.
-        if (err?.code === 'P2002') {
-          console.error(
-            `[WAMID_STAMP_COLLISION] outbound wamid already used — ASSISTANT stamping mismatched` +
-            ` | phone=${message.from} | company=${company.name}` +
-            ` | outWamids=${outWamids.filter(Boolean).length}` +
-            ` | target=${err?.meta?.target ?? '-'}`,
-          )
-          return
-        }
-        console.error('[WAMID_STAMP]', err)
-      })
+      // The second pass that used to live here is GONE. It re-queried "ASSISTANT rows
+      // with no wamid in the last 5 minutes" and zipped them positionally against one
+      // wamid per reply. Two things were wrong with that and both are now structural
+      // rather than guarded: a stale unstamped row from an earlier turn sat at index 0
+      // and stole the newest wamid, and a multi-part reply created N rows against a
+      // single captured wamid so every later part was unstampable. Stamping now
+      // happens inline above, by row id, against the wamid of that exact part.
     } catch (err) {
       console.error('Webhook error:', err)
     }
@@ -589,13 +577,17 @@ export class WhatsAppController {
     try {
       if (!body.convId)    return { error: 'convId required' }
       if (!body.companyId) return { error: 'companyId required' }
-      const { reply, phone, waUserId, waToken, waPhoneId, error } = await this.whatsapp.triggerAIReply(body.convId, body.companyId)
+      const { reply, messageIds, phone, waUserId, waToken, waPhoneId, error } = await this.whatsapp.triggerAIReply(body.convId, body.companyId)
       if (!reply) return { success: false, error: error ?? 'no reply generated' }
 
       // Addressed by phone when we have one, by BSUID when we do not.
       if (waToken && waPhoneId) {
-        const wamid = await sendWhatsAppMessage(waPhoneId, waToken, { phone, waUserId }, reply)
-        if (!wamid) return { success: false, error: 'تعذّر إرسال الرسالة — راجع السجلات' }
+        const wamids = await sendWhatsAppMessage(waPhoneId, waToken, { phone, waUserId }, reply)
+        // `.some(Boolean)`, not `!wamids`: this now returns an ARRAY, and an array —
+        // even an empty one — is truthy, so a bare falsiness check would silently
+        // never fire and a total send failure would report success.
+        if (!wamids.some(Boolean)) return { success: false, error: 'تعذّر إرسال الرسالة — راجع السجلات' }
+        await stampParts(this.prisma, messageIds, wamids, 'convReply')
       }
 
       return { success: true, reply }

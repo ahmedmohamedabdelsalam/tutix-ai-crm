@@ -53,7 +53,8 @@ export async function sendWhatsAppImage(
 
 /**
  * Send a text message, addressed by phone when we have one and by BSUID when we do
- * not. Returns the wamid of the first part (for reply-quoting), null on failure.
+ * not. Returns ONE ENTRY PER PART, in order — null for any part Meta rejected — so
+ * the caller can stamp each persisted row with the wamid of its own part.
  *
  * FAILURE IS LOUD, DELIBERATELY. A sales rep pressing send and seeing nothing is
  * the exact failure Phase 3c exists to remove, so a rejection is never swallowed.
@@ -67,7 +68,7 @@ export async function sendWhatsAppMessage(
   target: SendTarget,
   text: string,
   contextMsgId?: string,
-): Promise<string | null> {
+): Promise<(string | null)[]> {
   const address = addressingFields(target)
   if (!address) {
     // Not a Meta failure — we have no way to name this customer at all. Never
@@ -76,12 +77,16 @@ export async function sendWhatsAppMessage(
       '[SEND_UNADDRESSABLE] refusing to send — no phone and no BSUID on this conversation. ' +
       'Nothing was delivered and no attempt was made.',
     )
-    return null
+    return []
   }
   const mode = addressingMode(target)
 
+  // One entry per part, positionally aligned with saveAssistantMessage's row ids:
+  // both split the same text with the same splitIntoMessages, so part i is row i.
+  // Returning ONLY the first wamid is what left every later part unstampable, and
+  // therefore permanently without a delivery status.
   const parts = splitIntoMessages(text)
-  let firstWamid: string | null = null
+  const wamids: (string | null)[] = new Array(parts.length).fill(null)
   for (let pi = 0; pi < parts.length; pi++) {
     await new Promise(r => setTimeout(r, 5000))
     const body: Record<string, unknown> = {
@@ -98,15 +103,13 @@ export async function sendWhatsAppMessage(
       body: JSON.stringify(body),
     })
     if (res.ok) {
-      if (pi === 0) {
-        const data = await res.json() as { messages?: { id: string }[] }
-        firstWamid = data.messages?.[0]?.id ?? null
-      }
+      const data = await res.json() as { messages?: { id: string }[] }
+      wamids[pi] = data.messages?.[0]?.id ?? null
       // Logged on success for BSUID sends specifically: "a message actually
       // delivered to a BSUID" is a claim this project has never been able to make,
       // and it should be visible the first time it becomes true.
       if (mode === 'recipient') {
-        console.log(`[SEND_OK_RECIPIENT] part ${pi + 1}/${parts.length} accepted — ${describeTarget(target)} wamid=${firstWamid ?? 'n/a'}`)
+        console.log(`[SEND_OK_RECIPIENT] part ${pi + 1}/${parts.length} accepted — ${describeTarget(target)} wamid=${wamids[pi] ?? 'n/a'}`)
       }
     } else {
       const errText = await res.text()
@@ -116,5 +119,5 @@ export async function sendWhatsAppMessage(
       )
     }
   }
-  return firstWamid
+  return wamids
 }

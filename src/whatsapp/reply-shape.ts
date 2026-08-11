@@ -26,6 +26,19 @@ export interface RichReply {
 
 export type HandleResult = string | string[] | RichReply
 
+/**
+ * Where handleMessage reports the row ids it persisted — one group per reply, each
+ * group ordered by message part.
+ *
+ * An out-parameter rather than a return value on purpose: handleMessage returns from
+ * roughly thirty places, and every one of them still returns exactly what it did
+ * before. Threading ids through the return type would have meant touching all of
+ * them, which is a large diff across code whose behaviour must not change.
+ */
+export interface PersistedRowSink {
+  idGroups: string[][]
+}
+
 export function isRichReply(r: unknown): r is RichReply {
   return !!r && typeof r === 'object' && Array.isArray((r as RichReply).replies)
 }

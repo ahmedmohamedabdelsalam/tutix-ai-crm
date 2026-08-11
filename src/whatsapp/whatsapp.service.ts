@@ -31,7 +31,7 @@ import { type InboundIdentity, findConversation, findLead, describeIdentity } fr
 import { buildMealsReply, distinctMealPatterns, narrowMealCandidates } from './meals-handler'
 import { RawTrip } from './conversation-state'
 import { attachmentFor } from './programme-images'
-import { type HandleResult } from './reply-shape'
+import { type HandleResult, type PersistedRowSink } from './reply-shape'
 
 // Arabic month name → calendar number (used when populating rawTrips on overviewMap)
 const MONTH_TO_NUM: Record<string, number> = {
@@ -147,7 +147,7 @@ export class WhatsAppService {
 
   // wamid/replyToId are appended last so existing positional callers are unaffected.
   // wamid is the Meta message id; when present the USER insert becomes the dedup claim.
-  async handleMessage(companyId: string, identity: InboundIdentity, text: string, source = 'direct', referralData?: object | null, simulate = false, wamid?: string, replyToId?: string): Promise<HandleResult> {
+  async handleMessage(companyId: string, identity: InboundIdentity, text: string, source = 'direct', referralData?: object | null, simulate = false, wamid?: string, replyToId?: string, sink?: PersistedRowSink): Promise<HandleResult> {
     // Phase 3b: identity is a PAIR, either half of which may be absent. `phone` is
     // kept as a local for the many log lines and reply paths below that read it, but
     // it is now nullable and must never be used as a lookup key on its own.
@@ -159,7 +159,15 @@ export class WhatsAppService {
     // Assistant replies ARE persisted to DB even in simulate mode so that multi-turn test
     // conversations have full history context for the AI fallback path (Cluster-C fix).
     // WhatsApp sending is impossible here regardless — sendWhatsAppMessage is never called.
-    const persistReply = (convId: string, content: string) => saveAssistantMessage(this.prisma, convId, content)
+    // Every persisted reply reports its row ids back, grouped per reply and ordered
+    // by part. The caller pairs group[i] with the wamids from sending reply[i], so a
+    // row is stamped with the wamid of the message it literally is — no window query,
+    // no candidate set, nothing to mis-zip.
+    const persistReply = async (convId: string, content: string) => {
+      const ids = await saveAssistantMessage(this.prisma, convId, content)
+      sink?.idGroups.push(ids)
+      return ids
+    }
 
     const company = await this.prisma.company.findUnique({ where: { id: companyId } })
     if (!company || !company.isActive) return ''
@@ -1495,7 +1503,9 @@ export class WhatsAppService {
   // USER message — used by the dashboard "take over with AI reply" flow.
   async triggerAIReply(convId: string, expectedCompanyId: string): Promise<{
     // Both halves of the identity, so the caller can address by phone or by BSUID.
-    reply: string; phone: string | null; waUserId: string | null; waToken: string | null; waPhoneId: string | null; error?: string
+    // messageIds: the rows this call persisted, one per part, so the caller can stamp
+    // each with the wamid of its own part instead of guessing which rows it just sent.
+    reply: string; messageIds?: string[]; phone: string | null; waUserId: string | null; waToken: string | null; waPhoneId: string | null; error?: string
   }> {
     const empty = { reply: '', phone: null, waUserId: null, waToken: null, waPhoneId: null }
     const conv = await this.prisma.conversation.findUnique({
@@ -1574,7 +1584,7 @@ export class WhatsAppService {
     const triggerGuard = scanModelOutput(rawTriggerReply, triggerEntityBlocklist)
     if (triggerGuard) {
       const triggerHandoff = buildHandoffMessage(triggerTemplates)
-      await saveAssistantMessage(this.prisma, convId, triggerHandoff)
+      const triggerIds = await saveAssistantMessage(this.prisma, convId, triggerHandoff)
       const lastUserMsg = freshMessages.filter(m => m.role === 'USER').at(-1)?.content ?? ''
       // The guard that matters is against FABRICATING a phone, not against recording
       // the handoff: HandoffLog.phone is nullable from Phase 3a, so a BSUID-only
@@ -1583,14 +1593,14 @@ export class WhatsAppService {
       if (!conv.phone) console.warn(`HANDOFF_NO_PHONE conv=${convId} — BSUID-only; logged with a null phone, never a placeholder`)
       logHandoff(this.prisma, { companyId: conv.companyId, conversationId: convId, phone: conv.phone, customerMessage: lastUserMsg, reason: 'output_guard', blockedOutput: rawTriggerReply })
       console.log(`OUTPUT_GUARD_BLOCK(TRIGGER) → conv=${convId} trigger=${triggerGuard}`)
-      return { reply: triggerHandoff, phone: conv.phone, waUserId: conv.waUserId, waToken: company.waToken, waPhoneId: company.waPhoneId }
+      return { reply: triggerHandoff, messageIds: triggerIds, phone: conv.phone, waUserId: conv.waUserId, waToken: company.waToken, waPhoneId: company.waPhoneId }
     }
 
     const reply = applyHajjDateDisclaimer(rawTriggerReply)
 
-    await saveAssistantMessage(this.prisma, convId, reply)
+    const replyIds = await saveAssistantMessage(this.prisma, convId, reply)
     console.log(`MANUAL_AI_REPLY → conv=${convId} phone=${conv.phone}`)
 
-    return { reply, phone: conv.phone, waUserId: conv.waUserId, waToken: company.waToken, waPhoneId: company.waPhoneId }
+    return { reply, messageIds: replyIds, phone: conv.phone, waUserId: conv.waUserId, waToken: company.waToken, waPhoneId: company.waPhoneId }
   }
 }
