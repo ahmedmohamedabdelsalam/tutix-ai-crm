@@ -402,7 +402,7 @@ export class WhatsAppController {
             where: { id: convId },
             data: { status: ConvStatus.NEEDS_HUMAN, handoffMessageSent: true },
           })
-          logHandoff(this.prisma, { companyId: company.id, conversationId: convId, phone: message.from, customerMessage: media.label, reason: 'no_handler', category: `media:${mediaType}` })
+          await logHandoff(this.prisma, { companyId: company.id, conversationId: convId, phone: message.from, customerMessage: media.label, reason: 'no_handler', category: `media:${mediaType}` })
           console.log(`MEDIA_HANDOFF (${mediaType}) → ${message.from}`)
         } else {
           if (company.waToken && company.waPhoneId) {

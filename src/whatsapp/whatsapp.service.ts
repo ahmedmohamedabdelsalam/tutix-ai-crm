@@ -641,7 +641,7 @@ export class WhatsAppService {
     if (isBlocked) {
       const handoffMsg = buildHandoffMessage(aiTemplates)
       await persistReply(conv.id, handoffMsg)
-      logHandoff(this.prisma, { companyId, conversationId: conv.id, phone, customerMessage: text, reason: 'blocked_category', category: blockedCat })
+      await logHandoff(this.prisma, { companyId, conversationId: conv.id, phone, customerMessage: text, reason: 'blocked_category', category: blockedCat })
       if (!simulate) {
         await this.prisma.conversation.update({
           where: { id: conv.id },
@@ -667,7 +667,7 @@ export class WhatsAppService {
       if (isUmrahCatalogQ) {
         const handoffMsg = buildHandoffMessage(aiTemplates)
         await persistReply(conv.id, handoffMsg)
-        logHandoff(this.prisma, { companyId, conversationId: conv.id, phone, customerMessage: text, reason: 'freshness_gate', category: 'all_offerings_expired' })
+        await logHandoff(this.prisma, { companyId, conversationId: conv.id, phone, customerMessage: text, reason: 'freshness_gate', category: 'all_offerings_expired' })
         if (!simulate) {
           await this.prisma.conversation.update({
             where: { id: conv.id },
@@ -684,7 +684,7 @@ export class WhatsAppService {
     if (detectInstallmentIntent(text)) {
       const handoffMsg = buildHandoffMessage(aiTemplates)
       await persistReply(conv.id, handoffMsg)
-      logHandoff(this.prisma, { companyId, conversationId: conv.id, phone, customerMessage: text, reason: 'blocked_category', category: 'installment' })
+      await logHandoff(this.prisma, { companyId, conversationId: conv.id, phone, customerMessage: text, reason: 'blocked_category', category: 'installment' })
       if (!simulate) {
         await this.prisma.conversation.update({
           where: { id: conv.id },
@@ -703,7 +703,7 @@ export class WhatsAppService {
     if (detectBaggageIntent(text)) {
       const baggageReply = 'بالنسبة للشنط والوزن المسموح يافندم — زميلنا المختص هيأكدلك التفاصيل دي بالظبط. عندك سؤال تاني؟ 🤍'
       await persistReply(conv.id, baggageReply)
-      logHandoff(this.prisma, { companyId, conversationId: conv.id, phone, customerMessage: text, reason: 'blocked_category', category: 'baggage' })
+      await logHandoff(this.prisma, { companyId, conversationId: conv.id, phone, customerMessage: text, reason: 'blocked_category', category: 'baggage' })
       if (!simulate) {
         await this.prisma.conversation.update({
           where: { id: conv.id },
@@ -721,7 +721,7 @@ export class WhatsAppService {
     if (detectChildPriceIntent(text)) {
       const childReply = 'أسعار الأطفال بتختلف حسب البرنامج ووسيلة السفر يافندم — زميلنا المختص هيحسبهالك بالظبط حسب سن الطفل والبرنامج. عندك سؤال تاني؟ 🤍'
       await persistReply(conv.id, childReply)
-      logHandoff(this.prisma, { companyId, conversationId: conv.id, phone, customerMessage: text, reason: 'blocked_category', category: 'child_price' })
+      await logHandoff(this.prisma, { companyId, conversationId: conv.id, phone, customerMessage: text, reason: 'blocked_category', category: 'child_price' })
       if (!simulate) {
         await this.prisma.conversation.update({
           where: { id: conv.id },
@@ -1176,7 +1176,7 @@ export class WhatsAppService {
       // No catalog data — safe handoff rather than letting AI name hotels
       const handoffMsg = buildHandoffMessage(aiTemplates)
       await persistReply(conv.id, handoffMsg)
-      logHandoff(this.prisma, { companyId, conversationId: conv.id, phone, customerMessage: text, reason: 'no_handler', category: 'hotel_names_no_catalog' })
+      await logHandoff(this.prisma, { companyId, conversationId: conv.id, phone, customerMessage: text, reason: 'no_handler', category: 'hotel_names_no_catalog' })
       if (!simulate) {
         await this.prisma.conversation.update({ where: { id: conv.id }, data: { status: ConvStatus.NEEDS_HUMAN, handoffMessageSent: true } })
       }
@@ -1248,7 +1248,7 @@ export class WhatsAppService {
       noMatchMap.set(conv.id, 0) // reset after triggering
       const handoffMsg = buildHandoffMessage(aiTemplates)
       await persistReply(conv.id, handoffMsg)
-      logHandoff(this.prisma, { companyId, conversationId: conv.id, phone, customerMessage: text, reason: 'repeat_failure' })
+      await logHandoff(this.prisma, { companyId, conversationId: conv.id, phone, customerMessage: text, reason: 'repeat_failure' })
       if (!simulate) {
         await this.prisma.conversation.update({
           where: { id: conv.id },
@@ -1296,7 +1296,7 @@ export class WhatsAppService {
     if (guardTrigger) {
       const handoffMsg = buildHandoffMessage(aiTemplates)
       await persistReply(conv.id, handoffMsg)
-      logHandoff(this.prisma, { companyId, conversationId: conv.id, phone, customerMessage: text, reason: 'output_guard', blockedOutput: rawAIReply })
+      await logHandoff(this.prisma, { companyId, conversationId: conv.id, phone, customerMessage: text, reason: 'output_guard', blockedOutput: rawAIReply })
       if (!simulate) {
         await this.prisma.conversation.update({
           where: { id: conv.id },
@@ -1439,7 +1439,7 @@ export class WhatsAppService {
         }
         const clarifierHandoffMsg = buildHandoffMessage(aiTemplates)
         await persistReply(conv.id, clarifierHandoffMsg)
-        logHandoff(this.prisma, { companyId, conversationId: conv.id, phone, customerMessage: text, reason: 'no_handler' })
+        await logHandoff(this.prisma, { companyId, conversationId: conv.id, phone, customerMessage: text, reason: 'no_handler' })
         if (!simulate) {
           await this.prisma.conversation.update({ where: { id: conv.id }, data: { status: ConvStatus.NEEDS_HUMAN, handoffMessageSent: true } })
         }
@@ -1591,7 +1591,7 @@ export class WhatsAppService {
       // conversation is written with null and stays visible to a human. Skipping it
       // would lose the record for exactly the customers hardest to reach.
       if (!conv.phone) console.warn(`HANDOFF_NO_PHONE conv=${convId} — BSUID-only; logged with a null phone, never a placeholder`)
-      logHandoff(this.prisma, { companyId: conv.companyId, conversationId: convId, phone: conv.phone, customerMessage: lastUserMsg, reason: 'output_guard', blockedOutput: rawTriggerReply })
+      await logHandoff(this.prisma, { companyId: conv.companyId, conversationId: convId, phone: conv.phone, customerMessage: lastUserMsg, reason: 'output_guard', blockedOutput: rawTriggerReply })
       console.log(`OUTPUT_GUARD_BLOCK(TRIGGER) → conv=${convId} trigger=${triggerGuard}`)
       return { reply: triggerHandoff, messageIds: triggerIds, phone: conv.phone, waUserId: conv.waUserId, waToken: company.waToken, waPhoneId: company.waPhoneId }
     }
