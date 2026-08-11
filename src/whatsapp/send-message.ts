@@ -13,9 +13,14 @@ export async function metaPost(phoneId: string, token: string, body: object): Pr
 /**
  * Send one image by its Meta media ID, with a caption.
  *
- * Returns true only when Meta accepted it. The caller sends the text either way —
- * an image that fails is an image the customer does not see, never a reply they do
- * not get. Same addressing rules as text, so a BSUID-only customer gets pictures too.
+ * Returns the wamid when Meta accepted it, null otherwise. The caller sends the text
+ * either way — an image that fails is an image the customer does not see, never a
+ * reply they do not get. Same addressing rules as text, so a BSUID-only customer gets
+ * pictures too.
+ *
+ * The wamid is returned rather than a boolean because the caller persists a Message
+ * row for the image, and that row is stamped at insert — the same discipline the text
+ * path now follows, and the reason an image can carry a delivery status at all.
  */
 export async function sendWhatsAppImage(
   phoneId: string,
@@ -23,11 +28,11 @@ export async function sendWhatsAppImage(
   target: SendTarget,
   mediaId: string,
   caption: string,
-): Promise<boolean> {
+): Promise<string | null> {
   const address = addressingFields(target)
   if (!address) {
     console.error('[SEND_UNADDRESSABLE] image not sent — no phone and no BSUID on this conversation.')
-    return false
+    return null
   }
   const res = await fetch(`${GRAPH_BASE}/${phoneId}/messages`, {
     method: 'POST',
@@ -45,10 +50,12 @@ export async function sendWhatsAppImage(
       `[IMAGE_SEND_FAILED] mode=${addressingMode(target)} ${describeTarget(target)} ` +
       `status=${res.status} — Meta said: ${await res.text()}`,
     )
-    return false
+    return null
   }
-  console.log(`[IMAGE_SENT] ${describeTarget(target)} media=${mediaId}`)
-  return true
+  const data = await res.json() as { messages?: { id: string }[] }
+  const wamid = data.messages?.[0]?.id ?? null
+  console.log(`[IMAGE_SENT] ${describeTarget(target)} media=${mediaId} wamid=${wamid ?? 'n/a'}`)
+  return wamid
 }
 
 /**

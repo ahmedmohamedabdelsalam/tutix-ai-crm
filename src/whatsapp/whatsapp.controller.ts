@@ -426,7 +426,9 @@ export class WhatsAppController {
             mediaId = up?.mediaId ?? null
             if (up) await cacheMediaId(this.prisma, company.id, img.checksum, company.waPhoneId, up.mediaId, img.mime, up.bytes)
           }
-          if (mediaId) await sendWhatsAppImage(company.waPhoneId, company.waToken, target, mediaId, img.caption)
+          if (!mediaId) continue
+          const imgWamid = await sendWhatsAppImage(company.waPhoneId, company.waToken, target, mediaId, img.caption)
+          if (imgWamid) await this.recordSentImage(sink.conversationId, img, imgWamid, sink.idGroups[0]?.[0])
         }
         // Reply i was persisted as sink.idGroups[i] (one row per part) and sends as
         // the same parts in the same order, so row j of group i IS Meta message j of
@@ -456,6 +458,62 @@ export class WhatsAppController {
       // happens inline above, by row id, against the wamid of that exact part.
     } catch (err) {
       console.error('Webhook error:', err)
+    }
+  }
+
+  /**
+   * Record an image the agent actually sent, so the thread shows what the customer got.
+   *
+   * Until now an agent-sent image left NO trace anywhere. The customer received a
+   * picture with a price on it; the conversation history showed only the text that
+   * followed. A rep reading the thread could not see what had been sent, could not
+   * tell whether the customer was reacting to an image, and had no way to know which
+   * programme's picture was in front of them. That is a hole in the record itself,
+   * independent of any delivery tick.
+   *
+   * Stamped at insert with the wamid Meta returned — the same discipline the text
+   * path follows — so this row can carry a delivery status without any second pass.
+   *
+   * TIMESTAMP: images are sent BEFORE the text, but the text rows were persisted
+   * earlier, inside handleMessage, before anything was sent. Written with `new Date()`
+   * this row would sort BELOW the text it appeared above on the customer's phone. So
+   * it is backdated just before the first text row, and the thread reads in the order
+   * the customer actually experienced it.
+   *
+   * Never throws: a failure to record must not take down a reply that already went out.
+   */
+  private async recordSentImage(
+    conversationId: string | undefined,
+    img: { url: string; mime: string; caption: string },
+    wamid: string,
+    firstTextRowId: string | undefined,
+  ): Promise<void> {
+    if (!conversationId) {
+      console.error(`[IMAGE_ROW_SKIPPED] no conversation id on the sink — image ${wamid} not recorded`)
+      return
+    }
+    try {
+      // Anchored to the FIRST part of this reply, not the latest row in the thread:
+      // a multi-part reply persists several rows, and backdating off the last one
+      // would still sort the image below the earlier parts.
+      const firstText = firstTextRowId
+        ? await this.prisma.message.findUnique({ where: { id: firstTextRowId }, select: { createdAt: true } })
+        : null
+      const createdAt = firstText ? new Date(firstText.createdAt.getTime() - 1000) : new Date()
+      await this.prisma.message.create({
+        data: {
+          conversationId,
+          role: 'ASSISTANT',
+          content: img.caption,
+          mediaUrl: img.url,
+          mediaType: 'image',
+          whatsappMsgId: wamid,
+          createdAt,
+        },
+      })
+      console.log(`[IMAGE_ROW] conv=${conversationId} wamid=${wamid} recorded`)
+    } catch (err) {
+      console.error(`[IMAGE_ROW_FAILED] conv=${conversationId} wamid=${wamid} — ${(err as Error)?.message}`)
     }
   }
 

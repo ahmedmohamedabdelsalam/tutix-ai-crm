@@ -165,7 +165,7 @@ export class WhatsAppService {
     // no candidate set, nothing to mis-zip.
     const persistReply = async (convId: string, content: string) => {
       const ids = await saveAssistantMessage(this.prisma, convId, content)
-      sink?.idGroups.push(ids)
+      if (sink) { sink.idGroups.push(ids); sink.conversationId = convId }
       return ids
     }
 

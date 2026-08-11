@@ -37,6 +37,12 @@ export type HandleResult = string | string[] | RichReply
  */
 export interface PersistedRowSink {
   idGroups: string[][]
+  /**
+   * The conversation this call replied to. The caller needs it to persist rows for
+   * things handleMessage did not write itself — an image, which is chosen inside
+   * handleMessage but only sent (and only acquires a wamid) out in the controller.
+   */
+  conversationId?: string
 }
 
 export function isRichReply(r: unknown): r is RichReply {
