@@ -13,6 +13,7 @@ import { CompanyAIConfig } from '@prisma/client'
 import { toArabicIndic, formatPrice, arabicCount, DAYS, NIGHTS } from '../../utils/arabic-numerals'
 import { UmrahProgram, ProgramType, buildUmrahCatalogTableFromData } from './umrah-packages-2026'
 import { HotelEntry, buildHotelKnowledgeFromData, findHotelInMessageFromData } from './hajj-umrah-hotels'
+import { readProgrammeImages, priceFingerprint } from '../../whatsapp/programme-images'
 
 // ── Offerings bridge — semantic role → raw field value ────────────────────────
 
@@ -141,6 +142,13 @@ export function offeringToRawUmrahProgram(
       const v = values[def.key]
       return typeof v === 'boolean' ? v : null
     })(),
+    // ── Stage 2: images travel WITH the programme ──────────────────────────────
+    // Both halves are computed here, from the same `values` in the same pass, so
+    // the fingerprint a reply compares against is the price it is about to quote.
+    // Reading them separately later would open a window where one is fresh and the
+    // other is not — which is precisely the failure this feature must not have.
+    images: readProgrammeImages(values[fieldDefs.find(f => f.inputType === 'image')?.key ?? '']),
+    priceFingerprintNow: priceFingerprint(values, fieldDefs),
   }
 }
 

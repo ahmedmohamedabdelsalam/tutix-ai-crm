@@ -6,7 +6,9 @@ import { WhatsAppService } from './whatsapp.service'
 import { FollowUpService } from './followup.service'
 import { PrismaService } from '../prisma/prisma.service'
 import { splitIntoMessages } from './message-splitter'
-import { metaPost, sendWhatsAppMessage } from './send-message'
+import { metaPost, sendWhatsAppMessage, sendWhatsAppImage } from './send-message'
+import { normalizeResult } from './reply-shape'
+import { findCachedMediaId, cacheMediaId, uploadImageToMeta } from './media-cache'
 import { extractBsuid, linkBsuid, recordUnidentifiedInbound } from './bsuid'
 import { findConversation, findLead, extractProfileName } from './identity'
 import { captureMedia } from './capture-media'
@@ -387,16 +389,37 @@ export class WhatsAppController {
         message.text.body, adSource, referral,
         false, incomingWamid, resolvedReplyToId,
       )
-      const replyList = Array.isArray(result) ? result : (result ? [result] : [])
+      const { replies: replyList, images: replyImages } = normalizeResult(result)
 
       // Send each reply via Meta WhatsApp Cloud API — split into parts with typing delays
       const hasContent = replyList.some(r => r)
       const outWamids: (string | null)[] = []
+      const target = { phone: (message.from as string) ?? null, waUserId: bsuid }
       if (hasContent && company.waToken && company.waPhoneId) {
+        // ── Image FIRST, then the text ──────────────────────────────────────────
+        // Order matters: the picture arrives with the programme name as its caption
+        // and the full, live-generated detail lands underneath it. The reverse reads
+        // as an afterthought, and on a phone the image would push the text out of
+        // view just as the customer starts reading the prices.
+        //
+        // Every failure below is non-fatal by construction. A missing cache entry, a
+        // storage fetch that 404s, a media upload Meta rejects — each one leaves
+        // `mediaId` null and the loop simply moves on to the text, which is the part
+        // that is always correct.
+        for (const img of replyImages) {
+          let mediaId = await findCachedMediaId(this.prisma, company.id, img.checksum, company.waPhoneId)
+          if (mediaId) {
+            console.log(`[MEDIA_CACHE_HIT] company=${company.id} checksum=${img.checksum.slice(0, 12)}`)
+          } else {
+            const up = await uploadImageToMeta(company.waPhoneId, company.waToken, img.url, img.mime)
+            mediaId = up?.mediaId ?? null
+            if (up) await cacheMediaId(this.prisma, company.id, img.checksum, company.waPhoneId, up.mediaId, img.mime, up.bytes)
+          }
+          if (mediaId) await sendWhatsAppImage(company.waPhoneId, company.waToken, target, mediaId, img.caption)
+        }
         for (const r of replyList) {
           if (!r) continue
-          const w = await sendWhatsAppMessage(company.waPhoneId, company.waToken,
-            { phone: (message.from as string) ?? null, waUserId: bsuid }, r)
+          const w = await sendWhatsAppMessage(company.waPhoneId, company.waToken, target, r)
           outWamids.push(w)
         }
       } else if (hasContent) {
@@ -503,14 +526,18 @@ export class WhatsAppController {
         data: { isTest: true },
       })
 
-      const replies = Array.isArray(result) ? result : (result ? [result] : [])
+      const { replies, images } = normalizeResult(result)
       const parts = replies.flatMap(r => r ? splitIntoMessages(r) : [])
       console.log(`TEST${simulate ? ' [SIMULATE]' : ''}: ${replies.length} message(s), ${parts.length} part(s) total`)
       replies.forEach((r, i) => {
         const rParts = r ? splitIntoMessages(r) : []
         rParts.forEach((p, pi) => console.log(`  [msg${i + 1} part${pi + 1}] ${p.substring(0, 80)}`))
       })
-      return { simulate, replies, parts }
+      // Descriptors are RETURNED, never uploaded or sent. This endpoint is what every
+      // gate suite drives, so the decision "would an image go with this reply, and
+      // which one" becomes assertable without a single byte reaching Meta.
+      images.forEach(img => console.log(`  [image] ${img.checksum.slice(0, 12)} caption="${img.caption}"`))
+      return { simulate, replies, parts, images }
     } catch (err: any) {
       console.error('❌ /webhook/test error:', err?.message ?? err)
       return { error: err?.message ?? 'Internal server error', stack: err?.stack?.split('\n').slice(0, 3) }

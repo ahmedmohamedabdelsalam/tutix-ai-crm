@@ -11,6 +11,47 @@ export async function metaPost(phoneId: string, token: string, body: object): Pr
 }
 
 /**
+ * Send one image by its Meta media ID, with a caption.
+ *
+ * Returns true only when Meta accepted it. The caller sends the text either way —
+ * an image that fails is an image the customer does not see, never a reply they do
+ * not get. Same addressing rules as text, so a BSUID-only customer gets pictures too.
+ */
+export async function sendWhatsAppImage(
+  phoneId: string,
+  token: string,
+  target: SendTarget,
+  mediaId: string,
+  caption: string,
+): Promise<boolean> {
+  const address = addressingFields(target)
+  if (!address) {
+    console.error('[SEND_UNADDRESSABLE] image not sent — no phone and no BSUID on this conversation.')
+    return false
+  }
+  const res = await fetch(`${GRAPH_BASE}/${phoneId}/messages`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      ...address,
+      type: 'image',
+      image: { id: mediaId, caption },
+    }),
+  })
+  if (!res.ok) {
+    console.error(
+      `[IMAGE_SEND_FAILED] mode=${addressingMode(target)} ${describeTarget(target)} ` +
+      `status=${res.status} — Meta said: ${await res.text()}`,
+    )
+    return false
+  }
+  console.log(`[IMAGE_SENT] ${describeTarget(target)} media=${mediaId}`)
+  return true
+}
+
+/**
  * Send a text message, addressed by phone when we have one and by BSUID when we do
  * not. Returns the wamid of the first part (for reply-quoting), null on failure.
  *

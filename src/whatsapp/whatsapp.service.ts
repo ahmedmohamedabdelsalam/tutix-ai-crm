@@ -30,6 +30,8 @@ import { linkBsuid } from './bsuid'
 import { type InboundIdentity, findConversation, findLead, describeIdentity } from './identity'
 import { buildMealsReply, distinctMealPatterns, narrowMealCandidates } from './meals-handler'
 import { RawTrip } from './conversation-state'
+import { attachmentFor } from './programme-images'
+import { type HandleResult } from './reply-shape'
 
 // Arabic month name → calendar number (used when populating rawTrips on overviewMap)
 const MONTH_TO_NUM: Record<string, number> = {
@@ -145,7 +147,7 @@ export class WhatsAppService {
 
   // wamid/replyToId are appended last so existing positional callers are unaffected.
   // wamid is the Meta message id; when present the USER insert becomes the dedup claim.
-  async handleMessage(companyId: string, identity: InboundIdentity, text: string, source = 'direct', referralData?: object | null, simulate = false, wamid?: string, replyToId?: string): Promise<string | string[]> {
+  async handleMessage(companyId: string, identity: InboundIdentity, text: string, source = 'direct', referralData?: object | null, simulate = false, wamid?: string, replyToId?: string): Promise<HandleResult> {
     // Phase 3b: identity is a PAIR, either half of which may be absent. `phone` is
     // kept as a local for the many log lines and reply paths below that read it, but
     // it is now nullable and must never be used as a lookup key on its own.
@@ -482,6 +484,11 @@ export class WhatsAppService {
         else fullDetailsMap.set(conv.id, { offset: nextOffset, total })
 
         await persistReply(conv.id,fdReply)
+        // NO IMAGE HERE, EVER — Stage 2. This chunk carries three programmes at three
+        // different prices. Any single picture attached to it would be read as the
+        // price of whichever programme the customer was already interested in, and it
+        // would be wrong for at least two of the three. Images attach only where the
+        // reply is about exactly one programme (see OV_NUMBER).
         console.log(`FD_CHUNK → ${phone} offset=${offset}..${nextOffset - 1}/${total} isLast=${isLast}`)
         return fdReply
       }
@@ -539,8 +546,12 @@ export class WhatsAppService {
           const detail = applyHajjDateDisclaimer(ovState.orderedDetails[n - 1])
           overviewMap.delete(conv.id)
           await persistReply(conv.id,detail)
-          console.log(`OV_NUMBER → ${phone} n=${n} → program detail sent`)
-          return detail
+          // Stage 2 — the customer picked ONE programme, so an image is unambiguous:
+          // there is exactly one set of prices it could be showing, and it is this
+          // one. attachmentFor returns [] on any doubt and the text goes alone.
+          const ovImages = attachmentFor(trip, detail, 'OV_NUMBER')
+          console.log(`OV_NUMBER → ${phone} n=${n} → program detail sent${ovImages.length ? ' +image' : ''}`)
+          return ovImages.length ? { replies: [detail], images: ovImages } : detail
         }
         // Topic changed — clear overview state and let normal AI handle it
         overviewMap.delete(conv.id)
