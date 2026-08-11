@@ -658,3 +658,33 @@ model UnidentifiedInbound {
   @@index([createdAt])
   @@index([source, createdAt])
 }
+
+/// Meta media IDs, cached so a brochure sent to fifty customers is uploaded ONCE.
+///
+/// Meta stores an uploaded asset for 30 days and lets it be re-sent by id, so
+/// re-uploading per recipient wastes bandwidth and latency for no benefit. The key
+/// is the file's sha256, so the same brochure re-picked from a rep's disk hits the
+/// cache even though it is a different File object.
+///
+/// SCOPED PER COMPANY, never shared. A media id belongs to the WhatsApp phone
+/// number that uploaded it, and sharing one across tenants would send one company's
+/// asset from another company's number. Same rule as the offering-images cache.
+model MediaAsset {
+  id         String   @id @default(cuid())
+  companyId  String
+  /// sha256 of the file bytes.
+  checksum   String
+  /// The Meta media id, valid 30 days from upload.
+  mediaId    String
+  /// The phone number that uploaded it. A media id is scoped to this; if the
+  /// company's number changes, the cached id is useless and must be re-uploaded.
+  waPhoneId  String
+  mime       String
+  bytes      Int
+  /// Set to 25 days after upload, short of Meta's 30, so a send never races expiry.
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+
+  @@unique([companyId, checksum])
+  @@index([companyId, expiresAt])
+}
