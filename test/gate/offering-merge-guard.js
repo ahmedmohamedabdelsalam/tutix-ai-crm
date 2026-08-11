@@ -81,7 +81,7 @@ const readValues = async (c, id) =>
 ;(async () => {
   const c = await pool.connect()
   let pass = 0, fail = 0, snapshot = null, target = null
-  const skipped = []
+  const uncovered = []
   const t = (ok, label, detail) => {
     if (ok) { console.log(`  ✅ ${label}`); pass++ }
     else { console.log(`  ❌ ${label}${detail ? `\n     ${detail}` : ''}`); fail++ }
@@ -162,13 +162,22 @@ const readValues = async (c, id) =>
       const r1 = await patch(tgt.id, formPayload)
 
       // A type the agent does not read is refused outright (409), so no save can
-      // damage it while it stays unwired. That is not a pass — it is untested. Say
-      // so loudly: production wires more types than a bare local dashboard does, and
-      // the row that actually got destroyed was a hajj row on production.
+      // damage it while it stays unwired. That is not a pass — it is untested, and it
+      // USED to print as a skip above a green total. That is the false-PASS shape this
+      // project has been bitten by four times over: the check ran, said something
+      // reassuring, and the truth was in the part it could not see.
+      //
+      // Production wires more types than a bare local dashboard does, and the row that
+      // actually got destroyed was a HAJJ row on production — precisely the type a
+      // local run used to skip. So an uncovered type FAILS: a gate that cannot see a
+      // type cannot vouch for it, and the exit code has to say so.
       if (r1.status === 409 && r1.body.includes('مش مربوط')) {
-        skipped.push(tgt.typeName)
-        console.log(`  ⏭  SKIPPED — type "${tgt.typeName}" is not agent-wired here, so the API refuses all writes.`)
-        console.log(`     To cover it, start the dashboard with AGENT_WIRED_OFFERING_TYPES set as production has it.`)
+        uncovered.push(tgt.typeName)
+        t(false, `type "${tgt.typeName}" is NOT COVERED — the API refuses all writes to it here`,
+          `This gate cannot vouch for "${tgt.typeName}": production wires it, this run does not,` + "\n" +
+          `     so a merge bug in it would ship green. Set AGENT_WIRED_OFFERING_TYPES as production` + "\n" +
+          `     has it (tutix-dashboard/.env.local), restart the dashboard, and re-run.`)
+        // Still worth asserting while it is unwired: the refusal must leave the row alone.
         const untouched = await readValues(c, tgt.id)
         t(eq(untouched, snapshot), `refused save left "${tgt.typeName}" row untouched`)
         continue
@@ -205,8 +214,16 @@ const readValues = async (c, id) =>
     c.release(); await pool.end()
   }
 
-  console.log(`\n${fail === 0 ? '✅' : '❌'} ${pass} passed, ${fail} failed${skipped.length ? `, ${skipped.length} type(s) skipped` : ''}`)
-  if (skipped.length) console.log(`⚠  UNTESTED types (not agent-wired here): ${skipped.join(', ')} — cover them before trusting this gate.`)
-  if (fail > 0) console.log('An offering save is dropping keys. This is silent customer-facing data loss.')
-  process.exit(fail === 0 ? 0 : 1)
+  console.log(`\n${fail === 0 ? '✅' : '❌'} ${pass} passed, ${fail} failed`)
+  if (uncovered.length) {
+    console.log(`\n⛔ UNCOVERED TYPES: ${uncovered.join(', ')}`)
+    console.log('   Not tested at all — counted as FAILURES, not skips. A green total over an')
+    console.log('   untested type is exactly the false PASS this suite exists to prevent.')
+    console.log('   Fix: set AGENT_WIRED_OFFERING_TYPES in tutix-dashboard/.env.local, then restart it.')
+  }
+  if (fail > uncovered.length) console.log('An offering save is dropping keys. This is silent customer-facing data loss.')
+  // Belt and braces: an uncovered type already incremented `fail` via t(false), but
+  // state the condition explicitly so a future refactor of t() cannot quietly
+  // restore exit 0 — the exit code is the only part CI actually reads.
+  process.exit(fail === 0 && uncovered.length === 0 ? 0 : 1)
 })()
