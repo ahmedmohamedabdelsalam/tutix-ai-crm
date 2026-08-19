@@ -696,3 +696,44 @@ model MediaAsset {
   @@unique([companyId, checksum])
   @@index([companyId, expiresAt])
 }
+
+/// A sales rep's PERSONAL image library — private to her, managed by her.
+///
+/// Deliberately carries no safety machinery: no offering link, no price
+/// fingerprint, no staleness check. The rep chose the picture and the rep owns
+/// whether it is right. That is the opposite of the admin offering images, which
+/// the agent may send unattended and which therefore keep the full fingerprint
+/// guard — see Offering.values images + Stage 2.
+///
+/// THE AGENT MUST NEVER READ THIS TABLE. It exists so a human can send a picture
+/// she vouches for; nothing here has been checked against live prices, so an
+/// unattended sender has no basis to trust it.
+///
+/// STORAGE IS CONTENT-ADDRESSED: the object lives at library/{companyId}/{checksum}
+/// so identical bytes physically cannot duplicate. Rows are per-rep, the object is
+/// per-company, and the object is removed only when the last row referencing that
+/// checksum is deleted.
+model LibraryImage {
+  id         String   @id @default(cuid())
+  companyId  String
+  /// Owner. Scoped from the session — never from a query parameter.
+  userId     String
+  /// sha256 of the bytes; also the storage filename, which is what makes the
+  /// deduplication structural rather than a process that can drift.
+  checksum   String
+  /// Path within the library bucket. The public URL is derived, never stored, so
+  /// the two cannot disagree.
+  path       String
+  mime       String
+  bytes      Int
+  /// Shipped unwritten in v1: no shared tab yet. Present so enabling one later is
+  /// a UI change rather than a migration on a table that is by then large.
+  isShared   Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  /// Re-adding a file she already has is idempotent, not an error.
+  @@unique([companyId, userId, checksum])
+  @@index([companyId, userId])
+  /// Refcount on delete: is any other row still using this object?
+  @@index([companyId, checksum])
+}
