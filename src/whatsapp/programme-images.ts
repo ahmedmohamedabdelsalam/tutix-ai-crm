@@ -50,6 +50,27 @@ export function priceFingerprint(
   return createHash('sha256').update(JSON.stringify(canonical)).digest('hex')
 }
 
+/**
+ * ── BOUNDARY: THE AGENT READS OFFERING IMAGES ONLY ───────────────────────────
+ *
+ * Sales reps have a PERSONAL image library (dashboard: LibraryImage, surfaced in
+ * the composer). It is deliberately NOT reachable from here, and wiring it in later
+ * would be a mistake rather than a feature.
+ *
+ * The reason is the guard directly below this comment. An offering image carries a
+ * price fingerprint, so `chooseProgrammeImage` can refuse it the moment the prices
+ * move. A personal image has no offering, therefore no fingerprint, therefore
+ * nothing to compare — the agent would be sending a picture with a price on it and
+ * no way to know whether that price is still true.
+ *
+ * That is survivable when a human presses send: the rep chose the picture, can see
+ * what is on it, and owns the claim. It is not survivable unattended, at whatever
+ * hour a customer happens to write, with nobody looking at what goes out.
+ *
+ * If personal images ever need to reach customers automatically, they need a
+ * fingerprint first — not a shortcut through this function.
+ */
+
 /** Descriptors off an Offering value, ignoring anything malformed. */
 export function readProgrammeImages(raw: unknown): ProgrammeImage[] {
   if (!Array.isArray(raw)) return []
@@ -92,13 +113,6 @@ export function chooseProgrammeImage(
   return { blocked: anyComparable ? 'stale' : 'no_fingerprint' }
 }
 
-/**
- * The caption: the programme's headline, which is the first line of the detail text.
- *
- * Deliberately NOT a second copy of the prices. The caption rides on the image and
- * cannot be regenerated later, so it carries only the name; every figure stays in
- * the text message below, which is rebuilt from live data every time it is sent.
- */
 interface ProgrammeLike { name?: string; images?: unknown; priceFingerprintNow?: string }
 
 /**
@@ -152,6 +166,13 @@ export function attachmentFor(prog: unknown, detailText: string, ctx: string): O
   return [toOutboundImage(decision.send, captionFor(detailText))]
 }
 
+/**
+ * The caption: the programme's headline, which is the first line of the detail text.
+ *
+ * Deliberately NOT a second copy of the prices. The caption rides on the image and
+ * cannot be regenerated later, so it carries only the name; every figure stays in
+ * the text message below, which is rebuilt from live data every time it is sent.
+ */
 export function captionFor(detailText: string): string {
   const firstLine = detailText.split('\n').find(l => l.trim().length > 0) ?? ''
   // Strip the price clause after the em-dash so the caption cannot outlive a change.
