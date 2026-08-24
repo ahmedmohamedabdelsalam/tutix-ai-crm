@@ -1,5 +1,5 @@
 import type { PrismaService } from '../prisma/prisma.service'
-import { ConvStatus } from '@prisma/client'
+import { ConvStatus, type Prisma } from '@prisma/client'
 
 /**
  * Who an inbound message is from — Phase 3b.
@@ -65,7 +65,21 @@ export async function findConversation(
   prisma: PrismaService,
   companyId: string,
   identity: InboundIdentity,
-  include: object,
+  /**
+   * A REAL Prisma include, not `object`.
+   *
+   * This parameter was typed `object`, which accepts anything — and on 2026-08-10
+   * the media branch passed `{ orderBy: { updatedAt: 'desc' } }` here. tsc was
+   * satisfied, Prisma was not, and every inbound image, voice note and document was
+   * thrown away for fourteen days: the throw aborted the handler before any row was
+   * written, so there was nothing to notice. `orderBy` was redundant anyway — this
+   * function already sorts by updatedAt below.
+   *
+   * The generated type makes that mistake impossible to compile. Third time a
+   * too-loose type has disarmed tsc on this project; the cost is only ever paid in
+   * production.
+   */
+  include: Prisma.ConversationInclude,
 ) {
   if (identity.waUserId) {
     const byBsuid = await prisma.conversation.findFirst({

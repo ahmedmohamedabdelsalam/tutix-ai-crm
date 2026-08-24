@@ -299,9 +299,11 @@ export class WhatsAppController {
         // present. A findFirst on a null phone would match ANY phone-less
         // conversation in this company and hand the customer a stranger's thread.
         const mediaIdentity = { phone: (message.from as string) ?? null, waUserId: bsuid, profileName }
-        const conv = await findConversation(this.prisma, company.id, mediaIdentity, {
-          orderBy: { updatedAt: 'desc' },
-        })
+        // {} — no relations needed here; the branch reads only conv.id and
+        // conv.agentMode. This argument is the INCLUDE, and passing an `orderBy`
+        // through it is what discarded every inbound image for fourteen days.
+        // findConversation already orders by updatedAt.
+        const conv = await findConversation(this.prisma, company.id, mediaIdentity, {})
         const isHumanMode = conv?.agentMode === 'HUMAN'
         // Kill-switch check for media path — the main text path gates via handleMessage(),
         // but the media branch is a separate short-circuit that must check both locks itself.
